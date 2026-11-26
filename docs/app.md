@@ -37,6 +37,8 @@ Opening the app again from the Finder or Spotlight shows the window.
 | Open Claude Code in a profile | Click the profile. You pick the project folder, then a terminal window opens there |
 | Create a profile | "New profile…", or ⌘N |
 | Set the default profile | Hover the profile, then "Set as default" |
+| Create a rule | "New rule…" under the rules. You pick a folder, then where the rule applies (every repository of its owner, this repository, or the folder), the profile, and whether to lock it |
+| Remove a rule | Hover one of your own rules, then the bin icon and "Remove rule". Team rules cannot be removed |
 | Remove a profile | Hover the profile, then the bin icon. The row says what goes and what stays before you confirm |
 | Change how long conversations are kept | Unfold "Conversations kept": 30 days, 90 days, 1 year, or a number of days |
 | Move big conversations to the Trash | Unfold "Storage", click a profile, then the bin icon of a conversation and "Move to Trash" |
@@ -52,7 +54,8 @@ folder is kept unless you tick "Also delete its folder and sign out", which is
 
 ## What it does not do yet
 
-- Rules are created and removed with `cprofile rule`; the app only shows them.
+- A rule that needs both a folder and a git remote, or a pattern typed by
+  hand, is created with `cprofile rule add` or in `config.toml`.
 - Claude Desktop is not handled.
 - The app is in English only.
 - It is not signed with an Apple developer certificate. See

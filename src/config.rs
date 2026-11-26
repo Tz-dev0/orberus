@@ -41,7 +41,8 @@ pub struct Profile {
     pub dir: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// `PartialEq` lets two rules be compared with `==`, to refuse a copy.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     /// Folder the rule applies to, including everything below it.

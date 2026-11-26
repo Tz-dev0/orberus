@@ -516,6 +516,106 @@ h2 {
   background: var(--hue);
 }
 
+/* Your own rules show a bin under the pointer, as a profile does. */
+.rule {
+  position: relative;
+  border-radius: 5px;
+}
+
+.rule:hover .rule-bin,
+.rule:focus-within .rule-bin {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+  margin-right: 0;
+}
+
+/* The line that adds a rule reads like "New profile…": quiet until
+   pointed at. */
+.rule-new {
+  padding: 0;
+}
+
+.rule-add {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: left;
+}
+
+.rule-add:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.rule-form {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.rule-choices {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.rule-choices legend,
+.rule-use > span {
+  padding: 0;
+  color: var(--muted);
+}
+
+/* The profile form indents its lines under the name; here there is no
+   seal to align with. */
+.rule-form .form-check,
+.rule-form .form-error {
+  margin-left: 0;
+}
+
+.rule-form .form-check {
+  margin-top: 5px;
+  align-items: flex-start;
+}
+
+.rule-form .form-check input {
+  margin-top: 2px;
+}
+
+.rule-form .form-check span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rule-use {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rule-select {
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 6px;
+  max-width: 55%;
+}
+
+.rule-select:focus-visible {
+  outline: 2px solid var(--hue);
+  outline-offset: -1px;
+}
+
 /* ----------------------------------------------------------------- storage */
 
 .storage-section {

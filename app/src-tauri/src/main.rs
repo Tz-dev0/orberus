@@ -130,20 +130,71 @@ fn remove_profile(name: String, purge: bool) -> Result<(), String> {
 /// The popover normally hides as soon as it loses the focus, which also
 /// puts this Dock-less app in the background: macOS then never brings the
 /// picker to the screen. So while the picker is open, the popover stays.
-fn pick_folder(app: &AppHandle, name: &str, start: PathBuf) -> Option<PathBuf> {
+///
+/// `then_hide` says what becomes of the popover afterwards: hidden when the
+/// choice ends its job (a terminal opens), brought back to the front when
+/// the page still has a form to show.
+fn pick_folder(app: &AppHandle, title: &str, start: PathBuf, then_hide: bool) -> Option<PathBuf> {
     app.state::<Picking>().0.store(true, Ordering::SeqCst);
     let picked = app
         .dialog()
         .file()
-        .set_title(format!("Open Claude Code as {name} in"))
+        .set_title(title)
         .set_directory(start)
         .blocking_pick_folder();
-    app.state::<Picking>().0.store(false, Ordering::SeqCst);
-    // The choice is made: the popover has done its job.
     if let Some(window) = app.get_webview_window(WINDOW) {
-        let _ = window.hide();
+        if then_hide {
+            let _ = window.hide();
+        } else {
+            // The picker took the focus: take it back before the popover
+            // is allowed to hide on losing it again.
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
     }
+    app.state::<Picking>().0.store(false, Ordering::SeqCst);
     picked.and_then(|folder| folder.into_path().ok())
+}
+
+/// Asks which folder a new rule is about, and returns what the form can
+/// offer for it. `None` when the user cancels.
+#[tauri::command]
+async fn pick_rule_folder(app: AppHandle) -> Result<Option<data::RuleDraft>, String> {
+    if app.state::<Picking>().0.load(Ordering::SeqCst) {
+        return Ok(None);
+    }
+    let env = Env::from_process().map_err(|error| format!("{error:#}"))?;
+    let picked = pick_folder(&app, "Folder the rule is about", env.home.clone(), false);
+    Ok(picked.map(|folder| data::rule_draft(&env, &folder)))
+}
+
+#[tauri::command]
+fn add_rule(
+    path: Option<String>,
+    git_remote: Option<String>,
+    profile: String,
+    locked: bool,
+) -> Result<(), String> {
+    run(|env| data::add_rule(env, path, git_remote, &profile, locked))
+}
+
+/// The rule comes back as the page showed it, so that a list that changed
+/// meanwhile never loses another rule.
+#[tauri::command]
+fn remove_rule(
+    index: usize,
+    path: Option<String>,
+    git_remote: Option<String>,
+    profile: String,
+    locked: bool,
+) -> Result<(), String> {
+    let shown = claude_profiles::config::Rule {
+        path,
+        git_remote,
+        profile,
+        locked,
+    };
+    run(|env| data::remove_rule(env, index, &shown))
 }
 
 /// Asks for a project folder, then opens a terminal window running Claude
@@ -160,7 +211,8 @@ async fn open_claude(app: AppHandle, name: String) -> Result<bool, String> {
     let env = Env::from_process().map_err(|error| format!("{error:#}"))?;
     // Start where this profile was last used, or in the home folder.
     let start = data::last_folder(&env, &name).unwrap_or_else(|| env.home.clone());
-    let Some(folder) = pick_folder(&app, &name, start) else {
+    let title = format!("Open Claude Code as {name} in");
+    let Some(folder) = pick_folder(&app, &title, start, true) else {
         return Ok(false);
     };
     run(|env| {
@@ -308,6 +360,9 @@ fn main() {
             trash_conversation,
             storage,
             usage,
+            pick_rule_folder,
+            add_rule,
+            remove_rule,
             open_claude,
             open_config,
             fit,

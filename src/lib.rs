@@ -10,6 +10,7 @@ pub mod paths;
 pub mod purge;
 pub mod resolve;
 pub mod retention;
+pub mod rules;
 pub mod sessions;
 pub mod uninstall;
 pub mod usage;

@@ -16,12 +16,12 @@ use clap::{Parser, Subcommand};
 
 use claude_profiles::config::{self, Config, Loaded, Rule};
 use claude_profiles::disk;
-use claude_profiles::git;
 use claude_profiles::launch::{self, Target};
 use claude_profiles::paths::Env;
 use claude_profiles::purge;
 use claude_profiles::resolve::{self, REPO_FILE};
 use claude_profiles::retention::{self, Retention};
+use claude_profiles::rules;
 use claude_profiles::sessions::{self, Session};
 use claude_profiles::uninstall::{self, Binary};
 use claude_profiles::usage::{self, Verdict};
@@ -1371,36 +1371,18 @@ fn status(ui: &Ui, env: &Env, explicit: Option<String>) -> Result<i32> {
 /// Returns `(path, git_remote)`.
 fn ask_condition(ui: &Ui, env: &Env) -> Result<(Option<String>, Option<String>)> {
     let cwd = std::env::current_dir().context("cannot read the current folder")?;
-    let folder = portable_path(env, ".")?;
-
-    // Each choice: what the user reads, and the condition it stands for.
-    let mut choices: Vec<(String, Option<String>, Option<String>)> = Vec::new();
-    if let Some(remote) = git::remotes(&cwd).into_iter().next() {
-        // `github.com/acme/app` gives the owner pattern `github.com/acme/*`.
-        if let Some((owner, _)) = remote.rsplit_once('/') {
-            let pattern = format!("{owner}/*");
-            choices.push((
-                format!("Every repository of {owner}  (git remote {pattern})"),
-                None,
-                Some(pattern),
-            ));
-        }
-        choices.push((
-            format!("Only this repository  (git remote {remote})"),
-            None,
-            Some(remote),
-        ));
-    }
-    choices.push((
-        format!("This folder and everything below  ({folder})"),
-        Some(folder),
-        None,
-    ));
-
-    let options: Vec<String> = choices.iter().map(|(label, _, _)| label.clone()).collect();
+    let mut choices = rules::choices(env, &cwd);
+    // Each line also shows the condition as it will be stored.
+    let options: Vec<String> = choices
+        .iter()
+        .map(|choice| match (&choice.git_remote, &choice.path) {
+            (Some(remote), _) => format!("{}  (git remote {remote})", choice.label),
+            _ => choice.label.clone(),
+        })
+        .collect();
     let index = ui.select("Where should the rule apply?", &options, &[], Some(0))?;
-    let (_, path, git_remote) = choices.swap_remove(index);
-    Ok((path, git_remote))
+    let choice = choices.swap_remove(index);
+    Ok((choice.path, choice.git_remote))
 }
 
 fn rule_add(
@@ -1450,8 +1432,7 @@ fn rule_add(
         rule.profile,
         if locked { " (locked)" } else { "" }
     );
-    config.rules.push(rule);
-    config::save(env, &config)?;
+    rules::add(env, &mut config, rule)?;
     ui.success(&format!("Rule added: {summary}"));
     Ok(0)
 }
@@ -1462,14 +1443,9 @@ fn portable_path(env: &Env, path: &str) -> Result<String> {
     if path.starts_with('~') {
         return Ok(path.to_string());
     }
+    // `join` keeps an absolute path as it is and completes a relative one.
     let absolute = std::env::current_dir()?.join(path);
-    let absolute = absolute.canonicalize().unwrap_or(absolute);
-    let home = env.home.canonicalize().unwrap_or_else(|_| env.home.clone());
-    Ok(match absolute.strip_prefix(&home) {
-        Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
-        Ok(rest) => format!("~/{}", rest.display()),
-        Err(_) => absolute.display().to_string(),
-    })
+    Ok(rules::portable_path(env, &absolute))
 }
 
 fn rule_list(ui: &Ui, env: &Env) -> Result<i32> {
@@ -1536,8 +1512,7 @@ fn rule_remove(ui: &Ui, env: &Env, number: Option<usize>, yes: bool) -> Result<i
         println!("Nothing changed.");
         return Ok(0);
     }
-    config.rules.remove(index);
-    config::save(env, &config)?;
+    rules::remove(env, &mut config, index)?;
     ui.success(&format!("Rule removed: {summary}"));
     Ok(0)
 }

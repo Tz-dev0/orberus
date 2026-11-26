@@ -215,6 +215,9 @@ $ cprofile rule list
   Checked from top to bottom. A locked rule wins over everything.
 ```
 
+`rule add` refuses a rule for a profile that does not exist, and an exact copy
+of a rule you already have.
+
 Rule types and the order of checks are described in [rules.md](rules.md).
 
 ## usage

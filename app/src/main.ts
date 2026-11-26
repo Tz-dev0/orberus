@@ -9,6 +9,7 @@ import {
   type Profile,
   type Conversations,
   type Rule,
+  type RuleDraft,
   type StorageOverview,
   type Usage,
   type UsageOverview,
@@ -39,6 +40,7 @@ const ICONS = {
     "M5 3.2v9.6M5 5.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 8.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm6-6.2a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 0c0 2.2-2.6 2.6-6 3",
   lock: "M4.5 7.2V5.4a3.5 3.5 0 0 1 7 0v1.8M3.6 7.2h8.8v6H3.6z",
   chevron: "M6 3.5 10.5 8 6 12.5",
+  plus: "M8 3.5v9M3.5 8h9",
   bin: "M3 4.5h10M6.5 4.5V3h3v1.5M4.3 4.5l.6 8.5h6.2l.6-8.5M6.8 7v3.5M9.2 7v3.5",
 } as const;
 
@@ -363,7 +365,137 @@ function newProfileRow(overview: Overview): HTMLElement {
   return row;
 }
 
-function ruleRow(rule: Rule): HTMLElement {
+// The "new rule" form: open once a folder is chosen. Like the profile
+// form, its state lives here because the page is rebuilt often.
+let ruleDraft: RuleDraft | null = null;
+let draftChoice = 0;
+let draftProfile = "";
+let draftLocked = false;
+let ruleError = "";
+// The place of the rule whose removal waits for a second click.
+let removingRule: number | null = null;
+
+function closeRuleForm(): void {
+  ruleDraft = null;
+  draftChoice = 0;
+  draftLocked = false;
+  ruleError = "";
+}
+
+/** The last line of the rules: a way to add one, then the form. */
+function newRuleRow(overview: Overview): HTMLElement {
+  if (!ruleDraft) {
+    const row = el("li", "rule rule-new");
+    const open = el("button", "rule-add");
+    open.title = "Choose a folder, then where the rule applies and which profile it uses";
+    open.append(icon("plus"), el("span", "", "New rule…"));
+    onClick(open, async () => {
+      closeForm();
+      removing = null;
+      removingRule = null;
+      const draft = await api.pickRuleFolder();
+      if (!draft) return;
+      closeRuleForm();
+      ruleDraft = draft;
+      // The profile the folder does not use yet is the likely answer:
+      // start on the first one that is not the default.
+      const other = overview.profiles.find((profile) => !profile.isDefault);
+      draftProfile = (other ?? overview.profiles[0]).name;
+    });
+    row.append(open);
+    return row;
+  }
+
+  const draft = ruleDraft;
+  // A profile removed in a terminal meanwhile cannot stay selected.
+  if (!overview.profiles.some((profile) => profile.name === draftProfile)) {
+    draftProfile = overview.profiles[0].name;
+  }
+  const row = el("li", "profile-form rule-form");
+  row.style.setProperty("--hue", hue(draftProfile));
+  const form = el("form");
+
+  const where = el("fieldset", "rule-choices");
+  where.append(el("legend", "", "Where the rule applies"));
+  draft.choices.forEach((choice, index) => {
+    const label = el("label", "form-check");
+    const radio = el("input");
+    radio.type = "radio";
+    radio.name = "rule-where";
+    radio.checked = index === draftChoice;
+    radio.addEventListener("change", () => {
+      draftChoice = index;
+      ruleError = "";
+      render(overview);
+    });
+    label.title = choice.gitRemote ? `git_remote = "${choice.gitRemote}"` : `path = "${choice.path}"`;
+    label.append(radio, el("span", "", choice.label));
+    where.append(label);
+  });
+  form.append(where);
+
+  const use = el("label", "rule-use");
+  const select = el("select", "rule-select");
+  for (const profile of overview.profiles) {
+    const option = el("option", "", profile.name);
+    option.value = profile.name;
+    option.selected = profile.name === draftProfile;
+    select.append(option);
+  }
+  select.addEventListener("change", () => {
+    draftProfile = select.value;
+    ruleError = "";
+    render(overview);
+  });
+  use.append(el("span", "", "Profile to use there"), select);
+  form.append(use);
+
+  const lock = el("label", "form-check");
+  lock.title = "A locked rule wins over everything: Claude Code does not start there with another profile";
+  const box = el("input");
+  box.type = "checkbox";
+  box.checked = draftLocked;
+  box.addEventListener("change", () => {
+    draftLocked = box.checked;
+  });
+  lock.append(box, el("span", "", "Lock it: refuse any other profile there"));
+  form.append(lock);
+
+  if (ruleError) {
+    const error = el("p", "form-error", ruleError);
+    error.setAttribute("role", "alert");
+    form.append(error);
+  }
+
+  const buttons = el("div", "form-buttons");
+  const cancel = el("button", "quiet-button", "Cancel");
+  cancel.type = "button";
+  cancel.addEventListener("click", () => {
+    closeRuleForm();
+    render(overview);
+  });
+  const create = el("button", "filled-button", "Add rule");
+  create.type = "submit";
+  buttons.append(cancel, create);
+  form.append(buttons);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    create.disabled = true;
+    try {
+      await api.addRule(draft.choices[draftChoice], draftProfile, draftLocked);
+      closeRuleForm();
+    } catch (error) {
+      ruleError = String(error);
+    }
+    await refresh();
+  });
+
+  row.append(form);
+  return row;
+}
+
+function ruleRow(rule: Rule, overview: Overview): HTMLElement {
   const row = el("li", "rule");
   const where = el("span", "rule-where");
   if (rule.gitRemote) {
@@ -392,6 +524,30 @@ function ruleRow(rule: Rule): HTMLElement {
   const target = el("span", "rule-profile");
   target.style.setProperty("--hue", hue(rule.profile));
   target.append(el("span", "dot"), el("span", "", rule.profile));
+
+  // Only your own rules can go: a team rule has no place of its own.
+  const place = rule.index;
+  if (place !== null && removingRule === place) {
+    // Second click: it really goes.
+    const go = el("button", "talk-go", "Remove rule");
+    onClick(go, async () => {
+      removingRule = null;
+      await api.removeRule(rule);
+    });
+    row.append(go);
+    return row;
+  }
+  if (place !== null) {
+    const bin = el("button", "remove rule-bin");
+    bin.type = "button";
+    bin.title = "Remove this rule";
+    bin.append(icon("bin", "Remove this rule"));
+    bin.addEventListener("click", () => {
+      removingRule = place;
+      render(overview);
+    });
+    row.append(bin);
+  }
   row.append(target);
   return row;
 }
@@ -840,12 +996,13 @@ function render(overview: Overview | null, loadError = ""): void {
       newProfileRow(overview),
     );
     main.append(list);
-    if (overview.rules.length > 0) {
+    // A rule needs a profile to lead to: no section before the first one.
+    if (overview.profiles.length > 0) {
       const section = el("section", "rules-section");
       const title = el("h2", "", "Rules");
-      title.title = "Checked from top to bottom";
+      title.title = "Checked from top to bottom. A rule sends a folder or a repository to a profile";
       const list = el("ul", "rules");
-      list.append(...overview.rules.map(ruleRow));
+      list.append(...overview.rules.map((rule) => ruleRow(rule, overview)), newRuleRow(overview));
       section.append(title, list);
       main.append(section);
     }
@@ -884,7 +1041,7 @@ async function refresh(): Promise<void> {
     const changed = JSON.stringify(measured) !== JSON.stringify(storage);
     storage = measured;
     // Not while a form is open: rebuilding the page would disturb typing.
-    if (changed && !adding && !removing) render(overview);
+    if (changed && !adding && !removing && !ruleDraft) render(overview);
   } catch {
     // Sizes are a comfort, not worth an error message: keep the last ones.
   }
@@ -893,7 +1050,7 @@ async function refresh(): Promise<void> {
     const read = await api.usage();
     const changed = JSON.stringify(read) !== JSON.stringify(usage);
     usage = read;
-    if (changed && !adding && !removing) render(overview);
+    if (changed && !adding && !removing && !ruleDraft) render(overview);
   } catch {
     // Keep the last reading.
   }
@@ -932,9 +1089,11 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.key !== "Escape") return;
   // Escape first backs out of a form or a question, then closes the window.
-  if (adding || removing || trashing) {
+  if (adding || removing || trashing || ruleDraft || removingRule !== null) {
     closeForm();
+    closeRuleForm();
     removing = null;
+    removingRule = null;
     trashing = null;
     void refresh();
   } else {

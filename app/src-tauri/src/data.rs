@@ -15,6 +15,7 @@ use claude_profiles::disk;
 use claude_profiles::paths::Env;
 use claude_profiles::purge;
 use claude_profiles::retention::{self, Retention};
+use claude_profiles::rules;
 use claude_profiles::sessions;
 use claude_profiles::usage::{self, Verdict};
 use claude_profiles::view;
@@ -53,6 +54,9 @@ pub struct RuleView {
     pub locked: bool,
     /// `team.toml` or `config.toml`.
     pub source: &'static str,
+    /// Its place among the user's own rules, to remove it. `None` for a
+    /// team rule, which cannot be removed from here.
+    pub index: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -422,14 +426,19 @@ pub fn overview(env: &Env) -> Result<Overview> {
             keeps_days,
         });
     }
+    // Team rules come first in the list; the user's own are numbered from
+    // 0 after them.
+    let team = loaded.team_rules.len();
     let rules = loaded
         .rules()
-        .map(|(rule, source)| RuleView {
+        .enumerate()
+        .map(|(place, (rule, source))| RuleView {
             path: rule.path.clone(),
             git_remote: rule.git_remote.clone(),
             profile: rule.profile.clone(),
             locked: rule.locked,
             source: source.label(),
+            index: (source == RuleSource::User).then(|| place - team),
         })
         .collect();
 
@@ -439,6 +448,74 @@ pub fn overview(env: &Env) -> Result<Overview> {
         shim_installed: shim_path(env).exists(),
         can_reuse_login: config::native_profile(config).is_none(),
     })
+}
+
+/// One way to say where a new rule applies, for the form.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleChoice {
+    pub label: String,
+    pub path: Option<String>,
+    pub git_remote: Option<String>,
+}
+
+/// What the "new rule" form offers once a folder is chosen.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleDraft {
+    /// The chosen folder, for people: "~/code/acme-api".
+    pub folder: String,
+    /// Where the rule can apply, widest first. Never empty.
+    pub choices: Vec<RuleChoice>,
+}
+
+/// The rules that make sense for a folder, like the guided
+/// `cprofile rule add`.
+pub fn rule_draft(env: &Env, folder: &Path) -> RuleDraft {
+    RuleDraft {
+        folder: view::short_path(env, folder),
+        choices: rules::choices(env, folder)
+            .into_iter()
+            .map(|choice| RuleChoice {
+                label: choice.label,
+                path: choice.path,
+                git_remote: choice.git_remote,
+            })
+            .collect(),
+    }
+}
+
+/// Adds a rule, with the same checks as `cprofile rule add`.
+pub fn add_rule(
+    env: &Env,
+    path: Option<String>,
+    git_remote: Option<String>,
+    profile: &str,
+    locked: bool,
+) -> Result<()> {
+    let mut config = config::load(env)?.config;
+    rules::add(
+        env,
+        &mut config,
+        config::Rule {
+            path,
+            git_remote,
+            profile: profile.to_string(),
+            locked,
+        },
+    )
+}
+
+/// Removes one of the user's rules. `shown` is the rule as the page showed
+/// it: when the config changed meanwhile and another rule sits at that
+/// place, nothing is removed.
+pub fn remove_rule(env: &Env, index: usize, shown: &config::Rule) -> Result<()> {
+    let mut config = config::load(env)?.config;
+    if config.rules.get(index) != Some(shown) {
+        bail!("the rules changed since they were listed: look at them again");
+    }
+    rules::remove(env, &mut config, index)?;
+    Ok(())
 }
 
 /// Creates a profile, with the same checks as `cprofile add`. With
@@ -683,6 +760,48 @@ mod tests {
         assert!(work.size.ends_with("KB"), "{work:?}");
         assert!(work.detail.contains("conversations, "), "{work:?}");
         assert!(work.detail.ends_with(" other"), "{work:?}");
+    }
+
+    #[test]
+    fn rules_are_added_and_removed_but_never_a_team_one() {
+        let (_temp, env) = world();
+        fs::write(
+            env.root.join("team.toml"),
+            "[[rule]]\ngit_remote = \"github.com/corp/*\"\nprofile = \"work\"\n",
+        )
+        .unwrap();
+        let folder = env.home.join("notes");
+        fs::create_dir_all(&folder).unwrap();
+        let draft = rule_draft(&env, &folder);
+        assert_eq!(draft.choices.len(), 1);
+        let path = draft.choices[0].path.clone();
+        assert!(path.as_deref().is_some_and(|path| path.ends_with("notes")));
+
+        add_rule(&env, path.clone(), None, "perso", false).unwrap();
+        assert!(add_rule(&env, path.clone(), None, "perso", false).is_err());
+        assert!(add_rule(&env, None, None, "perso", false).is_err());
+        assert!(add_rule(&env, path.clone(), None, "nope", false).is_err());
+
+        let rules = overview(&env).unwrap().rules;
+        // The team rule first, then the one of the world, then the new one.
+        assert_eq!(rules.len(), 3);
+        assert_eq!((rules[0].source, rules[0].index), ("team.toml", None));
+        assert_eq!(rules[1].index, Some(0));
+        assert_eq!(rules[2].index, Some(1));
+
+        let shown = config::Rule {
+            path,
+            git_remote: None,
+            profile: "perso".to_string(),
+            locked: false,
+        };
+        // Another rule sits at that place: nothing goes.
+        assert!(remove_rule(&env, 0, &shown).is_err());
+        assert_eq!(overview(&env).unwrap().rules.len(), 3);
+        remove_rule(&env, 1, &shown).unwrap();
+        let rules = overview(&env).unwrap().rules;
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[1].git_remote.as_deref(), Some("github.com/acme/*"));
     }
 
     #[test]

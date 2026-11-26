@@ -30,6 +30,23 @@ export interface Rule {
   locked: boolean;
   /** "team.toml" or "config.toml". */
   source: string;
+  /** Its place among your own rules, to remove it; null for a team rule. */
+  index: number | null;
+}
+
+/** One way to say where a new rule applies. */
+export interface RuleChoice {
+  label: string;
+  path: string | null;
+  gitRemote: string | null;
+}
+
+/** What the "new rule" form offers once a folder is chosen. */
+export interface RuleDraft {
+  /** The chosen folder: "~/code/acme-api". */
+  folder: string;
+  /** Widest first, never empty. */
+  choices: RuleChoice[];
 }
 
 /** The disk space one profile takes. */
@@ -133,6 +150,12 @@ export interface Api {
   /** Takes the profile and its own rules out of the config. Its Claude Code
    *  folder is kept, unless `purge` asks to delete it with its login. */
   removeProfile(name: string, purge: boolean): Promise<void>;
+  /** Asks which folder a new rule is about. Resolves to null when the
+   *  choice is cancelled. */
+  pickRuleFolder(): Promise<RuleDraft | null>;
+  addRule(choice: RuleChoice, profile: string, locked: boolean): Promise<void>;
+  /** Removes one of your own rules, given as the page shows it. */
+  removeRule(rule: Rule): Promise<void>;
   /** The biggest conversations of a profile. */
   conversations(name: string): Promise<Conversations>;
   /** Moves one conversation to the Trash. */
@@ -155,6 +178,17 @@ const tauri: Api = {
   usage: () => invoke<UsageOverview>("usage"),
   setDefault: (name) => invoke("set_default", { name }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
+  pickRuleFolder: () => invoke<RuleDraft | null>("pick_rule_folder"),
+  addRule: (choice, profile, locked) =>
+    invoke("add_rule", { path: choice.path, gitRemote: choice.gitRemote, profile, locked }),
+  removeRule: (rule) =>
+    invoke("remove_rule", {
+      index: rule.index,
+      path: rule.path,
+      gitRemote: rule.gitRemote,
+      profile: rule.profile,
+      locked: rule.locked,
+    }),
   conversations: (name) => invoke<Conversations>("conversations", { name }),
   trashConversation: (name, id) => invoke("trash_conversation", { name, id }),
   setRetention: (name, days) => invoke("set_retention", { name, days }),
@@ -209,8 +243,8 @@ function preview(): Api {
       },
     ],
     rules: [
-      { path: null, gitRemote: "github.com/acme/*", profile: "work", locked: true, source: "team.toml" },
-      { path: "~/clients/acme", gitRemote: null, profile: "work", locked: false, source: "config.toml" },
+      { path: null, gitRemote: "github.com/acme/*", profile: "work", locked: true, source: "team.toml", index: null },
+      { path: "~/clients/acme", gitRemote: null, profile: "work", locked: false, source: "config.toml", index: 0 },
     ],
   };
   return {
@@ -291,6 +325,34 @@ function preview(): Api {
       });
       state.profiles.sort((a, b) => a.name.localeCompare(b.name));
       if (reuseLogin) state.canReuseLogin = false;
+    },
+    pickRuleFolder: async () => ({
+      folder: "~/code/blog",
+      choices: [
+        { label: "Every repository of github.com/me", path: null, gitRemote: "github.com/me/*" },
+        { label: "Only the repository github.com/me/blog", path: null, gitRemote: "github.com/me/blog" },
+        { label: "The folder ~/code/blog and everything below", path: "~/code/blog", gitRemote: null },
+      ],
+    }),
+    addRule: async (choice, profile, locked) => {
+      if (!state.profiles.some((known) => known.name === profile)) throw `unknown profile '${profile}'`;
+      const same = (rule: Rule) =>
+        rule.source === "config.toml" &&
+        rule.path === choice.path &&
+        rule.gitRemote === choice.gitRemote &&
+        rule.profile === profile &&
+        rule.locked === locked;
+      if (state.rules.some(same)) throw "this rule already exists";
+      const own = state.rules.filter((rule) => rule.index !== null).length;
+      state.rules.push({ path: choice.path, gitRemote: choice.gitRemote, profile, locked, source: "config.toml", index: own });
+      const target = state.profiles.find((known) => known.name === profile);
+      if (target) target.rules += 1;
+    },
+    removeRule: async (gone) => {
+      state.rules = state.rules.filter((rule) => rule.index !== gone.index);
+      // Your own rules are numbered again from 0.
+      let next = 0;
+      for (const rule of state.rules) if (rule.index !== null) rule.index = next++;
     },
     conversations: async (name) => ({
       items: structuredClone(talks[name] ?? []),
