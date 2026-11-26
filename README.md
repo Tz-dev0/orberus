@@ -1,198 +1,245 @@
-# Claude Profiles
+<div align="center">
+  <h1>Claude Profiles</h1>
+  <p><b>The right Claude Code account for each folder. Automatically.</b></p>
+  <p>
+    <a href="https://github.com/Tz-dev0/claude-profiles/releases"><img src="https://img.shields.io/github/v/release/Tz-dev0/claude-profiles?label=version&style=flat-square" alt="Version"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT license"></a>
+    <img src="https://img.shields.io/badge/macOS-Apple_Silicon_and_Intel-lightgrey?style=flat-square" alt="macOS, Apple Silicon and Intel">
+  </p>
+</div>
 
-The right Claude account for each folder. Automatically.
-
-`cprofile` keeps several Claude Code accounts on one machine (work, personal,
+`cprofile` keeps several Claude Code accounts on one Mac (work, personal,
 client) and picks the account from the folder you are in. A company repository
 always opens with the company account, a side project with yours, and a locked
 rule refuses the wrong one.
 
-Not affiliated with Anthropic. Claude is a trademark of Anthropic.
+```text
+~/code/acme-api $ claude
+cprofile: work (locked rule git_remote = "github.com/acme/*" in config.toml)
 
-> Status: early prototype. Claude Code only, developed and tested on macOS.
+~/code/blog $ claude
+cprofile: perso (default profile)
 
-## Install
+~/code/acme-api $ CLAUDE_PROFILE=perso claude
+cprofile: refused: this folder is locked to profile 'work' by rule
+git_remote = "github.com/acme/*" in config.toml, so profile 'perso' cannot be used here
+```
 
-On a Mac (Apple Silicon or Intel), no Rust needed. This downloads the latest
-release into `~/.claude-profiles/bin`, then installs the `claude` shim next to it
-and offers to add that folder to your `PATH`:
+> Not affiliated with Anthropic. Claude is a trademark of Anthropic.
+>
+> Early version: Claude Code only, developed and tested on macOS.
+> It is meant for people who hold several legitimate, paid accounts. It does
+> not switch accounts to get around usage limits.
+
+## Features
+
+- **Automatic choice**: you keep typing `claude`. The account comes from a
+  rule on the folder or on the git remote, so there is no switch command to
+  forget.
+- **Guard rail**: a locked rule wins over everything, and Claude Code does not
+  start with another account in that folder.
+- **Team rules**: a company can hand out a `team.toml`; its rules are checked
+  before yours.
+- **Separate logins**: each profile has its own Claude Code folder and its own
+  login. Your existing `~/.claude` can be one of them, left untouched.
+- **Disk space and history**: see what each profile takes, choose how long
+  conversations are kept, and move the biggest ones to the Trash.
+- **Menu bar app** (optional): the same profiles and rules, one click away.
+
+## Quick start
+
+Claude Profiles needs macOS (Apple Silicon or Intel) and
+[Claude Code](https://claude.com/claude-code) already
+installed.
+
+**Install**
 
 ```sh
 mkdir -p ~/.claude-profiles/bin
-curl -fsSL https://github.com/Tz-dev0/claude-profile/releases/latest/download/cprofile-macos-universal.tar.gz \
+curl -fsSL https://github.com/Tz-dev0/claude-profiles/releases/latest/download/cprofile-macos-universal.tar.gz \
   | tar -xz -C ~/.claude-profiles/bin --strip-components 1 cprofile-macos-universal/cprofile
 ~/.claude-profiles/bin/cprofile setup
 ```
 
-Use the command above rather than a download from the browser: the binary is
-not signed with an Apple developer certificate, and macOS refuses to run an
-unsigned program that a browser downloaded.
+`setup` installs the `claude` shim next to `cprofile` and offers to add that
+folder to your `PATH`. Open a new terminal afterwards. Other ways to install,
+and how to update or uninstall, are in [docs/installation.md](docs/installation.md).
 
-To update, run the same commands again. The CLI works on its own; the menu bar
-app is optional.
-
-### From source
+**Create your profiles**
 
 ```sh
-cargo install --path .
-cprofile setup          # installs the shim and offers to add it to your PATH
+cprofile add perso --native   # your current login, ~/.claude, kept as it is
+cprofile add work             # a second, empty profile
+cprofile run --profile work   # start Claude Code in it once, then /login
 ```
 
-### Publishing a release (maintainers)
-
-Set the version in `Cargo.toml` and in `app/src-tauri/tauri.conf.json`, commit,
-then push a tag with the same number:
+**Send a repository to a profile**
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-The `Release` workflow runs the tests, builds a universal CLI with `scripts/package.sh` and
-a universal app with `scripts/package-app.sh`, and attaches both archives to a
-new GitHub release.
-
-## Quick start
-
-Most commands ask for what you leave out, so you can start with no argument:
-
-```sh
-cprofile add            # name it, and reuse your current login if you want
-cprofile add work       # second profile; offers to start Claude Code to log in
-
-cd ~/code/acme-app
-cprofile rule add       # proposes "every repository of github.com/acme"
-
-cprofile                # which profile applies here, and all your profiles
-```
-
-The same without questions, for scripts:
-
-```sh
-cprofile add perso --native
-cprofile add work
 cprofile rule add --git-remote "github.com/acme/*" --profile work --locked
 ```
 
 From then on, just type `claude`.
 
-## Commands
+Most commands ask for what you leave out, so `cprofile add` and
+`cprofile rule add` alone also work: they guide you step by step.
 
-| Command | What it does |
-|---|---|
-| `cprofile` | Profile used in this folder, and the list of profiles |
-| `cprofile setup` | Install the `claude` shim and put it in your PATH |
-| `cprofile add [name]` | Create a profile (`--native` reuses `~/.claude`) |
-| `cprofile list`, `ls` | List profiles: account logged in, default, and the one used here |
-| `cprofile disk` | Show how much disk space each profile takes, and what takes it. Deletes nothing |
-| `cprofile clean [name]` | List a profile's biggest conversations and move the ones you pick to the Trash. Without a pick it only lists |
-| `cprofile retention [name] [days]` | Show or set how long each profile keeps its conversations (Claude Code deletes them after 30 days by default) |
-| `cprofile remove [name]`, `rm` | Remove a profile and its rules; its folder is kept. `--purge` also deletes the folder and its login in the keychain |
-| `cprofile default [name]`, `global` | Profile used when no rule applies |
-| `cprofile use [name]` | Pin the current folder (writes `.claude-profile`) |
-| `cprofile status` | Which profile applies here, and why |
-| `cprofile run [-p name] [-- args]` | Start Claude Code, optionally forcing a profile |
-| `cprofile rule add` | Add a rule, built from the current folder when no option is given |
-| `cprofile rule list`, `ls` | Rules, in the order they are checked |
-| `cprofile rule remove [n]`, `rm` | Remove one of your rules by its number |
-| `cprofile doctor` | Check the installation |
+## How a profile is chosen
 
-In a script or a pipe nothing is asked: a missing argument is an error, and a
-removal needs `--yes`. Colors follow `NO_COLOR`.
+The first of these that applies wins:
 
-## Menu bar app (macOS, early)
-
-A small app that lives in the menu bar. Click its icon to see your profiles
-and who is logged in to each, create or remove a profile, start Claude Code
-in one of them (you pick the project folder, a terminal window opens there),
-or change the default profile. Two folded sections show how long each
-profile keeps its conversations, with a way to change it, and the disk
-space each profile takes. Click a profile there to see its biggest
-conversations and move some to the Trash. Removing a profile keeps its Claude Code
-folder unless you tick the box to delete it, as `cprofile remove` and
-`cprofile remove --purge` do. It reads and writes the same config as
-the CLI.
-
-Install the CLI first (the app starts Claude Code through its shim), then
-put the app in `/Applications` and open it:
-
-```sh
-curl -fsSL https://github.com/Tz-dev0/claude-profile/releases/latest/download/Claude-Profiles-macos-universal.tar.gz \
-  | tar -xz -C /Applications
-open "/Applications/Claude Profiles.app"
-```
-
-As for the CLI, use this command rather than a download from the browser: the
-app is not signed with an Apple developer certificate, and macOS refuses to
-open an unsigned app that a browser downloaded. To update, quit the app and
-run the same commands again.
-
-Rules are still created with `cprofile`; the app shows them. It does not
-handle Claude Desktop yet.
-
-To build it from source:
-
-```sh
-cd app
-npm install
-npm run tauri build     # builds "Claude Profiles.app"
-npm run tauri dev       # or run it while working on it
-```
-
-The built app is in `app/src-tauri/target/release/bundle/macos/`.
-
-## How it works
-
-`cprofile setup` creates `~/.claude-profiles/bin/claude`, a link to `cprofile`.
-With that folder first in your PATH, typing `claude` starts the shim. It finds
-the profile for the current folder, sets `CLAUDE_CONFIG_DIR` to that profile's
-folder, then replaces itself with the real Claude Code. Your arguments are
-passed as they are.
-
-A profile is picked in this order:
-
-1. a **locked rule** (it also refuses an explicit choice of another profile)
+1. a **locked rule**. It also refuses an explicit choice of another profile
 2. an **explicit choice**: `cprofile run --profile x`, or `CLAUDE_PROFILE=x claude`
 3. a **`.claude-profile` file** in the folder or a parent (`cprofile use x`)
 4. the **first matching rule**, team rules before your own
 5. the **default profile**
 
-With no config at all, `claude` runs exactly as if nothing was installed.
+`cprofile status` tells you which one applies where you are, and why:
 
-## Configuration
-
-`~/.claude-profiles/config.toml`:
-
-```toml
-default = "perso"
-
-[profiles.perso]
-native = true                    # Claude Code's own ~/.claude, left untouched
-
-[profiles.work]                  # stored in ~/.claude-profiles/profiles/work
-
-[[rule]]
-git_remote = "github.com/acme/*"
-profile = "work"
-locked = true
-
-[[rule]]
-path = "~/clients/foo"
-profile = "work"
+```text
+$ cprofile status
+  Profile  work
+  Account  me@acme.example
+  Why      locked rule git_remote = "github.com/acme/*" in config.toml
+  Config   ~/.claude-profiles/profiles/work
+  Claude   /opt/homebrew/bin/claude
 ```
 
-`~/.claude-profiles/team.toml` has the same `[[rule]]` entries and is meant to
-be handed out by a company. Its rules are checked before yours.
+With no config at all, `claude` runs exactly as if nothing was installed.
+Rules, the config files and team rules are described in
+[docs/rules.md](docs/rules.md).
 
-Rules by git remote read `.git/config` directly, so they work wherever the
-repository is cloned, including worktrees.
+## Commands
 
-## Known limits
+| Command | What it does |
+|---|---|
+| `cprofile` | Profile used in this folder, then the list of commands |
+| `cprofile setup` | Install the `claude` shim and put it in your `PATH` |
+| `cprofile add [name]` | Create a profile (`--native` reuses `~/.claude`) |
+| `cprofile list` | Profiles, the account logged in to each, the default |
+| `cprofile status` | Which profile applies here, and why |
+| `cprofile use [name]` | Pin the current folder to a profile |
+| `cprofile default [name]` | Profile used when no rule applies |
+| `cprofile run [-p name] [-- args]` | Start Claude Code, optionally forcing a profile |
+| `cprofile rule add`, `list`, `remove` | Manage the rules |
+| `cprofile disk` | Disk space of each profile. Deletes nothing |
+| `cprofile retention [name] [days]` | How long each profile keeps its conversations |
+| `cprofile clean [name]` | Biggest conversations of a profile; move some to the Trash |
+| `cprofile remove [name]` | Remove a profile and your rules that point to it |
+| `cprofile doctor` | Check the installation |
 
-- A running session keeps its account. The choice is made at launch.
-- IDE extensions that start their own Claude Code binary may not go through
-  the shim.
-- Claude Desktop is not handled yet.
-- Neither the CLI nor the menu bar app is signed with an Apple developer
-  certificate: install them with the `curl` commands above, not from the
-  browser.
+Every command, with its options and an example of its output, is in
+[docs/commands.md](docs/commands.md).
+
+## Features in detail
+
+The examples below are shortened.
+
+### Profiles
+
+```text
+$ cprofile list
+┌─────────┬─────────────────┬──────────────────────────────────┬───────┬─────────┬──────┐
+│ Profile │ Account         │ Config folder                    │ Rules │ Default │ Here │
+├─────────┼─────────────────┼──────────────────────────────────┼───────┼─────────┼──────┤
+│ perso   │ me@example.com  │ ~/.claude (Claude Code default)  │       │ ●       │ ✓    │
+│ work    │ me@acme.example │ ~/.claude-profiles/profiles/work │ 1     │         │      │
+└─────────┴─────────────────┴──────────────────────────────────┴───────┴─────────┴──────┘
+  Default: used when no rule applies.   Here: used in this folder.
+```
+
+A profile is a Claude Code config folder with its own login, settings and
+history. The profile created with `--native` is your existing `~/.claude`.
+
+### Disk space
+
+```text
+$ cprofile disk
+┌─────────┬────────┬──────────┬──────────────┬─────────────────┬────────┐
+│ Profile │ Total  │ Sessions │ File history │ Plugins, skills │ Other  │
+├─────────┼────────┼──────────┼──────────────┼─────────────────┼────────┤
+│ perso   │ 28 MB  │ 28 MB    │ 0 B          │ 0 B             │ 4.1 KB │
+│ work    │ 252 MB │ 239 MB   │ 0 B          │ 13 MB           │ 4.1 KB │
+└─────────┴────────┴──────────┴──────────────┴─────────────────┴────────┘
+  All profiles: 280 MB
+  Nothing is deleted by this command.
+```
+
+### Cleaning up conversations
+
+`cprofile clean` lists a profile's conversations, biggest first. Nothing moves
+until you pick some, and what you pick goes to the macOS Trash with a note
+that says where to put it back.
+
+```text
+$ cprofile clean work
+┌───┬────────┬─────────────┬─────────────────┬────────────────────────────┬──────────┐
+│ # │ Size   │ Last used   │ Folder          │ Title                      │ Id       │
+├───┼────────┼─────────────┼─────────────────┼────────────────────────────┼──────────┤
+│ 1 │ 168 MB │ 4 days ago  │ ~/code/acme-api │ Payment retries            │ 3f2a9c1e │
+│ 2 │ 63 MB  │ 2 days ago  │ ~/code/acme-api │ Migrate the invoices table │ 7b8d0e2f │
+│ 3 │ 8.4 MB │ 16 days ago │ ~/code/acme-api │ Fix flaky login test       │ a1c4e5f6 │
+└───┴────────┴─────────────┴─────────────────┴────────────────────────────┴──────────┘
+  3 conversation(s), 239 MB in all
+  Nothing was changed.
+```
+
+### How long conversations are kept
+
+Claude Code deletes conversations after 30 days by default, without a
+message. `cprofile retention` shows the setting of each profile and changes it:
+
+```text
+$ cprofile retention work 365
+✓ Profile 'work' keeps its conversations 1 year
+```
+
+### Menu bar app
+
+A small app that lives in the menu bar: your profiles and who is logged in to
+each, the rules, the disk space, and a button to open Claude Code in a profile.
+It reads and writes the same config as the CLI and is optional. See
+[docs/app.md](docs/app.md).
+
+## Safety
+
+- The shim only chooses a config folder, then hands over to the real Claude
+  Code. It does not read your conversations or your credentials, and it makes
+  no network request.
+- If the config cannot be read, or a locked rule forbids the profile you asked
+  for, Claude Code does not start. It never falls back to another account.
+- `disk`, `list`, `status` and `doctor` change nothing.
+- `clean` moves conversations to the Trash and refuses one that changed in the
+  last hour, since it may still be open. It never touches `memory/` folders.
+- `remove` keeps the profile's folder, so its login and history stay on disk.
+  Only `remove --purge` deletes them, and it is refused for `~/.claude`.
+
+Known limits are listed in [docs/troubleshooting.md](docs/troubleshooting.md#known-limits).
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+## Documentation
+
+- [Installation](docs/installation.md): install, update, uninstall, build from source
+- [Rules and configuration](docs/rules.md): rule types, `config.toml`, team rules
+- [Commands](docs/commands.md): every command and its options
+- [Menu bar app](docs/app.md)
+- [How it works](docs/how-it-works.md)
+- [Troubleshooting](docs/troubleshooting.md): known limits and common problems
+
+## Get help
+
+First run `cprofile doctor` and read what it says: it checks the shim, your
+`PATH`, the config files and the rules, and tells you how to fix what is wrong.
+
+Then read [Troubleshooting](docs/troubleshooting.md). If the problem is still
+there, [open an issue](https://github.com/Tz-dev0/claude-profiles/issues) with
+the output of `cprofile doctor` and `cprofile status`.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to build and test the project.
+
+## License
+
+[MIT](LICENSE).
