@@ -9,7 +9,7 @@ rule refuses the wrong one.
 
 Not affiliated with Anthropic. Claude is a trademark of Anthropic.
 
-> Status: early prototype. Claude Code only, tested on Linux so far.
+> Status: early prototype. Claude Code only, developed and tested on macOS.
 
 ## Install
 
