@@ -21,6 +21,7 @@ use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Rect, WebviewWind
 use claude_profiles::paths::Env;
 
 const WINDOW: &str = "main";
+const TRAY: &str = "main";
 // Window size in points. The width matches tauri.conf.json.
 const WIDTH: f64 = 320.0;
 const MIN_HEIGHT: f64 = 80.0;
@@ -29,6 +30,20 @@ const MAX_HEIGHT: f64 = 560.0;
 /// When the popover was last hidden because it lost focus. Shared state must
 /// be safe to touch from several threads, hence the `Mutex`.
 struct LastHidden(Mutex<Option<Instant>>);
+
+/// When the window was last shown without a click (launch or reopen).
+struct LastPresented(Mutex<Option<Instant>>);
+
+/// True when `moment` holds a time less than `within` ago.
+fn recent(moment: &Mutex<Option<Instant>>, within: Duration) -> bool {
+    // A poisoned lock (another thread panicked while holding it) is read as
+    // "no", which is the safe answer for both callers.
+    moment
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .is_some_and(|at| at.elapsed() < within)
+}
 
 /// Runs a core function and turns its error into a text. Tauri sends command
 /// errors to the page as JSON, and `anyhow::Error` is not serializable.
@@ -140,14 +155,7 @@ fn toggle(app: &AppHandle, icon: Rect) {
     // Clicking the icon while the window is open first takes the focus away,
     // which hides the window. Without this check the same click would then
     // open it again.
-    let just_hidden = app
-        .state::<LastHidden>()
-        .0
-        .lock()
-        .ok()
-        .and_then(|guard| *guard)
-        .is_some_and(|at| at.elapsed() < Duration::from_millis(300));
-    if just_hidden {
+    if recent(&app.state::<LastHidden>().0, Duration::from_millis(300)) {
         return;
     }
     place_under(&window, icon);
@@ -155,9 +163,56 @@ fn toggle(app: &AppHandle, icon: Rect) {
     let _ = window.set_focus();
 }
 
+/// Shows the window without a click on the icon: at startup, and when the
+/// app is opened again from Finder or Spotlight while it is running.
+///
+/// A menu bar app has no Dock icon and no window of its own, and on a screen
+/// with a notch macOS hides the menu bar icons that do not fit. Without this,
+/// opening the app could show nothing at all.
+fn present(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(WINDOW) else {
+        return;
+    };
+    // `rect()` gives the icon's place in the menu bar, when macOS has one.
+    let icon = app
+        .tray_by_id(TRAY)
+        .and_then(|tray| tray.rect().ok().flatten())
+        // Right after launch macOS has not placed the icon yet and reports a
+        // position outside every screen: only trust one that is on a screen.
+        .filter(|icon| {
+            let scale = window.scale_factor().unwrap_or(1.0);
+            let at = icon.position.to_physical::<f64>(scale);
+            matches!(app.monitor_from_point(at.x, at.y), Ok(Some(_)))
+        });
+    match icon {
+        Some(icon) => place_under(&window, icon),
+        None => place_top_right(&window),
+    }
+    if let Ok(mut last) = app.state::<LastPresented>().0.lock() {
+        *last = Some(Instant::now());
+    }
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Fallback when the icon's place is unknown: the top right corner of the
+/// main screen, just under the menu bar.
+fn place_top_right(window: &WebviewWindow) {
+    let (Ok(Some(monitor)), Ok(own)) = (window.primary_monitor(), window.outer_size()) else {
+        return;
+    };
+    let scale = monitor.scale_factor();
+    let x = f64::from(monitor.position().x) + f64::from(monitor.size().width)
+        - f64::from(own.width)
+        - 12.0 * scale;
+    let y = f64::from(monitor.position().y) + 40.0 * scale;
+    let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(LastHidden(Mutex::new(None)))
+        .manage(LastPresented(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             overview,
             set_default,
@@ -178,7 +233,7 @@ fn main() {
             // `include_bytes!` puts the PNG inside the binary at build time.
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
 
-            TrayIconBuilder::with_id("main")
+            TrayIconBuilder::with_id(TRAY)
                 .icon(icon)
                 // A template icon is drawn by macOS in the menu bar color,
                 // so it stays readable in light and dark mode.
@@ -213,6 +268,12 @@ fn main() {
             let handle = app.handle().clone();
             window.on_window_event(move |event| {
                 if let WindowEvent::Focused(false) = event {
+                    // While the app starts, the focus can go back to the app
+                    // that launched it. The window must survive that, or
+                    // opening the app would show nothing.
+                    if recent(&handle.state::<LastPresented>().0, Duration::from_secs(2)) {
+                        return;
+                    }
                     if let Some(window) = handle.get_webview_window(WINDOW) {
                         let _ = window.hide();
                     }
@@ -221,8 +282,29 @@ fn main() {
                     }
                 }
             });
+            // Opening the app shows its window, so there is always something
+            // to see. It waits a moment for macOS to place the menu bar icon,
+            // on another thread so the app keeps starting meanwhile. Window
+            // calls must then come back to the main thread.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(600));
+                let on_main = handle.clone();
+                let _ = handle.run_on_main_thread(move || present(&on_main));
+            });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("cannot start Claude Profiles");
+        // `build` + `run` instead of `run` alone, to receive app events.
+        .build(tauri::generate_context!())
+        .expect("cannot start Claude Profiles")
+        .run(|app, event| {
+            // Sent by macOS when the app is opened while already running.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                present(app);
+            }
+            // On other systems nothing is done with the event yet.
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }
