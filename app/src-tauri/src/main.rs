@@ -9,7 +9,9 @@
 
 mod data;
 
+use std::path::PathBuf;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -19,6 +21,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Rect, WebviewWindow, WindowEvent};
 
 use claude_profiles::paths::Env;
+use tauri_plugin_dialog::DialogExt;
 
 const WINDOW: &str = "main";
 const TRAY: &str = "main";
@@ -30,6 +33,10 @@ const MAX_HEIGHT: f64 = 560.0;
 /// When the popover was last hidden because it lost focus. Shared state must
 /// be safe to touch from several threads, hence the `Mutex`.
 struct LastHidden(Mutex<Option<Instant>>);
+
+/// True while the folder picker is open. An `AtomicBool` is a flag that
+/// several threads can read and write without a lock.
+struct Picking(AtomicBool);
 
 /// When the window was last shown without a click (launch or reopen).
 struct LastPresented(Mutex<Option<Instant>>);
@@ -84,13 +91,54 @@ fn add_profile(name: String, reuse_login: bool) -> Result<(), String> {
     run(|env| data::add_profile(env, &name, reuse_login))
 }
 
-/// Opens a terminal window running Claude Code in the given profile.
 #[tauri::command]
-fn open_claude(name: String) -> Result<(), String> {
+fn remove_profile(name: String, purge: bool) -> Result<(), String> {
+    run(|env| data::remove_profile(env, &name, purge))
+}
+
+/// Shows the native folder picker and returns the chosen folder.
+///
+/// The popover normally hides as soon as it loses the focus, which also
+/// puts this Dock-less app in the background: macOS then never brings the
+/// picker to the screen. So while the picker is open, the popover stays.
+fn pick_folder(app: &AppHandle, name: &str, start: PathBuf) -> Option<PathBuf> {
+    app.state::<Picking>().0.store(true, Ordering::SeqCst);
+    let picked = app
+        .dialog()
+        .file()
+        .set_title(format!("Open Claude Code as {name} in"))
+        .set_directory(start)
+        .blocking_pick_folder();
+    app.state::<Picking>().0.store(false, Ordering::SeqCst);
+    // The choice is made: the popover has done its job.
+    if let Some(window) = app.get_webview_window(WINDOW) {
+        let _ = window.hide();
+    }
+    picked.and_then(|folder| folder.into_path().ok())
+}
+
+/// Asks for a project folder, then opens a terminal window running Claude
+/// Code there with the given profile. Returns false when the user cancels.
+///
+/// `async` matters here: Tauri runs an async command off the main thread,
+/// and the folder picker would freeze the app if it waited on the main one.
+#[tauri::command]
+async fn open_claude(app: AppHandle, name: String) -> Result<bool, String> {
+    // A second click while the picker is open must not stack another one.
+    if app.state::<Picking>().0.load(Ordering::SeqCst) {
+        return Ok(false);
+    }
+    let env = Env::from_process().map_err(|error| format!("{error:#}"))?;
+    // Start where this profile was last used, or in the home folder.
+    let start = data::last_folder(&env, &name).unwrap_or_else(|| env.home.clone());
+    let Some(folder) = pick_folder(&app, &name, start) else {
+        return Ok(false);
+    };
     run(|env| {
-        let launcher = data::write_launcher(env, &name)?;
+        let launcher = data::write_launcher(env, &name, &folder)?;
         open(&[launcher.as_os_str()])
-    })
+    })?;
+    Ok(true)
 }
 
 /// Opens `config.toml` in the default text editor.
@@ -216,12 +264,16 @@ fn place_top_right(window: &WebviewWindow) {
 
 fn main() {
     tauri::Builder::default()
+        // The native folder picker.
+        .plugin(tauri_plugin_dialog::init())
         .manage(LastHidden(Mutex::new(None)))
+        .manage(Picking(AtomicBool::new(false)))
         .manage(LastPresented(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             overview,
             set_default,
             add_profile,
+            remove_profile,
             open_claude,
             open_config,
             fit,
@@ -274,6 +326,10 @@ fn main() {
             let handle = app.handle().clone();
             window.on_window_event(move |event| {
                 if let WindowEvent::Focused(false) = event {
+                    // The folder picker takes the focus: stay visible.
+                    if handle.state::<Picking>().0.load(Ordering::SeqCst) {
+                        return;
+                    }
                     // While the app starts, the focus can go back to the app
                     // that launched it. The window must survive that, or
                     // opening the app would show nothing.

@@ -10,6 +10,11 @@ export interface Profile {
   location: string;
   isDefault: boolean;
   rules: number;
+  /** How many of those rules come from team.toml: they stay when the
+   *  profile is removed. */
+  teamRules: number;
+  /** False when its folder must never be deleted, as for ~/.claude. */
+  canPurge: boolean;
 }
 
 export interface Rule {
@@ -35,7 +40,12 @@ export interface Api {
   overview(): Promise<Overview>;
   setDefault(name: string): Promise<void>;
   addProfile(name: string, reuseLogin: boolean): Promise<void>;
-  openClaude(name: string): Promise<void>;
+  /** Takes the profile and its own rules out of the config. Its Claude Code
+   *  folder is kept, unless `purge` asks to delete it with its login. */
+  removeProfile(name: string, purge: boolean): Promise<void>;
+  /** Asks for a project folder, then opens Claude Code there in a terminal.
+   *  Resolves to false when the folder choice is cancelled. */
+  openClaude(name: string): Promise<boolean>;
   openConfig(): Promise<void>;
   /** Resizes the window to the height of its content. */
   fit(height: number): Promise<void>;
@@ -47,7 +57,8 @@ const tauri: Api = {
   overview: () => invoke<Overview>("overview"),
   setDefault: (name) => invoke("set_default", { name }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
-  openClaude: (name) => invoke("open_claude", { name }),
+  removeProfile: (name, purge) => invoke("remove_profile", { name, purge }),
+  openClaude: (name) => invoke<boolean>("open_claude", { name }),
   openConfig: () => invoke("open_config"),
   fit: (height) => invoke("fit", { height }),
   hide: () => invoke("hide"),
@@ -61,13 +72,15 @@ function preview(): Api {
     shimInstalled: true,
     canReuseLogin: false,
     profiles: [
-      { name: "perso", account: "me@example.com", location: "~/.claude", isDefault: true, rules: 0 },
+      { name: "perso", account: "me@example.com", location: "~/.claude", isDefault: true, rules: 0, teamRules: 0, canPurge: false },
       {
         name: "work",
         account: "me@acme.example",
         location: "~/.claude-profiles/profiles/work",
         isDefault: false,
         rules: 2,
+        teamRules: 1,
+        canPurge: true,
       },
       {
         name: "client",
@@ -75,6 +88,8 @@ function preview(): Api {
         location: "~/.claude-profiles/profiles/client",
         isDefault: false,
         rules: 0,
+        teamRules: 0,
+        canPurge: true,
       },
     ],
     rules: [
@@ -102,12 +117,22 @@ function preview(): Api {
         location: reuseLogin ? "~/.claude" : `~/.claude-profiles/profiles/${name}`,
         isDefault: state.profiles.length === 0,
         rules: 0,
+        teamRules: 0,
+        canPurge: !reuseLogin,
       });
       state.profiles.sort((a, b) => a.name.localeCompare(b.name));
       if (reuseLogin) state.canReuseLogin = false;
     },
+    removeProfile: async (name, _purge) => {
+      state.profiles = state.profiles.filter((profile) => profile.name !== name);
+      // Team rules cannot be removed from here.
+      state.rules = state.rules.filter(
+        (rule) => rule.profile !== name || rule.source === "team.toml",
+      );
+    },
     openClaude: async (name) => {
       if (name === "client") throw "Preview only: a browser cannot open a terminal.";
+      return true;
     },
     openConfig: async () => {},
     fit: async () => {},

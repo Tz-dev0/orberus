@@ -211,6 +211,28 @@ pub fn add_profile(
     Ok(first)
 }
 
+/// Removes a profile from the config, with the user's rules that point to
+/// it, and returns how many rules went. Shared by `cprofile remove` and the
+/// menu bar app.
+///
+/// The profile's folder is never touched: it holds the history and settings
+/// of that account, and deleting it cannot be undone. Team rules cannot be
+/// edited from here either; `claude` refuses to start where one still needs
+/// the profile.
+pub fn remove_profile(env: &Env, config: &mut Config, name: &str) -> Result<usize> {
+    if config.profiles.remove(name).is_none() {
+        bail!("unknown profile '{name}'");
+    }
+    let before = config.rules.len();
+    // `retain` keeps the elements for which the closure answers true.
+    config.rules.retain(|rule| rule.profile != name);
+    if config.default.as_deref() == Some(name) {
+        config.default = None;
+    }
+    save(env, config)?;
+    Ok(before - config.rules.len())
+}
+
 /// The folder given to Claude Code as CLAUDE_CONFIG_DIR for this profile.
 /// `None` means the profile is native: the variable must stay unset.
 pub fn profile_dir(env: &Env, config: &Config, name: &str) -> Result<Option<PathBuf>> {

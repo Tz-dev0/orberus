@@ -22,6 +22,8 @@ claude-profiles = { path = "../.." }
 # panel with rounded corners. It rules out the Mac App Store, which is not a
 # target for this app.
 tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+# The native "choose a folder" panel, asked from Rust before opening a terminal.
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 anyhow = "1"
 

@@ -18,6 +18,7 @@ use claude_profiles::config::{self, Config, Loaded, Rule};
 use claude_profiles::git;
 use claude_profiles::launch::{self, Target};
 use claude_profiles::paths::Env;
+use claude_profiles::purge;
 use claude_profiles::resolve::{self, REPO_FILE};
 use claude_profiles::view::{account, location, short_path, when};
 
@@ -68,6 +69,10 @@ enum Command {
     Remove {
         /// Name of the profile. Asked when left out
         name: Option<String>,
+        /// Also delete its Claude Code folder (history, settings) and its
+        /// login in the keychain. Cannot be undone
+        #[arg(long)]
+        purge: bool,
         /// Do not ask for confirmation
         #[arg(long, short)]
         yes: bool,
@@ -213,7 +218,7 @@ fn cli() -> Result<i32> {
         Command::Setup => setup(&ui, &env),
         Command::Add { name, native, dir } => add(&ui, &env, name, native, dir),
         Command::List => list(&ui, &env),
-        Command::Remove { name, yes } => remove(&ui, &env, name, yes),
+        Command::Remove { name, purge, yes } => remove(&ui, &env, name, purge, yes),
         Command::Default { name } => set_default(&ui, &env, name),
         Command::Use { name } => pin(&ui, &env, name),
         Command::Status { profile } => status(&ui, &env, profile),
@@ -586,7 +591,7 @@ fn list(ui: &Ui, env: &Env) -> Result<i32> {
     Ok(0)
 }
 
-fn remove(ui: &Ui, env: &Env, name: Option<String>, yes: bool) -> Result<i32> {
+fn remove(ui: &Ui, env: &Env, name: Option<String>, purge: bool, yes: bool) -> Result<i32> {
     let loaded = config::load(env)?;
     let name = pick_profile(
         ui,
@@ -617,7 +622,19 @@ fn remove(ui: &Ui, env: &Env, name: Option<String>, yes: bool) -> Result<i32> {
             "{team_rules} team rule(s) need '{name}': claude will refuse to start where they match"
         ));
     }
-    if !confirmed(ui, &format!("Remove profile '{name}'?"), yes)? {
+    // Checked before the question, so a refusal comes first.
+    if purge {
+        purge::folder(env, &loaded.config, &name)?;
+        ui.warning(&format!(
+            "{kept} will be deleted with its history, settings and login. This cannot be undone"
+        ));
+    }
+    let question = if purge {
+        format!("Remove profile '{name}' and delete its folder?")
+    } else {
+        format!("Remove profile '{name}'?")
+    };
+    if !confirmed(ui, &question, yes)? {
         println!("Nothing changed.");
         return Ok(0);
     }
@@ -625,19 +642,22 @@ fn remove(ui: &Ui, env: &Env, name: Option<String>, yes: bool) -> Result<i32> {
     // `loaded` is no longer needed as a whole, so we take its config out
     // (a move) instead of copying it.
     let mut config = loaded.config;
-    config.profiles.remove(&name);
-    // `retain` keeps the elements for which the closure answers true.
-    config.rules.retain(|rule| rule.profile != name);
     let was_default = config.default.as_deref() == Some(name.as_str());
-    if was_default {
-        config.default = None;
+    if purge {
+        let purged = purge::purge_profile(env, &mut config, &name)?;
+        ui.success(&format!("Profile '{name}' removed"));
+        ui.detail(&format!("deleted its Claude Code folder: {kept}"));
+        if purged.login {
+            ui.detail("removed its login from the keychain");
+        }
+    } else {
+        config::remove_profile(env, &mut config, &name)?;
+        ui.success(&format!("Profile '{name}' removed"));
+        // The folder holds the history and settings of that account.
+        // Deleting it cannot be undone, so it only happens on request.
+        ui.detail(&format!("its Claude Code folder is kept: {kept}"));
+        ui.detail("to delete it too next time: cprofile remove --purge");
     }
-    config::save(env, &config)?;
-
-    ui.success(&format!("Profile '{name}' removed"));
-    // The folder holds the history and settings of that account. Deleting it
-    // cannot be undone, so it is left to the user.
-    ui.detail(&format!("its Claude Code folder is kept: {kept}"));
     if was_default {
         ui.warning(&format!(
             "It was the default profile. Choose another with: {}",

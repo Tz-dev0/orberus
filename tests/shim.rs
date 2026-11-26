@@ -253,6 +253,7 @@ fn profiles_and_rules_can_be_listed_and_removed() {
     assert!(refused(&world, &home, &["rule", "rm", "9", "-y"]).contains("no rule 9"));
 
     // Removing a profile takes its rules with it and keeps its folder.
+    // (`--purge` has its own test.)
     let client_dir = world.root.join("profiles/client");
     world.ok(&home, &["remove", "client", "--yes"]);
     assert!(client_dir.is_dir(), "the profile folder must be kept");
@@ -268,6 +269,39 @@ fn profiles_and_rules_can_be_listed_and_removed() {
     let config = fs::read_to_string(world.root.join("config.toml")).unwrap();
     assert!(!config.contains("default"), "{config}");
     assert!(!config.contains("perso"), "{config}");
+}
+
+#[test]
+fn purge_deletes_the_profile_folder_but_never_the_native_one() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["add", "perso", "--native"]);
+    world.ok(&home, &["add", "work"]);
+    let native_dir = home.join(".claude");
+    fs::create_dir_all(&native_dir).unwrap();
+    let work_dir = world.root.join("profiles/work");
+    fs::write(work_dir.join("history.jsonl"), "{}").unwrap();
+
+    // It still needs a confirmation.
+    assert!(refused(&world, &home, &["remove", "work", "--purge"]).contains("--yes"));
+    assert!(work_dir.is_dir());
+
+    let done = world.ok(&home, &["remove", "work", "--purge", "--yes"]);
+    assert!(done.contains("deleted its Claude Code folder"), "{done}");
+    assert!(!work_dir.exists(), "the profile folder must be deleted");
+    assert!(!world.ok(&home, &["ls"]).contains("work"));
+
+    // The native profile is the user's own ~/.claude: refused, nothing changes.
+    let error = refused(&world, &home, &["remove", "perso", "--purge", "--yes"]);
+    assert!(error.contains("never deleted"), "{error}");
+    assert!(native_dir.is_dir());
+    assert!(world.ok(&home, &["ls"]).contains("perso"));
+
+    // A folder set by hand that holds more than the profile is refused too.
+    world.ok(&home, &["add", "wide", "--dir", home.to_str().unwrap()]);
+    let error = refused(&world, &home, &["remove", "wide", "--purge", "--yes"]);
+    assert!(error.contains("refusing to delete"), "{error}");
+    assert!(home.is_dir());
 }
 
 #[test]

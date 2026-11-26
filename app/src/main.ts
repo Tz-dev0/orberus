@@ -28,6 +28,7 @@ const ICONS = {
   branch:
     "M5 3.2v9.6M5 5.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 8.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm6-6.2a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 0c0 2.2-2.6 2.6-6 3",
   lock: "M4.5 7.2V5.4a3.5 3.5 0 0 1 7 0v1.8M3.6 7.2h8.8v6H3.6z",
+  bin: "M3 4.5h10M6.5 4.5V3h3v1.5M4.3 4.5l.6 8.5h6.2l.6-8.5M6.8 7v3.5M9.2 7v3.5",
 } as const;
 
 function icon(name: keyof typeof ICONS, label = ""): SVGElement {
@@ -123,7 +124,86 @@ function closeForm(): void {
   formError = "";
 }
 
-function profileRow(profile: Profile): HTMLElement {
+// The profile whose removal is being confirmed, if any.
+let removing: string | null = null;
+// Whether its folder and login go too. Off each time the question opens.
+let purging = false;
+
+/** How many rules, in words: "1 rule", "2 rules". */
+function count(rules: number): string {
+  return rules === 1 ? "1 rule" : `${rules} rules`;
+}
+
+/** Takes the place of a profile's row while its removal is confirmed. */
+function removeRow(profile: Profile, overview: Overview): HTMLElement {
+  const row = el("li", "profile-form");
+  row.style.setProperty("--hue", hue(profile.name));
+  if (!profile.account) row.classList.add("signed-out");
+
+  const line = el("div", "form-line");
+  line.append(
+    el("span", "seal", profile.name.slice(0, 1).toUpperCase()),
+    el("span", "name", `Remove ${profile.name}?`),
+  );
+  row.append(line);
+
+  // Say exactly what goes and what stays, before the click.
+  const own = profile.rules - profile.teamRules;
+  const rules = own > 0 ? ` Your ${count(own)} for it will be removed too.` : "";
+  const kept = profile.canPurge
+    ? "Its Claude Code folder stays on this Mac, with its login and history."
+    : `Its folder ${profile.location} is your own Claude Code setup: it stays on this Mac.`;
+  const deleted = `${profile.location} will be deleted with its history and settings, and its login removed from the keychain. This cannot be undone.`;
+  const note = el("p", "form-note", (purging ? deleted : kept) + rules);
+  row.append(note);
+
+  if (profile.canPurge) {
+    const label = el("label", "form-check");
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = purging;
+    box.addEventListener("change", () => {
+      purging = box.checked;
+      render(overview);
+    });
+    label.append(box, el("span", "", "Also delete its folder and sign out"));
+    row.append(label);
+  }
+  if (profile.teamRules > 0) {
+    const needs = profile.teamRules === 1 ? "needs" : "need";
+    row.append(
+      el(
+        "p",
+        "form-error",
+        `${count(profile.teamRules)} from your team ${needs} this profile: Claude Code will refuse to start where ${profile.teamRules === 1 ? "it applies" : "they apply"}.`,
+      ),
+    );
+  }
+
+  const buttons = el("div", "form-buttons");
+  const cancel = el("button", "quiet-button", "Cancel");
+  cancel.type = "button";
+  cancel.addEventListener("click", () => {
+    removing = null;
+    render(overview);
+  });
+  const confirm = el(
+    "button",
+    "filled-button danger",
+    purging ? "Remove and delete" : "Remove profile",
+  );
+  onClick(confirm, async () => {
+    const purge = purging && profile.canPurge;
+    removing = null;
+    await api.removeProfile(profile.name, purge);
+  });
+  buttons.append(cancel, confirm);
+  row.append(buttons);
+  return row;
+}
+
+function profileRow(profile: Profile, overview: Overview): HTMLElement {
+  if (removing === profile.name) return removeRow(profile, overview);
   const row = el("li", "profile");
   row.style.setProperty("--hue", hue(profile.name));
   if (!profile.account) row.classList.add("signed-out");
@@ -136,11 +216,14 @@ function profileRow(profile: Profile): HTMLElement {
     el("span", "name", profile.name),
     el("span", "account", profile.account ?? "Not signed in"),
   );
-  open.append(who, el("span", "go", profile.account ? "Open" : "Sign in"));
+  // The "…" says a question comes first: which project folder.
+  open.append(who, el("span", "go", profile.account ? "Open…" : "Sign in…"));
   open.title = profile.account
-    ? `Open Claude Code as ${profile.account} in a terminal`
-    : "Open Claude Code in a terminal to sign in";
-  onClick(open, () => api.openClaude(profile.name));
+    ? `Choose a project folder, then open Claude Code there as ${profile.account}`
+    : "Choose a project folder, then open Claude Code there to sign in";
+  onClick(open, async () => {
+    await api.openClaude(profile.name);
+  });
   row.append(open);
 
   if (profile.isDefault) {
@@ -152,6 +235,19 @@ function profileRow(profile: Profile): HTMLElement {
     onClick(set, () => api.setDefault(profile.name));
     row.append(set);
   }
+
+  // Nothing is removed on this click: the row first asks to confirm.
+  const remove = el("button", "remove");
+  remove.type = "button";
+  remove.title = `Remove ${profile.name}…`;
+  remove.append(icon("bin", `Remove ${profile.name}`));
+  remove.addEventListener("click", () => {
+    removing = profile.name;
+    purging = false;
+    closeForm();
+    render(overview);
+  });
+  row.append(remove);
   return row;
 }
 
@@ -171,6 +267,7 @@ function newProfileRow(overview: Overview): HTMLElement {
     open.type = "button";
     open.addEventListener("click", () => {
       adding = true;
+      removing = null;
       // The first profile is usually the login already on this Mac.
       draftReuse = overview.canReuseLogin && overview.profiles.length === 0;
       render(overview);
@@ -315,7 +412,10 @@ function render(overview: Overview | null, loadError = ""): void {
       main.append(el("p", "empty", "No profile yet. A profile is one Claude account."));
     }
     const list = el("ul", "profiles");
-    list.append(...overview.profiles.map(profileRow), newProfileRow(overview));
+    list.append(
+      ...overview.profiles.map((profile) => profileRow(profile, overview)),
+      newProfileRow(overview),
+    );
     main.append(list);
     if (overview.rules.length > 0) {
       const section = el("section", "rules-section");
@@ -357,9 +457,10 @@ window.addEventListener("focus", () => {
 
 window.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
-  // Escape first backs out of the form, then closes the window.
-  if (adding) {
+  // Escape first backs out of a form or a question, then closes the window.
+  if (adding || removing) {
     closeForm();
+    removing = null;
     void refresh();
   } else {
     void api.hide();
