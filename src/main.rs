@@ -920,42 +920,6 @@ fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>
     Ok(0)
 }
 
-/// A share of a whole as a table cell: "62%", or "<1%" for a trace.
-fn percent(part: f64, whole: f64) -> String {
-    if whole <= 0.0 {
-        return "0%".to_string();
-    }
-    let share = part / whole * 100.0;
-    if share > 0.0 && share < 1.0 {
-        "<1%".to_string()
-    } else {
-        format!("{share:.0}%")
-    }
-}
-
-/// Why a folder goes to a profile, short enough for a table cell.
-fn rule_text(reason: &resolve::Reason) -> String {
-    use resolve::Reason;
-    match reason {
-        Reason::Locked { rule, source } | Reason::Rule { rule, source } => {
-            let locked = if matches!(reason, Reason::Locked { .. }) {
-                "locked "
-            } else {
-                ""
-            };
-            let team = if *source == config::RuleSource::Team {
-                "team "
-            } else {
-                ""
-            };
-            format!("{locked}{team}rule {rule}")
-        }
-        Reason::RepoFile(_) => format!("pinned with {REPO_FILE}"),
-        Reason::Explicit => "explicit choice".to_string(),
-        Reason::Default => "default profile".to_string(),
-    }
-}
-
 /// `cprofile usage`: which folders used each account, checked against the
 /// rules as they are today.
 fn usage_command(
@@ -1023,7 +987,7 @@ fn usage_command(
             let weight = folder.tokens.weight();
             let cell = match usage::verdict(env, &loaded, name, &folder.folder) {
                 Verdict::Covered(reason) => Cell::styled(
-                    format!("✓ {}", shorten(&rule_text(&reason), 46)),
+                    format!("✓ {}", shorten(&usage::rule_text(&reason), 46)),
                     Style::Green,
                 ),
                 Verdict::NoRule => {
@@ -1043,7 +1007,7 @@ fn usage_command(
                     Cell::styled(
                         format!(
                             "would use {profile} today ({})",
-                            shorten(&rule_text(&reason), 30)
+                            shorten(&usage::rule_text(&reason), 30)
                         ),
                         Style::Yellow,
                     )
@@ -1056,7 +1020,7 @@ fn usage_command(
                 continue;
             }
             rows.push(vec![
-                Cell::styled(percent(weight, whole), Style::Bold),
+                Cell::styled(usage::percent(weight, whole), Style::Bold),
                 Cell::new(shorten(&short_path(env, &folder.folder), 44)),
                 Cell::new(folder.answers.to_string()),
                 cell,
@@ -1064,7 +1028,7 @@ fn usage_command(
         }
         if hidden.1 > 0 {
             rows.push(vec![
-                Cell::styled(percent(hidden.0, whole), Style::Dim),
+                Cell::styled(usage::percent(hidden.0, whole), Style::Dim),
                 Cell::styled(format!("{} more, see --all", hidden.1), Style::Dim),
                 Cell::new(""),
                 Cell::new(""),
@@ -1083,7 +1047,7 @@ fn usage_command(
         } else if uncovered.1 > 0 {
             ui.warning(&format!(
                 "{} came from {} project(s) no rule names: '{name}' is used there only as the default.",
-                percent(uncovered.0, whole),
+                usage::percent(uncovered.0, whole),
                 uncovered.1
             ));
             if let Some(folder) = uncovered.2 {
@@ -1099,7 +1063,7 @@ fn usage_command(
         if elsewhere.1 > 0 {
             ui.warning(&format!(
                 "{} came from {} project(s) where `claude` would use another profile today.",
-                percent(elsewhere.0, whole),
+                usage::percent(elsewhere.0, whole),
                 elsewhere.1
             ));
             ui.detail(&format!(
@@ -1131,23 +1095,10 @@ fn usage_command(
     Ok(0)
 }
 
-/// A number of tokens, short: "850", "482k", "1.2M".
-fn tokens_text(count: u64) -> String {
-    if count < 1_000 {
-        count.to_string()
-    } else if count < 999_500 {
-        format!("{:.0}k", count as f64 / 1_000.0)
-    } else {
-        format!("{:.1}M", count as f64 / 1_000_000.0)
-    }
-}
-
 /// The conversations of a profile, heaviest first, with what each one sends
 /// again at every answer.
 fn conversations_table(ui: &Ui, env: &Env, used: &usage::ProfileUsage, shown: usize) {
-    // From this size on, a conversation is flagged: it carries at least
-    // 200k tokens along at each answer.
-    const HEAVY: u64 = 200_000;
+    const HEAVY: u64 = usage::HEAVY_CONTEXT;
     let whole = used.total.weight();
     let mut rows = Vec::new();
     let mut heavy = (0.0, 0usize);
@@ -1173,8 +1124,8 @@ fn conversations_table(ui: &Ui, env: &Env, used: &usage::ProfileUsage, shown: us
             Style::Plain
         };
         rows.push(vec![
-            Cell::styled(percent(weight, whole), Style::Bold),
-            Cell::styled(tokens_text(conversation.context), context_style),
+            Cell::styled(usage::percent(weight, whole), Style::Bold),
+            Cell::styled(usage::tokens_text(conversation.context), context_style),
             Cell::new(conversation.answers.to_string()),
             Cell::new(shorten(&short_path(env, &conversation.folder), 30)),
             title,
@@ -1188,7 +1139,7 @@ fn conversations_table(ui: &Ui, env: &Env, used: &usage::ProfileUsage, shown: us
     }
     if hidden.1 > 0 {
         rows.push(vec![
-            Cell::styled(percent(hidden.0, whole), Style::Dim),
+            Cell::styled(usage::percent(hidden.0, whole), Style::Dim),
             Cell::new(""),
             Cell::new(""),
             Cell::styled(format!("{} more, see --all", hidden.1), Style::Dim),
@@ -1208,8 +1159,8 @@ fn conversations_table(ui: &Ui, env: &Env, used: &usage::ProfileUsage, shown: us
         ui.warning(&format!(
             "{} conversation(s) send more than {} tokens with each answer, for {} of this usage.",
             heavy.1,
-            tokens_text(HEAVY),
-            percent(heavy.0, whole)
+            usage::tokens_text(HEAVY),
+            usage::percent(heavy.0, whole)
         ));
         ui.detail(&format!(
             "To lighten one: {} inside it, or a new conversation when the subject changes.",

@@ -114,6 +114,12 @@ async fn storage() -> Result<data::StorageOverview, String> {
     run(data::storage)
 }
 
+/// `async` for the same reason: it reads the conversations of the period.
+#[tauri::command]
+async fn usage() -> Result<data::UsageOverview, String> {
+    run(data::usage)
+}
+
 #[tauri::command]
 fn remove_profile(name: String, purge: bool) -> Result<(), String> {
     run(|env| data::remove_profile(env, &name, purge))
@@ -301,6 +307,7 @@ fn main() {
             conversations,
             trash_conversation,
             storage,
+            usage,
             open_claude,
             open_config,
             fit,

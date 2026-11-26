@@ -227,7 +227,8 @@ $ cprofile retention work 365
 ### Menu bar app
 
 A small app that lives in the menu bar: your profiles and who is logged in to
-each, the rules, the disk space, and a button to open Claude Code in a profile.
+each, the rules, the usage by project, the disk space, and a button to open
+Claude Code in a profile.
 It reads and writes the same config as the CLI and is optional. See
 [docs/app.md](docs/app.md).
 

@@ -67,6 +67,52 @@ export interface StorageOverview {
   total: string;
 }
 
+/** One project a profile was used in. */
+export interface UsageProject {
+  folder: string;
+  /** Its part of the profile's usage: "63%". */
+  share: string;
+  /** What today's rules say about it. */
+  state: "covered" | "default" | "elsewhere" | "gone" | "unknown";
+  /** The same in a few words; empty when a rule covers it. */
+  note: string;
+  /** The full explanation, shown on hover. */
+  why: string;
+  /** True when the line deserves a look. */
+  flagged: boolean;
+}
+
+/** One conversation, by what it sends with each answer. */
+export interface UsageTalk {
+  id: string;
+  title: string;
+  detail: string;
+  /** Tokens sent with each answer, on average: "417k". */
+  context: string;
+  heavy: boolean;
+}
+
+export interface Usage {
+  name: string;
+  /** Estimated weight, to draw the bars to scale. */
+  weight: number;
+  /** Its part of all profiles: "72%". Empty with no activity. */
+  share: string;
+  projects: UsageProject[];
+  moreProjects: number;
+  talks: UsageTalk[];
+  /** Projects that deserve a look. */
+  flagged: number;
+  reread: string;
+}
+
+export interface UsageOverview {
+  profiles: Usage[];
+  days: number;
+  /** Projects that deserve a look, all profiles together. */
+  flagged: number;
+}
+
 export interface Overview {
   profiles: Profile[];
   rules: Rule[];
@@ -79,6 +125,9 @@ export interface Api {
   overview(): Promise<Overview>;
   /** Measures every profile's folder. Slower than `overview`. */
   storage(): Promise<StorageOverview>;
+  /** Which projects and conversations used each profile lately. Reads the
+   *  conversation files, so it is slower than `overview`. */
+  usage(): Promise<UsageOverview>;
   setDefault(name: string): Promise<void>;
   addProfile(name: string, reuseLogin: boolean): Promise<void>;
   /** Takes the profile and its own rules out of the config. Its Claude Code
@@ -103,6 +152,7 @@ export interface Api {
 const tauri: Api = {
   overview: () => invoke<Overview>("overview"),
   storage: () => invoke<StorageOverview>("storage"),
+  usage: () => invoke<UsageOverview>("usage"),
   setDefault: (name) => invoke("set_default", { name }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
   conversations: (name) => invoke<Conversations>("conversations", { name }),
@@ -175,6 +225,46 @@ function preview(): Api {
         return { name, total, size, detail };
       });
       return { profiles, total: "4.1 GB" };
+    },
+    usage: async () => {
+      const sample: Record<string, Omit<Usage, "name">> = {
+        perso: {
+          weight: 28,
+          share: "28%",
+          projects: [
+            { folder: "~/code/blog", share: "79%", state: "default", note: "no rule", why: "No rule names this project: it uses perso only as the default", flagged: true },
+            { folder: "~/code/dotfiles", share: "21%", state: "covered", note: "", why: "Sent to perso by pinned with .claude-profile", flagged: false },
+          ],
+          moreProjects: 0,
+          talks: [
+            { id: "c1", title: "Blog redesign", detail: "~/code/blog, 74% of this profile", context: "142k", heavy: false },
+            { id: "c2", title: "Untitled (e5f6a7b8)", detail: "~/code/dotfiles, 21% of this profile", context: "38k", heavy: false },
+          ],
+          flagged: 1,
+          reread: "About 81% went to reading context again",
+        },
+        work: {
+          weight: 72,
+          share: "72%",
+          projects: [
+            { folder: "~/code/acme-api", share: "63%", state: "covered", note: "", why: 'Sent to work by locked team rule git_remote = "github.com/acme/*"', flagged: false },
+            { folder: "~/code/blog", share: "26%", state: "elsewhere", note: "would use perso", why: "Started there today, claude would use perso (default profile). It ran with work by an explicit choice, or the rules changed since", flagged: true },
+            { folder: "~/code/acme-web", share: "9%", state: "covered", note: "", why: 'Sent to work by locked team rule git_remote = "github.com/acme/*"', flagged: false },
+            { folder: "~/code/old-prototype", share: "2%", state: "gone", note: "folder gone", why: "The folder was deleted, so its rules cannot be checked", flagged: false },
+          ],
+          moreProjects: 3,
+          talks: [
+            { id: "d1", title: "Payment retries", detail: "~/code/acme-api, 61% of this profile", context: "417k", heavy: true },
+            { id: "d2", title: "Migrate the invoices table", detail: "~/code/acme-api, 20% of this profile", context: "229k", heavy: true },
+            { id: "d3", title: "Fix flaky login test", detail: "~/code/acme-web, 3% of this profile", context: "64k", heavy: false },
+          ],
+          flagged: 1,
+          reread: "About 88% went to reading context again",
+        },
+      };
+      const idle = { weight: 0, share: "", projects: [], moreProjects: 0, talks: [], flagged: 0, reread: "" };
+      const profiles = state.profiles.map(({ name }) => ({ name, ...(sample[name] ?? idle) }));
+      return { profiles, days: 7, flagged: profiles.reduce((sum, profile) => sum + profile.flagged, 0) };
     },
     setDefault: async (name) => {
       for (const profile of state.profiles) profile.isDefault = profile.name === name;

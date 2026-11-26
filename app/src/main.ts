@@ -2,7 +2,17 @@
 // Plain TypeScript and DOM calls: the page is one small list, a framework
 // would add more code than it removes.
 
-import { api, insideApp, type Overview, type Profile, type Conversations, type Rule, type StorageOverview } from "./api";
+import {
+  api,
+  insideApp,
+  type Overview,
+  type Profile,
+  type Conversations,
+  type Rule,
+  type StorageOverview,
+  type Usage,
+  type UsageOverview,
+} from "./api";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 // In the app the window itself is the frosted panel. In a browser there is
@@ -683,6 +693,115 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
   return section;
 }
 
+// The last reading of what each profile consumed. Like the sizes, it
+// arrives after the list and stays on screen until the next one is in.
+let usage: UsageOverview | null = null;
+let usageOpen = false;
+// The profile whose projects and conversations are unfolded.
+let usagePicked: string | null = null;
+
+/** What one profile was used for: its projects against the rules, then
+ *  the conversations that send the most with each answer. */
+function usageDetail(used: Usage): HTMLElement {
+  const list = el("ul", "talks");
+  if (used.projects.length === 0) {
+    list.append(el("li", "talks-note", "No conversation in this period."));
+    return list;
+  }
+  list.append(el("li", "talks-note", "Projects, against today's rules"));
+  for (const project of used.projects) {
+    const row = el("li", "talk used");
+    row.title = `${project.folder}\n${project.why}`;
+    row.append(el("span", "used-share", project.share), el("span", "used-folder", project.folder));
+    if (project.note) {
+      row.append(el("span", project.flagged ? "used-note used-flag" : "used-note", project.note));
+    } else {
+      // A rule covers it: nothing to read, a quiet mark is enough.
+      const ok = el("span", "used-note used-ok", "✓");
+      ok.setAttribute("aria-label", "Covered by a rule");
+      row.append(ok);
+    }
+    list.append(row);
+  }
+  if (used.moreProjects > 0) {
+    const others = used.moreProjects === 1 ? "1 lighter one" : `${used.moreProjects} lighter ones`;
+    list.append(el("li", "talks-note", `And ${others}: cprofile usage ${used.name}`));
+  }
+
+  const heading = el("li", "talks-note", "Conversations, by tokens sent with each answer");
+  heading.title = `${used.reread}.\nClaude reads the whole conversation again each time it answers`;
+  list.append(heading);
+  for (const talk of used.talks) {
+    const row = el("li", "talk");
+    const text = el("span", "talk-text");
+    text.append(el("span", "talk-title", talk.title), el("span", "talk-detail", talk.detail));
+    const context = el("span", talk.heavy ? "talk-size used-flag" : "talk-size", talk.context);
+    row.title = talk.heavy
+      ? `${talk.title}\nSends ${talk.context} tokens with each answer. /compact inside it, or a new conversation when the subject changes, lightens it`
+      : `${talk.title}\nSends ${talk.context} tokens with each answer`;
+    row.append(text, context);
+    list.append(row);
+  }
+  return list;
+}
+
+/** A line that unfolds to one line per profile: its part of the usage of
+ *  the last days. Folded, it says how many projects deserve a look. */
+function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
+  const profiles = read.profiles.filter((used) => hues.has(used.name));
+  const flagged = profiles.reduce((sum, used) => sum + used.flagged, 0);
+  const section = el("section", "storage-section");
+  const period = `Last ${read.days} days`;
+  section.append(
+    foldLine(
+      "usage",
+      "Usage",
+      `Which projects used each account over the ${period.toLowerCase()}.\nAn estimate from the conversations kept on this Mac, not your plan's limits`,
+      usageOpen,
+      flagged > 0 ? `${flagged} to check` : period,
+      () => {
+        usageOpen = !usageOpen;
+        render(overview);
+      },
+    ),
+  );
+  if (!usageOpen) return section;
+
+  const list = el("ul", "storage");
+  const heaviest = Math.max(...profiles.map((used) => used.weight), 1e-9);
+  for (const used of profiles) {
+    const item = el("li", "storage-item");
+    item.style.setProperty("--hue", hue(used.name));
+    const picked = usagePicked === used.name;
+    const row = el("button", "storage-row storage-pick");
+    row.type = "button";
+    row.setAttribute("aria-expanded", String(picked));
+    row.title =
+      used.flagged > 0
+        ? `${used.flagged} project(s) to check\nClick to see its projects and conversations`
+        : "Click to see its projects and conversations";
+    row.addEventListener("click", () => {
+      usagePicked = picked ? null : used.name;
+      render(overview);
+    });
+    const bar = el("span", "bar");
+    const fill = el("span", "bar-fill");
+    const share = used.weight > 0 ? Math.max(used.weight / heaviest, 0.02) : 0;
+    fill.style.width = `${(share * 100).toFixed(1)}%`;
+    bar.append(fill);
+    row.append(
+      el("span", "storage-name", used.name),
+      bar,
+      el("span", "storage-size", used.share || "Idle"),
+    );
+    item.append(row);
+    if (picked) item.append(usageDetail(used));
+    list.append(item);
+  }
+  section.append(list);
+  return section;
+}
+
 function menu(): HTMLElement {
   const footer = el("footer");
   footer.append(
@@ -731,6 +850,9 @@ function render(overview: Overview | null, loadError = ""): void {
       main.append(section);
     }
     // Only the profiles still in the list: a measure can be a moment old.
+    if (usage && usage.profiles.some((used) => hues.has(used.name))) {
+      main.append(usageSection(usage, overview));
+    }
     if (overview.profiles.length > 0) main.append(historySection(overview));
     if (storage && storage.profiles.some((size) => hues.has(size.name))) {
       main.append(storageSection(storage, overview));
@@ -765,6 +887,15 @@ async function refresh(): Promise<void> {
     if (changed && !adding && !removing) render(overview);
   } catch {
     // Sizes are a comfort, not worth an error message: keep the last ones.
+  }
+  // The same for the usage, read last because it is the slowest.
+  try {
+    const read = await api.usage();
+    const changed = JSON.stringify(read) !== JSON.stringify(usage);
+    usage = read;
+    if (changed && !adding && !removing) render(overview);
+  } catch {
+    // Keep the last reading.
   }
 }
 

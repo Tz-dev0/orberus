@@ -520,6 +520,56 @@ pub fn verdict(env: &Env, loaded: &Loaded, profile: &str, folder: &Path) -> Verd
     }
 }
 
+/// From this many tokens sent with each answer, a conversation is flagged
+/// as heavy.
+pub const HEAVY_CONTEXT: u64 = 200_000;
+
+/// A share of a whole, for people: "62%", or "<1%" for a trace.
+pub fn percent(part: f64, whole: f64) -> String {
+    if whole <= 0.0 {
+        return "0%".to_string();
+    }
+    let share = part / whole * 100.0;
+    if share > 0.0 && share < 1.0 {
+        "<1%".to_string()
+    } else {
+        format!("{share:.0}%")
+    }
+}
+
+/// A number of tokens, short: "850", "482k", "1.2M".
+pub fn tokens_text(count: u64) -> String {
+    if count < 1_000 {
+        count.to_string()
+    } else if count < 999_500 {
+        format!("{:.0}k", count as f64 / 1_000.0)
+    } else {
+        format!("{:.1}M", count as f64 / 1_000_000.0)
+    }
+}
+
+/// Why a folder goes to a profile, short enough for a table cell.
+pub fn rule_text(reason: &Reason) -> String {
+    match reason {
+        Reason::Locked { rule, source } | Reason::Rule { rule, source } => {
+            let locked = if matches!(reason, Reason::Locked { .. }) {
+                "locked "
+            } else {
+                ""
+            };
+            let team = if *source == config::RuleSource::Team {
+                "team "
+            } else {
+                ""
+            };
+            format!("{locked}{team}rule {rule}")
+        }
+        Reason::RepoFile(_) => format!("pinned with {}", resolve::REPO_FILE),
+        Reason::Explicit => "explicit choice".to_string(),
+        Reason::Default => "default profile".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -665,6 +715,17 @@ mod tests {
         assert_eq!(usage.conversations.len(), 1);
         assert_eq!(usage.conversations[0].id, "fork");
         assert_eq!(usage.total.output, 5);
+    }
+
+    #[test]
+    fn shares_and_token_counts_read_short() {
+        assert_eq!(percent(0.0, 0.0), "0%");
+        assert_eq!(percent(1.0, 400.0), "<1%");
+        assert_eq!(percent(62.4, 100.0), "62%");
+        assert_eq!(tokens_text(850), "850");
+        assert_eq!(tokens_text(482_012), "482k");
+        assert_eq!(tokens_text(999_700), "1.0M");
+        assert_eq!(tokens_text(1_240_000), "1.2M");
     }
 
     #[test]

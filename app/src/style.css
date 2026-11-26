@@ -15,6 +15,7 @@
   --on-seal: #1b1b1d;
   --alert-bg: rgb(196 43 28 / 0.12);
   --alert-text: #a4261b;
+  --warn: #94590a;
   --on-alert: #fff;
   --stand-in: #ececee;
   --field: rgb(255 255 255 / 0.7);
@@ -32,6 +33,7 @@
     --on-seal: #1b1b1d;
     --alert-bg: rgb(255 105 97 / 0.18);
     --alert-text: #ff9d94;
+    --warn: #f0b65a;
     --on-alert: #1b1b1d;
     --stand-in: #29292c;
     --field: rgb(0 0 0 / 0.25);
@@ -682,6 +684,45 @@ h2 {
   padding: 3px 8px 3px 16px;
   font-size: 11px;
   color: var(--faint);
+}
+
+/* ------------------------------------------------------------------- usage */
+
+/* A project of a profile: its share, where it is, what the rules say. */
+.used-share {
+  flex: none;
+  width: 30px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.used-folder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.used-note {
+  flex: none;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.used-ok {
+  color: var(--muted);
+}
+
+/* What deserves a look: a project off its rules, a heavy conversation. */
+.used-flag {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* A second list under the first one: a little air before its heading. */
+.talk + .talks-note {
+  margin-top: 4px;
 }
 
 /* Three choices side by side; the current one is filled. */

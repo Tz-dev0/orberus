@@ -16,6 +16,7 @@ use claude_profiles::paths::Env;
 use claude_profiles::purge;
 use claude_profiles::retention::{self, Retention};
 use claude_profiles::sessions;
+use claude_profiles::usage::{self, Verdict};
 use claude_profiles::view;
 
 // `Serialize` lets Tauri turn these structs into JSON for the TypeScript
@@ -191,6 +192,196 @@ pub fn trash_conversation(env: &Env, name: &str, id: &str) -> Result<()> {
     let trash = sessions::trash_dir(env)?;
     sessions::move_to_trash(session, &trash, SystemTime::now())?;
     Ok(())
+}
+
+/// One project a profile was used in, for the "Usage" section.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageProject {
+    /// "~/code/acme-api".
+    pub folder: String,
+    /// Its part of the profile's usage: "63%".
+    pub share: String,
+    /// What today's rules say, in a word: "covered", "default",
+    /// "elsewhere", "gone" or "unknown".
+    pub state: &'static str,
+    /// The same for people, short: "no rule", "would use perso".
+    pub note: String,
+    /// The full explanation, shown on hover.
+    pub why: String,
+    /// True when the line deserves a look.
+    pub flagged: bool,
+}
+
+/// One conversation of a profile, by what it sends with each answer.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageTalk {
+    pub id: String,
+    pub title: String,
+    /// "~/code/acme-api, 61% of this profile".
+    pub detail: String,
+    /// Tokens sent with each answer, on average: "417k".
+    pub context: String,
+    /// Above the size from which a conversation is flagged.
+    pub heavy: bool,
+}
+
+/// What one profile consumed over the period.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageView {
+    pub name: String,
+    /// Its estimated weight, to draw the bars to scale. No unit.
+    pub weight: f64,
+    /// Its part of all profiles together: "72%". Empty with no activity.
+    pub share: String,
+    /// The heaviest projects, heaviest first.
+    pub projects: Vec<UsageProject>,
+    /// How many lighter projects are not listed.
+    pub more_projects: usize,
+    /// The heaviest conversations, heaviest first.
+    pub talks: Vec<UsageTalk>,
+    /// Projects that deserve a look, among all of them.
+    pub flagged: usize,
+    /// "About 88% went to reading context again". Empty with no activity.
+    pub reread: String,
+}
+
+/// The "Usage" section.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageOverview {
+    pub profiles: Vec<UsageView>,
+    /// The period, in days.
+    pub days: u64,
+    /// Projects that deserve a look, all profiles together.
+    pub flagged: usize,
+}
+
+/// The period the window looks at, like `cprofile usage` by default.
+const USAGE_DAYS: u64 = 7;
+/// How many projects and conversations the window lists for a profile.
+const USAGE_PROJECTS: usize = 5;
+const USAGE_TALKS: usize = 3;
+
+/// Which projects and conversations used each profile, like
+/// `cprofile usage`. This reads the conversation files of the period, so
+/// the page asks for it apart from the profile list.
+pub fn usage(env: &Env) -> Result<UsageOverview> {
+    let loaded = config::load(env)?;
+    // With no rule at all, "no rule names it" is true of every project and
+    // is not worth a flag.
+    let has_rules = loaded.rules().next().is_some();
+    let mut read = Vec::new();
+    for name in loaded.config.profiles.keys() {
+        read.push((name, usage::profile_usage(env, &loaded, name, USAGE_DAYS)?));
+    }
+    let all: f64 = read.iter().map(|(_, used)| used.total.weight()).sum();
+
+    let mut views = Vec::new();
+    for (name, used) in read {
+        let whole = used.total.weight();
+        let mut flagged = 0;
+        let mut projects = Vec::new();
+        for folder in &used.folders {
+            let (state, note, why, flag) = match usage::verdict(env, &loaded, name, &folder.folder)
+            {
+                Verdict::Covered(reason) => (
+                    "covered",
+                    String::new(),
+                    format!("Sent to {name} by {}", usage::rule_text(&reason)),
+                    false,
+                ),
+                Verdict::NoRule => (
+                    "default",
+                    "no rule".to_string(),
+                    format!("No rule names this project: it uses {name} only as the default"),
+                    has_rules,
+                ),
+                Verdict::Elsewhere { profile, reason } => (
+                    "elsewhere",
+                    format!("would use {profile}"),
+                    format!(
+                        "Started there today, claude would use {profile} ({}). \
+                         It ran with {name} by an explicit choice, or the rules changed since",
+                        usage::rule_text(&reason)
+                    ),
+                    true,
+                ),
+                Verdict::Gone => (
+                    "gone",
+                    "folder gone".to_string(),
+                    "The folder was deleted, so its rules cannot be checked".to_string(),
+                    false,
+                ),
+                Verdict::Unknown(why) => ("unknown", "not checked".to_string(), why, false),
+            };
+            if flag {
+                flagged += 1;
+            }
+            // Every project is judged, for the count; only the heaviest
+            // are listed.
+            if projects.len() < USAGE_PROJECTS {
+                projects.push(UsageProject {
+                    folder: view::short_path(env, &folder.folder),
+                    share: usage::percent(folder.tokens.weight(), whole),
+                    state,
+                    note,
+                    why,
+                    flagged: flag,
+                });
+            }
+        }
+        let talks = used
+            .conversations
+            .iter()
+            .take(USAGE_TALKS)
+            .map(|talk| UsageTalk {
+                id: talk.id.clone(),
+                title: match sessions::title(&talk.transcript) {
+                    Some(title) => title,
+                    // `chars`: an id shorter than 8 bytes must not panic.
+                    None => format!("Untitled ({})", talk.id.chars().take(8).collect::<String>()),
+                },
+                detail: format!(
+                    "{}, {} of this profile",
+                    view::short_path(env, &talk.folder),
+                    usage::percent(talk.tokens.weight(), whole)
+                ),
+                context: usage::tokens_text(talk.context),
+                heavy: talk.context >= usage::HEAVY_CONTEXT,
+            })
+            .collect();
+        let active = !used.folders.is_empty();
+        views.push(UsageView {
+            name: name.clone(),
+            weight: whole,
+            share: if active {
+                usage::percent(whole, all)
+            } else {
+                String::new()
+            },
+            more_projects: used.folders.len().saturating_sub(USAGE_PROJECTS),
+            projects,
+            talks,
+            flagged,
+            reread: if active {
+                format!(
+                    "About {:.0}% went to reading context again",
+                    used.total.reread_share() * 100.0
+                )
+            } else {
+                String::new()
+            },
+        });
+    }
+    let flagged = views.iter().map(|view| view.flagged).sum();
+    Ok(UsageOverview {
+        profiles: views,
+        days: USAGE_DAYS,
+        flagged,
+    })
 }
 
 fn shim_path(env: &Env) -> PathBuf {
@@ -492,6 +683,75 @@ mod tests {
         assert!(work.size.ends_with("KB"), "{work:?}");
         assert!(work.detail.contains("conversations, "), "{work:?}");
         assert!(work.detail.ends_with(" other"), "{work:?}");
+    }
+
+    #[test]
+    fn usage_judges_each_project_and_flags_the_heavy_conversation() {
+        let (_temp, env) = world();
+        // A company repository, covered by the rule, and a side project
+        // that only the default profile would take.
+        let repo = |name: &str, remote: &str| {
+            let folder = env.home.join(name);
+            fs::create_dir_all(folder.join(".git")).unwrap();
+            fs::write(
+                folder.join(".git/config"),
+                format!("[remote \"origin\"]\n\turl = {remote}\n"),
+            )
+            .unwrap();
+            folder
+        };
+        let api = repo("api", "git@github.com:acme/api.git");
+        let blog = repo("blog", "git@github.com:me/blog.git");
+        // A date inside the period, whenever the test runs: Claude Code
+        // writes them as text, and "9999" sorts after any real date.
+        let answer = |id: &str, folder: &Path, read: u64| {
+            format!(
+                "{{\"type\":\"assistant\",\"cwd\":\"{}\",\"timestamp\":\"9999-01-01T00:00:00.000Z\",\"requestId\":\"r-{id}\",\"message\":{{\"id\":\"{id}\",\"usage\":{{\"input_tokens\":0,\"output_tokens\":1000,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":{read}}}}}}}\n",
+                folder.display()
+            )
+        };
+        let project = env.profiles_dir().join("work/projects/-p");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(
+            project.join("aaaaaaaa-1111.jsonl"),
+            [
+                "{\"type\":\"custom-title\",\"customTitle\":\"Payment retries\"}\n".to_string(),
+                answer("a", &api, 400_000),
+                answer("b", &api, 500_000),
+            ]
+            .concat(),
+        )
+        .unwrap();
+        fs::write(
+            project.join("bbbbbbbb-2222.jsonl"),
+            answer("c", &blog, 50_000),
+        )
+        .unwrap();
+
+        let overview = usage(&env).unwrap();
+        assert_eq!(overview.days, 7);
+        assert_eq!(overview.flagged, 1);
+        let perso = &overview.profiles[0];
+        assert_eq!((perso.share.as_str(), perso.weight), ("", 0.0));
+        assert!(perso.projects.is_empty() && perso.reread.is_empty());
+
+        let work = &overview.profiles[1];
+        assert_eq!(work.share, "100%");
+        assert_eq!(work.flagged, 1);
+        assert_eq!(work.projects.len(), 2);
+        assert_eq!(work.projects[0].state, "covered");
+        assert!(work.projects[0].why.contains("locked rule"), "{work:?}");
+        assert!(!work.projects[0].flagged);
+        assert_eq!(work.projects[1].state, "elsewhere");
+        assert_eq!(work.projects[1].note, "would use perso");
+        assert!(work.projects[1].flagged);
+
+        assert_eq!(work.talks[0].title, "Payment retries");
+        assert_eq!(work.talks[0].context, "450k");
+        assert!(work.talks[0].heavy);
+        assert_eq!(work.talks[1].title, "Untitled (bbbbbbbb)");
+        assert!(!work.talks[1].heavy);
+        assert!(work.reread.starts_with("About "), "{work:?}");
     }
 
     // The Trash is only known on macOS for now.
