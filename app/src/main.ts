@@ -48,14 +48,38 @@ function icon(name: keyof typeof ICONS, label = ""): SVGElement {
 }
 
 // Each profile has one color everywhere it appears, so "work" is recognized
-// at a glance in the list and in the rules. Colors are dealt in list order,
-// which guarantees that two profiles never share one (up to six profiles).
+// at a glance in the list and in the rules.
 const HUES = ["#d99a3d", "#2fa39b", "#6f83e6", "#d6648b", "#63a852", "#9a78d8"];
 const NO_PROFILE = "#8e8e93";
 let hues = new Map<string, string>();
 
-function assignHues(profiles: Profile[]): void {
-  hues = new Map(profiles.map((profile, index) => [profile.name, HUES[index % HUES.length]]));
+/** The color a name asks for. It depends on the name alone, so a profile
+ *  keeps its color when others are added or removed. */
+function preferredHue(name: string): number {
+  let hash = 5381;
+  for (const char of name) hash = (hash * 33 + (char.codePointAt(0) ?? 0)) >>> 0;
+  return hash % HUES.length;
+}
+
+/** The first color still free, starting from the one the name asks for. */
+function freeHue(name: string, taken: Set<number>): number {
+  const start = preferredHue(name);
+  for (let step = 0; step < HUES.length; step++) {
+    const index = (start + step) % HUES.length;
+    if (!taken.has(index)) return index;
+  }
+  return start; // more profiles than colors: sharing is unavoidable
+}
+
+function assignHues(profiles: Profile[]): number[] {
+  const taken = new Set<number>();
+  hues = new Map();
+  for (const profile of profiles) {
+    const index = freeHue(profile.name, taken);
+    taken.add(index);
+    hues.set(profile.name, HUES[index]);
+  }
+  return [...taken];
 }
 
 /** A rule can name a profile that no longer exists: it gets a neutral grey. */
@@ -84,6 +108,20 @@ function onClick(node: HTMLButtonElement, action: () => Promise<void>): void {
 
 let errorText = "";
 let errorAt = 0;
+
+// The "new profile" form. Its state lives here and not in the DOM, because
+// the page is rebuilt each time the window comes back to the front.
+let adding = false;
+let draftName = "";
+let draftReuse = false;
+let formError = "";
+
+function closeForm(): void {
+  adding = false;
+  draftName = "";
+  draftReuse = false;
+  formError = "";
+}
 
 function profileRow(profile: Profile): HTMLElement {
   const row = el("li", "profile");
@@ -114,6 +152,101 @@ function profileRow(profile: Profile): HTMLElement {
     onClick(set, () => api.setDefault(profile.name));
     row.append(set);
   }
+  return row;
+}
+
+/** The last line of the profile list: a way to add one. */
+function newProfileRow(overview: Overview): HTMLElement {
+  // A color no existing profile wears, so the form stands apart.
+  const taken = new Set(assignHues(overview.profiles));
+  const nextHue = HUES[freeHue("", taken)];
+
+  if (!adding) {
+    const row = el("li", "profile new signed-out");
+    row.style.setProperty("--hue", nextHue);
+    const open = el("button", "profile-open");
+    const who = el("span", "who");
+    who.append(el("span", "name", "New profile…"));
+    open.append(el("span", "seal", "+"), who);
+    open.type = "button";
+    open.addEventListener("click", () => {
+      adding = true;
+      // The first profile is usually the login already on this Mac.
+      draftReuse = overview.canReuseLogin && overview.profiles.length === 0;
+      render(overview);
+    });
+    row.append(open);
+    return row;
+  }
+
+  const row = el("li", "profile-form signed-out");
+  row.style.setProperty("--hue", nextHue);
+  const form = el("form");
+
+  const line = el("div", "form-line");
+  const seal = el("span", "seal", draftName.trim().slice(0, 1).toUpperCase() || "+");
+  const input = el("input", "name-input");
+  input.type = "text";
+  input.value = draftName;
+  input.placeholder = "Name, for example work";
+  input.setAttribute("aria-label", "Profile name");
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.maxLength = 40;
+  input.addEventListener("input", () => {
+    draftName = input.value;
+    seal.textContent = draftName.trim().slice(0, 1).toUpperCase() || "+";
+    // The message was about the previous name.
+    formError = "";
+    form.querySelector(".form-error")?.remove();
+    void api.fit(Math.ceil(root.getBoundingClientRect().height));
+  });
+  line.append(seal, input);
+  form.append(line);
+
+  if (overview.canReuseLogin) {
+    const label = el("label", "form-check");
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = draftReuse;
+    box.addEventListener("change", () => {
+      draftReuse = box.checked;
+    });
+    label.append(box, el("span", "", "Use the Claude Code login already on this Mac"));
+    form.append(label);
+  }
+
+  if (formError) {
+    const error = el("p", "form-error", formError);
+    error.setAttribute("role", "alert");
+    form.append(error);
+  }
+
+  const buttons = el("div", "form-buttons");
+  const cancel = el("button", "quiet-button", "Cancel");
+  cancel.type = "button";
+  cancel.addEventListener("click", () => {
+    closeForm();
+    render(overview);
+  });
+  const create = el("button", "filled-button", "Create profile");
+  create.type = "submit";
+  buttons.append(cancel, create);
+  form.append(buttons);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    create.disabled = true;
+    try {
+      await api.addProfile(draftName, draftReuse);
+      closeForm();
+    } catch (error) {
+      formError = String(error);
+    }
+    await refresh();
+  });
+
+  row.append(form);
   return row;
 }
 
@@ -178,13 +311,12 @@ function render(overview: Overview | null, loadError = ""): void {
       page.append(notice("The claude shim is not installed. Run “cprofile setup” in a terminal."));
     }
     const main = el("main");
-    if (overview.profiles.length === 0) {
-      main.append(el("p", "empty", "No profile yet. Run “cprofile add” in a terminal to create one."));
-    } else {
-      const list = el("ul", "profiles");
-      list.append(...overview.profiles.map(profileRow));
-      main.append(list);
+    if (overview.profiles.length === 0 && !adding) {
+      main.append(el("p", "empty", "No profile yet. A profile is one Claude account."));
     }
+    const list = el("ul", "profiles");
+    list.append(...overview.profiles.map(profileRow), newProfileRow(overview));
+    main.append(list);
     if (overview.rules.length > 0) {
       const section = el("section", "rules-section");
       const title = el("h2", "", "Rules");
@@ -199,6 +331,8 @@ function render(overview: Overview | null, loadError = ""): void {
 
   page.append(menu());
   root.replaceChildren(page);
+  // Rebuilding the page drops the cursor: put it back in the form.
+  page.querySelector<HTMLInputElement>(".name-input")?.focus();
   // The window takes the height of what it shows, like a native menu.
   void api.fit(Math.ceil(page.getBoundingClientRect().height));
 }
@@ -222,7 +356,14 @@ window.addEventListener("focus", () => {
 });
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") void api.hide();
+  if (event.key !== "Escape") return;
+  // Escape first backs out of the form, then closes the window.
+  if (adding) {
+    closeForm();
+    void refresh();
+  } else {
+    void api.hide();
+  }
 });
 
 void refresh();

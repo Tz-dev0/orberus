@@ -163,6 +163,54 @@ pub fn validate_name(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Name of the profile that reuses `~/.claude`, when there is one.
+pub fn native_profile(config: &Config) -> Option<&str> {
+    config
+        .profiles
+        .iter()
+        .find(|(_, profile)| profile.native)
+        .map(|(name, _)| name.as_str())
+}
+
+/// Adds a profile to `config`, creates its folder and saves the file.
+/// Returns true when it became the default, which happens for the first
+/// profile. Shared by `cprofile add` and the menu bar app, so both apply the
+/// same checks.
+///
+/// `config` is `&mut`: the caller keeps its copy and sees the new profile in
+/// it afterwards, without loading the file again.
+pub fn add_profile(
+    env: &Env,
+    config: &mut Config,
+    name: &str,
+    native: bool,
+    dir: Option<String>,
+) -> Result<bool> {
+    validate_name(name)?;
+    if config.profiles.contains_key(name) {
+        bail!("profile '{name}' already exists");
+    }
+    if native {
+        if let Some(other) = native_profile(config) {
+            bail!(
+                "profile '{other}' is already the native one; only one profile can reuse ~/.claude"
+            );
+        }
+    }
+    config
+        .profiles
+        .insert(name.to_string(), Profile { native, dir });
+    let first = config.default.is_none();
+    if first {
+        config.default = Some(name.to_string());
+    }
+    if let Some(dir) = profile_dir(env, config, name)? {
+        fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    }
+    save(env, config)?;
+    Ok(first)
+}
+
 /// The folder given to Claude Code as CLAUDE_CONFIG_DIR for this profile.
 /// `None` means the profile is native: the variable must stay unset.
 pub fn profile_dir(env: &Env, config: &Config, name: &str) -> Result<Option<PathBuf>> {

@@ -79,6 +79,11 @@ fn set_default(name: String) -> Result<(), String> {
     run(|env| data::set_default(env, &name))
 }
 
+#[tauri::command]
+fn add_profile(name: String, reuse_login: bool) -> Result<(), String> {
+    run(|env| data::add_profile(env, &name, reuse_login))
+}
+
 /// Opens a terminal window running Claude Code in the given profile.
 #[tauri::command]
 fn open_claude(name: String) -> Result<(), String> {
@@ -216,6 +221,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             overview,
             set_default,
+            add_profile,
             open_claude,
             open_config,
             fit,

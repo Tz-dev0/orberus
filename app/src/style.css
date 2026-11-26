@@ -16,6 +16,7 @@
   --alert-bg: rgb(196 43 28 / 0.12);
   --alert-text: #a4261b;
   --stand-in: #ececee;
+  --field: rgb(255 255 255 / 0.7);
   font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
 }
 
@@ -31,6 +32,7 @@
     --alert-bg: rgb(255 105 97 / 0.18);
     --alert-text: #ff9d94;
     --stand-in: #29292c;
+    --field: rgb(0 0 0 / 0.25);
   }
 }
 
@@ -216,6 +218,108 @@ button:focus-visible {
   background: var(--hover);
 }
 
+/* ------------------------------------------------------------- new profile */
+
+.profile.new .name {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.profile.new:hover .name {
+  color: var(--text);
+}
+
+.profile-form {
+  padding: 7px 8px 8px;
+  border-radius: 7px;
+  background: var(--hover);
+}
+
+.form-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.name-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  /* The one place where text can be selected and edited. */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.name-input::placeholder {
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.name-input:focus {
+  outline: 2px solid var(--hue);
+  outline-offset: -1px;
+}
+
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0 40px;
+  font-size: 12px;
+}
+
+.form-check input {
+  margin: 0;
+  accent-color: var(--hue);
+}
+
+.form-error {
+  margin: 8px 0 0 40px;
+  font-size: 12px;
+  color: var(--alert-text);
+  overflow-wrap: anywhere;
+}
+
+.form-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.quiet-button,
+.filled-button {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 11px;
+  border-radius: 6px;
+}
+
+.quiet-button {
+  color: var(--muted);
+}
+
+.quiet-button:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.filled-button {
+  background: var(--hue);
+  color: var(--on-seal);
+}
+
+.filled-button:disabled {
+  opacity: 0.5;
+}
+
 /* ------------------------------------------------------------------- rules */
 
 .rules-section {
@@ -316,7 +420,7 @@ h2 {
 }
 
 .empty {
-  margin: 14px 12px;
+  margin: 8px 8px 6px;
   color: var(--muted);
 }
 

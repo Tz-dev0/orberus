@@ -45,6 +45,8 @@ pub struct Overview {
     pub profiles: Vec<ProfileView>,
     pub rules: Vec<RuleView>,
     pub shim_installed: bool,
+    /// True while no profile reuses `~/.claude`: a new one may take it.
+    pub can_reuse_login: bool,
 }
 
 fn shim_path(env: &Env) -> PathBuf {
@@ -83,7 +85,17 @@ pub fn overview(env: &Env) -> Result<Overview> {
         profiles,
         rules,
         shim_installed: shim_path(env).exists(),
+        can_reuse_login: config::native_profile(config).is_none(),
     })
+}
+
+/// Creates a profile, with the same checks as `cprofile add`. With
+/// `reuse_login` it takes over the existing `~/.claude` login.
+pub fn add_profile(env: &Env, name: &str, reuse_login: bool) -> Result<()> {
+    let mut config = config::load(env)?.config;
+    // Spaces around a typed name are never meant.
+    config::add_profile(env, &mut config, name.trim(), reuse_login, None)?;
+    Ok(())
 }
 
 pub fn set_default(env: &Env, name: &str) -> Result<()> {
@@ -209,6 +221,27 @@ mod tests {
         );
         assert_eq!(overview.rules[0].path, None);
         assert!(overview.rules[0].locked);
+    }
+
+    #[test]
+    fn add_profile_applies_the_same_checks_as_the_cli() {
+        let (_temp, env) = world();
+        // "perso" already reuses ~/.claude, so the offer is gone.
+        assert!(!overview(&env).unwrap().can_reuse_login);
+
+        add_profile(&env, "  client ", false).unwrap();
+        let config = config::load(&env).unwrap().config;
+        assert!(config.profiles.contains_key("client"));
+        assert!(env.profiles_dir().join("client").is_dir());
+        // The first profile stays the default.
+        assert_eq!(config.default.as_deref(), Some("perso"));
+
+        let error =
+            |name: &str, reuse: bool| add_profile(&env, name, reuse).unwrap_err().to_string();
+        assert!(error("client", false).contains("already exists"));
+        assert!(error("my profile", false).contains("invalid profile name"));
+        assert!(error("", false).contains("invalid profile name"));
+        assert!(error("other", true).contains("already the native one"));
     }
 
     #[test]

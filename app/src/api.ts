@@ -27,11 +27,14 @@ export interface Overview {
   profiles: Profile[];
   rules: Rule[];
   shimInstalled: boolean;
+  /** True while no profile reuses ~/.claude: a new one may take it. */
+  canReuseLogin: boolean;
 }
 
 export interface Api {
   overview(): Promise<Overview>;
   setDefault(name: string): Promise<void>;
+  addProfile(name: string, reuseLogin: boolean): Promise<void>;
   openClaude(name: string): Promise<void>;
   openConfig(): Promise<void>;
   /** Resizes the window to the height of its content. */
@@ -43,6 +46,7 @@ export interface Api {
 const tauri: Api = {
   overview: () => invoke<Overview>("overview"),
   setDefault: (name) => invoke("set_default", { name }),
+  addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
   openClaude: (name) => invoke("open_claude", { name }),
   openConfig: () => invoke("open_config"),
   fit: (height) => invoke("fit", { height }),
@@ -55,6 +59,7 @@ const tauri: Api = {
 function preview(): Api {
   const state: Overview = {
     shimInstalled: true,
+    canReuseLogin: false,
     profiles: [
       { name: "perso", account: "me@example.com", location: "~/.claude", isDefault: true, rules: 0 },
       {
@@ -81,6 +86,25 @@ function preview(): Api {
     overview: async () => structuredClone(state),
     setDefault: async (name) => {
       for (const profile of state.profiles) profile.isDefault = profile.name === name;
+    },
+    // The same answers as the Rust side, so the form can be tried in a browser.
+    addProfile: async (name, reuseLogin) => {
+      name = name.trim();
+      if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+        throw `invalid profile name '${name}': use letters, digits, '-' and '_'`;
+      }
+      if (state.profiles.some((profile) => profile.name === name)) {
+        throw `profile '${name}' already exists`;
+      }
+      state.profiles.push({
+        name,
+        account: reuseLogin ? "me@example.com" : null,
+        location: reuseLogin ? "~/.claude" : `~/.claude-profiles/profiles/${name}`,
+        isDefault: state.profiles.length === 0,
+        rules: 0,
+      });
+      state.profiles.sort((a, b) => a.name.localeCompare(b.name));
+      if (reuseLogin) state.canReuseLogin = false;
     },
     openClaude: async (name) => {
       if (name === "client") throw "Preview only: a browser cannot open a terminal.";

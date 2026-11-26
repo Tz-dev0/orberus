@@ -14,7 +14,7 @@ use std::process::ExitCode;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Parser, Subcommand};
 
-use claude_profiles::config::{self, Config, Loaded, Profile, Rule};
+use claude_profiles::config::{self, Config, Loaded, Rule};
 use claude_profiles::git;
 use claude_profiles::launch::{self, Target};
 use claude_profiles::paths::Env;
@@ -468,11 +468,9 @@ fn add(
     dir: Option<String>,
 ) -> Result<i32> {
     let mut config = config::load(env)?.config;
-    let native_owner = config
-        .profiles
-        .iter()
-        .find(|(_, profile)| profile.native)
-        .map(|(name, _)| name.clone());
+    // `map(str::to_string)` copies the name, so `config` is free to change
+    // further down while we still hold it.
+    let native_owner = config::native_profile(&config).map(str::to_string);
 
     // No name given: guided mode. The questions only cover what the flags
     // did not say, so `cprofile add work --native` never asks anything.
@@ -504,17 +502,7 @@ fn add(
         }
     }
 
-    config
-        .profiles
-        .insert(name.clone(), Profile { native, dir });
-    let first = config.default.is_none();
-    if first {
-        config.default = Some(name.clone());
-    }
-    if let Some(dir) = config::profile_dir(env, &config, &name)? {
-        fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
-    }
-    config::save(env, &config)?;
+    let first = config::add_profile(env, &mut config, &name, native, dir)?;
 
     ui.success(&format!(
         "Profile '{name}' created{}",

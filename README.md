@@ -66,8 +66,9 @@ removal needs `--yes`. Colors follow `NO_COLOR`.
 ## Menu bar app (macOS, early)
 
 A small app that lives in the menu bar. Click its icon to see your profiles
-and who is logged in to each, start Claude Code in one of them in a terminal
-window, or change the default profile. It reads the same config as the CLI.
+and who is logged in to each, create a profile, start Claude Code in one of
+them in a terminal window, or change the default profile. It reads and writes
+the same config as the CLI.
 
 ```sh
 cd app
@@ -76,9 +77,9 @@ npm run tauri build     # builds "Claude Profiles.app"
 npm run tauri dev       # or run it while working on it
 ```
 
-The built app is in `app/src-tauri/target/release/bundle/macos/`. Profiles and
-rules are still created with `cprofile`; the app shows them. It does not
-handle Claude Desktop yet.
+The built app is in `app/src-tauri/target/release/bundle/macos/`. Rules are
+still created with `cprofile`; the app shows them. It does not handle Claude
+Desktop yet.
 
 ## How it works
 
