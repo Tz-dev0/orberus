@@ -10,7 +10,7 @@ removing something needs `--yes`. Colours follow `NO_COLOR`.
 
 The outputs below are shortened examples.
 
-- Setup: [`setup`](#setup), [`doctor`](#doctor)
+- Setup: [`setup`](#setup), [`doctor`](#doctor), [`uninstall`](#uninstall)
 - Profiles: [`add`](#add), [`list`](#list), [`default`](#default), [`remove`](#remove)
 - Choosing a profile: [`status`](#status), [`use`](#use), [`run`](#run), [`rule`](#rule)
 - Disk space and history: [`disk`](#disk), [`retention`](#retention), [`clean`](#clean)
@@ -50,6 +50,47 @@ Checks the installation and says how to fix what is wrong. It changes nothing.
 ```
 
 Lines that start with `!` are advice, not problems.
+
+## uninstall
+
+```sh
+cprofile uninstall [--purge] [--yes]
+```
+
+Removes Claude Profiles from this Mac. It lists what it is about to do, then
+asks.
+
+```text
+$ cprofile uninstall
+This removes
+  the claude shim: `claude` is the real Claude Code again
+  the PATH line that setup added to your shell config
+  cprofile itself: ~/.claude-profiles/bin/cprofile
+  the menu bar app, moved to the Trash: /Applications/Claude Profiles.app
+  kept: your profiles and rules, in ~/.claude-profiles (to delete them too: --purge)
+Uninstall Claude Profiles? [y/N]
+```
+
+What it removes:
+
+- the `claude` shim, so `claude` is the real Claude Code again;
+- the `PATH` line that `setup` wrote in `~/.zshrc`, `~/.bash_profile` or
+  `~/.bashrc`. A line you wrote yourself in another way is left alone, and
+  you are told about it;
+- `cprofile` itself, when it sits in `~/.claude-profiles/bin`. Installed
+  another way (`cargo install`), it tells you how to remove it;
+- the menu bar app, moved to the Trash.
+
+Your profiles stay: the config, the rules and each profile's Claude Code
+folder, with its login and history. Install again later and they are back.
+
+`--purge` deletes those too: `~/.claude-profiles` as a whole, the folder of
+every profile, and their logins in the macOS keychain. This cannot be undone.
+`~/.claude`, the folder of the native profile, is never touched, and neither
+is a profile folder that holds more than the profile.
+
+A `.claude-profile` file left in a project folder does nothing once the tool
+is gone.
 
 ## add
 

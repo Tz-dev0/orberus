@@ -49,6 +49,8 @@ impl World {
             .current_dir(cwd)
             .env_clear()
             .env("HOME", &self.home)
+            // Never the real /Applications: `uninstall` looks for the app there.
+            .env("CLAUDE_PROFILES_APPS", self.home.join("Applications"))
             .env("PATH", &self.path);
         command
     }
@@ -435,4 +437,100 @@ fn a_team_rule_cannot_be_removed_and_beats_a_pinned_folder() {
     let work_repo = world.repo("code/app", "git@github.com:acme/app.git");
     let pinned = world.ok(&work_repo, &["use", "perso"]);
     assert!(pinned.contains("still use 'work'"), "{pinned}");
+}
+
+#[test]
+fn uninstall_removes_the_shim_and_the_path_line_but_keeps_the_profiles() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    world.ok(&home, &["add", "perso", "--native"]);
+    world.ok(&home, &["add", "work"]);
+    let shim = world.root.join("bin/claude");
+    assert!(shim.symlink_metadata().is_ok());
+
+    // What an interactive `setup` writes, around lines of the user's own.
+    let zshrc = home.join(".zshrc");
+    fs::write(
+        &zshrc,
+        "export EDITOR=vim\n\n# cprofile: the claude shim must come before the real claude\nexport PATH=\"$HOME/.claude-profiles/bin:$PATH\"\nalias ll='ls -l'\n",
+    )
+    .unwrap();
+    let native_dir = home.join(".claude");
+    fs::create_dir_all(&native_dir).unwrap();
+
+    // It needs a confirmation, and nothing moves without it.
+    assert!(refused(&world, &home, &["uninstall"]).contains("--yes"));
+    assert!(shim.symlink_metadata().is_ok());
+
+    let done = world.ok(&home, &["uninstall", "--yes"]);
+    assert!(done.contains("Shim removed"), "{done}");
+    assert!(shim.symlink_metadata().is_err(), "the shim must be gone");
+    assert_eq!(
+        fs::read_to_string(&zshrc).unwrap(),
+        "export EDITOR=vim\nalias ll='ls -l'\n"
+    );
+    // The test binary lives in cargo's folder, not in ours: it is not removed.
+    assert!(done.contains("cprofile itself is still at"), "{done}");
+
+    // Profiles, their folders and ~/.claude are all still there.
+    assert!(world.root.join("config.toml").is_file());
+    assert!(world.root.join("profiles/work").is_dir());
+    assert!(native_dir.is_dir());
+    assert!(world.ok(&home, &["ls"]).contains("work"));
+}
+
+#[test]
+fn uninstall_purge_deletes_the_profiles_but_never_the_native_folder() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    world.ok(&home, &["add", "perso", "--native"]);
+    world.ok(&home, &["add", "work"]);
+    let native_dir = home.join(".claude");
+    fs::create_dir_all(&native_dir).unwrap();
+    fs::write(native_dir.join("history.jsonl"), "{}").unwrap();
+    // A profile folder set by hand, outside the data folder.
+    let custom = home.join("elsewhere/client");
+    world.ok(&home, &["add", "client", "--dir", custom.to_str().unwrap()]);
+    fs::create_dir_all(&custom).unwrap();
+    // And one that holds far more than a profile: it must survive.
+    world.ok(&home, &["add", "wide", "--dir", home.to_str().unwrap()]);
+
+    let done = world.ok(&home, &["uninstall", "--purge", "--yes"]);
+    assert!(done.contains("refusing to delete"), "{done}");
+    assert!(!world.root.exists(), "the data folder must be deleted");
+    assert!(!custom.exists(), "a profile folder set by hand goes too");
+    assert!(home.is_dir());
+    assert!(native_dir.join("history.jsonl").is_file());
+}
+
+// The app only exists on macOS.
+#[cfg(target_os = "macos")]
+#[test]
+fn uninstall_moves_the_app_to_the_trash_only_when_it_is_ours() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    let app = home.join("Applications/Claude Profiles.app");
+    fs::create_dir_all(app.join("Contents")).unwrap();
+
+    // Same name, another identifier: not our app.
+    fs::write(
+        app.join("Contents/Info.plist"),
+        "<string>com.example.other</string>",
+    )
+    .unwrap();
+    world.ok(&home, &["uninstall", "--yes"]);
+    assert!(app.is_dir(), "an app that is not ours must stay");
+
+    fs::write(
+        app.join("Contents/Info.plist"),
+        "<string>com.github.tzdev0.claudeprofiles</string>",
+    )
+    .unwrap();
+    let done = world.ok(&home, &["uninstall", "--yes"]);
+    assert!(done.contains("moved to the Trash"), "{done}");
+    assert!(!app.exists());
+    assert!(home.join(".Trash/Claude Profiles.app").is_dir());
 }

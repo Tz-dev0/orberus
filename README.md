@@ -127,6 +127,7 @@ Rules, the config files and team rules are described in
 | `cprofile clean [name]` | Biggest conversations of a profile; move some to the Trash |
 | `cprofile remove [name]` | Remove a profile and your rules that point to it |
 | `cprofile doctor` | Check the installation |
+| `cprofile uninstall` | Remove Claude Profiles from this Mac. Profiles are kept unless you add `--purge` |
 
 Every command, with its options and an example of its output, is in
 [docs/commands.md](docs/commands.md).
@@ -213,6 +214,8 @@ It reads and writes the same config as the CLI and is optional. See
   last hour, since it may still be open. It never touches `memory/` folders.
 - `remove` keeps the profile's folder, so its login and history stay on disk.
   Only `remove --purge` deletes them, and it is refused for `~/.claude`.
+- `uninstall` removes the tool and keeps your profiles. Nothing ever deletes
+  `~/.claude`.
 
 Known limits are listed in [docs/troubleshooting.md](docs/troubleshooting.md#known-limits).
 To report a vulnerability, see [SECURITY.md](SECURITY.md).

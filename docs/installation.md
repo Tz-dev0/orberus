@@ -78,19 +78,27 @@ menu bar icon, then Quit).
 ## Uninstall
 
 ```sh
-rm -rf "/Applications/Claude Profiles.app"   # the app, if you installed it
-rm ~/.claude-profiles/bin/claude ~/.claude-profiles/bin/cprofile
+cprofile uninstall
 ```
 
-Then remove the `export PATH="$HOME/.claude-profiles/bin:$PATH"` line from
-your shell config. `claude` is the real Claude Code again.
+It removes the shim, the `PATH` line that `setup` added to your shell config,
+`cprofile` itself and the menu bar app (moved to the Trash), after showing you
+the list and asking. Open a new terminal afterwards: `claude` is the real
+Claude Code again.
 
-Your profiles are still on disk: `~/.claude-profiles/config.toml` holds the
-profiles and rules, and `~/.claude-profiles/profiles/` holds the Claude Code
-folder of each profile, with its history. Delete `~/.claude-profiles` to
-remove them too. Their logins are stored in the macOS keychain; to remove
-those as well, run `cprofile remove <name> --purge` for each profile before
-you uninstall. Your own `~/.claude` is never touched by any of this.
+Your profiles are kept in `~/.claude-profiles`: the config, the rules and the
+Claude Code folder of each profile, with its login and history. To delete
+them as well, with their logins in the macOS keychain:
+
+```sh
+cprofile uninstall --purge
+```
+
+Your own `~/.claude` is never touched by either command. See
+[commands.md](commands.md#uninstall) for the details.
+
+If you installed `cprofile` with `cargo install`, finish with
+`cargo uninstall claude-profiles`.
 
 ## Build from source
 
