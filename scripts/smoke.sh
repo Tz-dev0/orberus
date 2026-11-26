@@ -33,6 +33,7 @@ try default work
 try status
 try retention
 try disk
+try usage
 try rule add --path "$home/projects" --profile work
 try rule list
 try remove client --yes

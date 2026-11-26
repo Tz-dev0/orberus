@@ -534,3 +534,113 @@ fn uninstall_moves_the_app_to_the_trash_only_when_it_is_ours() {
     assert!(!app.exists());
     assert!(home.join(".Trash/Claude Profiles.app").is_dir());
 }
+
+#[test]
+fn usage_shows_each_folder_against_the_rules() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["add", "perso", "--native"]);
+    world.ok(&home, &["add", "work"]);
+    world.ok(
+        &home,
+        &[
+            "rule",
+            "add",
+            "--git-remote",
+            "github.com/acme/*",
+            "--profile",
+            "work",
+        ],
+    );
+    assert!(world
+        .ok(&home, &["usage", "work"])
+        .contains("No conversation in this period"));
+
+    // Four folders were used with the work account: a company repository,
+    // a side project no rule names, a folder pinned to the other profile
+    // since, and one that was deleted.
+    let acme = world.repo("code/acme-api", "git@github.com:acme/api.git");
+    let blog = world.repo("code/blog", "git@github.com:me/blog.git");
+    let pinned = home.join("code/notes");
+    fs::create_dir_all(&pinned).unwrap();
+    world.ok(&pinned, &["use", "perso"]);
+    let gone = home.join("code/deleted");
+
+    let answer = |id: &str, folder: &Path, output: u64| {
+        format!(
+            "{{\"type\":\"assistant\",\"cwd\":\"{}\",\"timestamp\":\"2026-11-26T10:00:00.000Z\",\"requestId\":\"r-{id}\",\"message\":{{\"id\":\"{id}\",\"usage\":{{\"input_tokens\":0,\"output_tokens\":{output},\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}}}}\n",
+            folder.display()
+        )
+    };
+    let project = world.root.join("profiles/work/projects/-p");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(
+        project.join("11111111-2222-3333-4444-555555555555.jsonl"),
+        [
+            answer("a", &acme, 600),
+            // Written twice, as Claude Code does: counted once.
+            answer("a", &acme, 600),
+            answer("b", &blog, 300),
+            answer("c", &pinned, 60),
+            answer("d", &gone, 40),
+        ]
+        .concat(),
+    )
+    .unwrap();
+
+    // A period long enough to hold the date written above, whenever the
+    // test runs.
+    let out = world.ok(&home, &["usage", "work", "--days", "36500"]);
+    let row = |folder: &str| {
+        out.lines()
+            .find(|line| line.contains(folder))
+            .unwrap_or_else(|| panic!("no row for {folder} in:\n{out}"))
+            .to_string()
+    };
+    assert!(row("~/code/acme-api").contains("60%"), "{out}");
+    assert!(
+        row("~/code/acme-api").contains("✓ rule git_remote"),
+        "{out}"
+    );
+    // No rule names the blog: started there today, `claude` would use the
+    // default profile, not this one.
+    assert!(row("~/code/blog").contains("30%"), "{out}");
+    assert!(
+        row("~/code/blog").contains("would use perso today (default profile)"),
+        "{out}"
+    );
+    assert!(
+        row("~/code/notes").contains("would use perso today (pinned with .claude-profile)"),
+        "{out}"
+    );
+    assert!(row("~/code/deleted").contains("folder gone"), "{out}");
+    assert!(
+        out.contains("36% came from 2 project(s) where `claude` would use another profile today"),
+        "{out}"
+    );
+    assert!(out.contains("cd ~/code/blog && cprofile use work"), "{out}");
+
+    // Nothing was used with the other profile yet.
+    let all = world.ok(&home, &["usage", "--days", "36500"]);
+    assert!(all.contains("No conversation in this period"), "{all}");
+
+    // The same blog, used with the default profile: nothing is wrong, but no
+    // rule says so.
+    let project = home.join(".claude/projects/-p");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(
+        project.join("22222222-2222-3333-4444-555555555555.jsonl"),
+        [answer("e", &blog, 10), answer("f", &pinned, 10)].concat(),
+    )
+    .unwrap();
+    let out = world.ok(&home, &["usage", "perso", "--days", "36500"]);
+    assert!(out.contains("no rule, default profile"), "{out}");
+    assert!(out.contains("✓ pinned with .claude-profile"), "{out}");
+    assert!(
+        out.contains("50% came from 1 project(s) no rule names"),
+        "{out}"
+    );
+    assert!(out.contains("cd ~/code/blog && cprofile rule add"), "{out}");
+
+    assert!(world.cprofile(&home, &["usage", "nope"]).status.code() != Some(0));
+}

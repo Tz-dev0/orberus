@@ -42,6 +42,8 @@ git_remote = "github.com/acme/*" in config.toml, so profile 'perso' cannot be us
   before yours.
 - **Separate logins**: each profile has its own Claude Code folder and its own
   login. Your existing `~/.claude` can be one of them, left untouched.
+- **Usage by project**: see which projects used each account, and which of
+  them no rule covers. Work done on the wrong account shows up there.
 - **Disk space and history**: see what each profile takes, choose how long
   conversations are kept, and move the biggest ones to the Trash.
 - **Menu bar app** (optional): the same profiles and rules, one click away.
@@ -122,6 +124,7 @@ Rules, the config files and team rules are described in
 | `cprofile default [name]` | Profile used when no rule applies |
 | `cprofile run [-p name] [-- args]` | Start Claude Code, optionally forcing a profile |
 | `cprofile rule add`, `list`, `remove` | Manage the rules |
+| `cprofile usage [name]` | Which projects used each account, checked against your rules |
 | `cprofile disk` | Disk space of each profile. Deletes nothing |
 | `cprofile retention [name] [days]` | How long each profile keeps its conversations |
 | `cprofile clean [name]` | Biggest conversations of a profile; move some to the Trash |
@@ -151,6 +154,28 @@ $ cprofile list
 
 A profile is a Claude Code config folder with its own login, settings and
 history. The profile created with `--native` is your existing `~/.claude`.
+
+### Usage by project
+
+`cprofile usage` shows where each account was used over the last 7 days, and
+flags the projects your rules do not send there. Here a personal blog ran on
+the work account:
+
+```text
+$ cprofile usage work
+work  me@acme.example, last 7 days
+┌───────┬─────────────────┬─────────┬────────────────────────────────────────────────┐
+│ Share │ Project         │ Answers │ Today's rules                                  │
+├───────┼─────────────────┼─────────┼────────────────────────────────────────────────┤
+│ 63%   │ ~/code/acme-api │ 942     │ ✓ locked rule git_remote = "github.com/acme/*" │
+│ 26%   │ ~/code/blog     │ 402     │ would use perso today (default profile)        │
+│ 9%    │ ~/code/acme-web │ 148     │ ✓ locked rule git_remote = "github.com/acme/*" │
+└───────┴─────────────────┴─────────┴────────────────────────────────────────────────┘
+! 26% came from 1 project(s) where `claude` would use another profile today.
+```
+
+The share is an estimate from the conversations kept on this Mac. It is not
+what your plan counts against its limits.
 
 ### Disk space
 
@@ -209,7 +234,8 @@ It reads and writes the same config as the CLI and is optional. See
   no network request.
 - If the config cannot be read, or a locked rule forbids the profile you asked
   for, Claude Code does not start. It never falls back to another account.
-- `disk`, `list`, `status` and `doctor` change nothing.
+- `usage`, `disk`, `list`, `status` and `doctor` change nothing. `usage` reads
+  only the token counts and the folder of each answer, never its text.
 - `clean` moves conversations to the Trash and refuses one that changed in the
   last hour, since it may still be open. It never touches `memory/` folders.
 - `remove` keeps the profile's folder, so its login and history stay on disk.

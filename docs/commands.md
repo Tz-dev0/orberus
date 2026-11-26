@@ -13,6 +13,7 @@ The outputs below are shortened examples.
 - Setup: [`setup`](#setup), [`doctor`](#doctor), [`uninstall`](#uninstall)
 - Profiles: [`add`](#add), [`list`](#list), [`default`](#default), [`remove`](#remove)
 - Choosing a profile: [`status`](#status), [`use`](#use), [`run`](#run), [`rule`](#rule)
+- Usage: [`usage`](#usage)
 - Disk space and history: [`disk`](#disk), [`retention`](#retention), [`clean`](#clean)
 
 ## setup
@@ -215,6 +216,70 @@ $ cprofile rule list
 ```
 
 Rule types and the order of checks are described in [rules.md](rules.md).
+
+## usage
+
+```sh
+cprofile usage [profile] [--days N] [--all]
+```
+
+Which projects used each account over the last 7 days, and what your rules
+say about each one today. It answers a question Claude Code does not: did work
+end up on the wrong account? It changes nothing.
+
+```text
+perso  me@example.com, last 7 days
+┌───────┬─────────────────┬─────────┬───────────────────────────────┐
+│ Share │ Project         │ Answers │ Today's rules                 │
+├───────┼─────────────────┼─────────┼───────────────────────────────┤
+│ 79%   │ ~/code/blog     │ 220     │ no rule, default profile      │
+│ 21%   │ ~/code/dotfiles │ 64      │ ✓ pinned with .claude-profile │
+└───────┴─────────────────┴─────────┴───────────────────────────────┘
+! 79% came from 1 project(s) no rule names: 'perso' is used there only as the default.
+  If one belongs to another account, add a rule: cd ~/code/blog && cprofile rule add
+
+work  me@acme.example, last 7 days
+┌───────┬─────────────────┬─────────┬─────────────────────────────────────────────────────┐
+│ Share │ Project         │ Answers │ Today's rules                                       │
+├───────┼─────────────────┼─────────┼─────────────────────────────────────────────────────┤
+│ 63%   │ ~/code/acme-api │ 942     │ ✓ locked rule git_remote = "github.com/acme/*"      │
+│ 26%   │ ~/code/blog     │ 402     │ would use perso today (default profile)             │
+│ 9%    │ ~/code/acme-web │ 148     │ ✓ locked rule git_remote = "github.com/acme/*"      │
+│ 2%    │ ~/code/dotfiles │ 31      │ would use perso today (pinned with .claude-profile) │
+└───────┴─────────────────┴─────────┴─────────────────────────────────────────────────────┘
+! 28% came from 2 project(s) where `claude` would use another profile today.
+  They ran with 'work' by an explicit choice, or the rules changed since.
+  To keep one on 'work': cd ~/code/blog && cprofile use work
+```
+
+The last column reads:
+
+- **✓ rule…** or **✓ pinned**: a rule or a `.claude-profile` file sends this
+  project to this profile.
+- **no rule, default profile**: nothing names this project. It uses this
+  profile only because it is the default.
+- **would use X today**: started there now, `claude` would pick another
+  profile. The project ran with this one by an explicit choice
+  (`cprofile run --profile`, `CLAUDE_PROFILE`), or the rules changed since.
+- **folder gone, not checked**: the folder was deleted, so a rule on its git
+  remote can no longer be checked.
+
+| Option | Effect |
+|---|---|
+| `--days N` | Look N days back instead of 7 |
+| `--all` | List every project, not only the 10 heaviest |
+
+A project is a git repository: sessions started in its subfolders are counted
+together. A folder outside any repository counts on its own.
+
+**Share is an estimate.** It is computed from the conversations Claude Code
+keeps on this Mac, each answer counted once, with output tokens weighted more
+than input and cached tokens less, following the relative API prices. It is
+not what your plan counts against its limits, it knows nothing of usage on
+claude.ai or on another computer, and conversations already deleted (see
+[`retention`](#retention), [`clean`](#clean)) are no longer in it. The format
+of these files is internal to Claude Code and may change; lines that cannot be
+read are skipped.
 
 ## disk
 

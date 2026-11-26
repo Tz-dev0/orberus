@@ -24,6 +24,7 @@ use claude_profiles::resolve::{self, REPO_FILE};
 use claude_profiles::retention::{self, Retention};
 use claude_profiles::sessions::{self, Session};
 use claude_profiles::uninstall::{self, Binary};
+use claude_profiles::usage::{self, Verdict};
 use claude_profiles::view::{account, location, short_path, when};
 
 use ui::{Cell, Style, Ui};
@@ -87,6 +88,17 @@ enum Command {
     },
     /// Show how much disk space each profile takes
     Disk,
+    /// Show which folders used each account, and whether a rule covers them
+    Usage {
+        /// Name of the profile. Without it, every profile is shown
+        profile: Option<String>,
+        /// How many days back to look
+        #[arg(long, default_value_t = 7, value_name = "N")]
+        days: u64,
+        /// List every project, not only the 10 heaviest
+        #[arg(long)]
+        all: bool,
+    },
     /// List a profile's biggest conversations and move some to the Trash
     Clean {
         /// Name of the profile. Asked when left out
@@ -267,6 +279,7 @@ fn cli() -> Result<i32> {
         Command::List => list(&ui, &env),
         Command::Remove { name, purge, yes } => remove(&ui, &env, name, purge, yes),
         Command::Disk => disk_usage(&ui, &env),
+        Command::Usage { profile, days, all } => usage_command(&ui, &env, profile, days, all),
         Command::Clean {
             profile,
             sessions,
@@ -895,6 +908,201 @@ fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>
         "Profile '{name}' keeps its conversations {}",
         retention::days_text(days)
     ));
+    Ok(0)
+}
+
+/// A share of a whole as a table cell: "62%", or "<1%" for a trace.
+fn percent(part: f64, whole: f64) -> String {
+    if whole <= 0.0 {
+        return "0%".to_string();
+    }
+    let share = part / whole * 100.0;
+    if share > 0.0 && share < 1.0 {
+        "<1%".to_string()
+    } else {
+        format!("{share:.0}%")
+    }
+}
+
+/// Why a folder goes to a profile, short enough for a table cell.
+fn rule_text(reason: &resolve::Reason) -> String {
+    use resolve::Reason;
+    match reason {
+        Reason::Locked { rule, source } | Reason::Rule { rule, source } => {
+            let locked = if matches!(reason, Reason::Locked { .. }) {
+                "locked "
+            } else {
+                ""
+            };
+            let team = if *source == config::RuleSource::Team {
+                "team "
+            } else {
+                ""
+            };
+            format!("{locked}{team}rule {rule}")
+        }
+        Reason::RepoFile(_) => format!("pinned with {REPO_FILE}"),
+        Reason::Explicit => "explicit choice".to_string(),
+        Reason::Default => "default profile".to_string(),
+    }
+}
+
+/// `cprofile usage`: which folders used each account, checked against the
+/// rules as they are today.
+fn usage_command(ui: &Ui, env: &Env, profile: Option<String>, days: u64, all: bool) -> Result<i32> {
+    const SHOWN: usize = 10;
+    let loaded = config::load(env)?;
+    let config = &loaded.config;
+    if config.profiles.is_empty() {
+        println!(
+            "No profile yet. Create one with: {}",
+            ui.command("cprofile add")
+        );
+        return Ok(0);
+    }
+    if days == 0 {
+        bail!("--days must be 1 or more");
+    }
+    let names: Vec<String> = match profile {
+        Some(name) if config.profiles.contains_key(&name) => vec![name],
+        Some(name) => return Err(unknown_profile(config, &name)),
+        None => config.profiles.keys().cloned().collect(),
+    };
+    let period = if days == 1 {
+        "last 24 hours".to_string()
+    } else {
+        format!("last {days} days")
+    };
+
+    for (index, name) in names.iter().enumerate() {
+        if index > 0 {
+            println!();
+        }
+        let who = account(env, config, name).unwrap_or_else(|| "not logged in".to_string());
+        println!(
+            "{}  {}",
+            ui.paint(name, Style::Bold),
+            ui.paint(&format!("{who}, {period}"), Style::Dim)
+        );
+        let used = usage::profile_usage(env, &loaded, name, days)?;
+        if used.folders.is_empty() {
+            ui.detail("No conversation in this period.");
+            continue;
+        }
+        let whole = used.total.weight();
+
+        let mut rows = Vec::new();
+        // Projects no rule names, and projects that would use another
+        // profile today: (weight, how many, the heaviest one, kept for the
+        // advice). Projects come heaviest first, so the first seen stays.
+        let mut uncovered: (f64, usize, Option<&Path>) = (0.0, 0, None);
+        let mut elsewhere: (f64, usize, Option<&Path>) = (0.0, 0, None);
+        let mut hidden = (0.0, 0usize);
+        for (rank, folder) in used.folders.iter().enumerate() {
+            let weight = folder.tokens.weight();
+            let cell = match usage::verdict(env, &loaded, name, &folder.folder) {
+                Verdict::Covered(reason) => Cell::styled(
+                    format!("✓ {}", shorten(&rule_text(&reason), 46)),
+                    Style::Green,
+                ),
+                Verdict::NoRule => {
+                    uncovered = (
+                        uncovered.0 + weight,
+                        uncovered.1 + 1,
+                        uncovered.2.or(Some(&folder.folder)),
+                    );
+                    Cell::styled("no rule, default profile", Style::Yellow)
+                }
+                Verdict::Elsewhere { profile, reason } => {
+                    elsewhere = (
+                        elsewhere.0 + weight,
+                        elsewhere.1 + 1,
+                        elsewhere.2.or(Some(&folder.folder)),
+                    );
+                    Cell::styled(
+                        format!(
+                            "would use {profile} today ({})",
+                            shorten(&rule_text(&reason), 30)
+                        ),
+                        Style::Yellow,
+                    )
+                }
+                Verdict::Gone => Cell::styled("folder gone, not checked", Style::Dim),
+                Verdict::Unknown(why) => Cell::styled(shorten(&why, 48), Style::Red),
+            };
+            if !all && rank >= SHOWN {
+                hidden = (hidden.0 + weight, hidden.1 + 1);
+                continue;
+            }
+            rows.push(vec![
+                Cell::styled(percent(weight, whole), Style::Bold),
+                Cell::new(shorten(&short_path(env, &folder.folder), 44)),
+                Cell::new(folder.answers.to_string()),
+                cell,
+            ]);
+        }
+        if hidden.1 > 0 {
+            rows.push(vec![
+                Cell::styled(percent(hidden.0, whole), Style::Dim),
+                Cell::styled(format!("{} more, see --all", hidden.1), Style::Dim),
+                Cell::new(""),
+                Cell::new(""),
+            ]);
+        }
+        ui.table(&["Share", "Project", "Answers", "Today's rules"], &rows);
+
+        // With no rule at all, "no rule names it" is true of every project
+        // and teaches nothing: say the one useful thing instead.
+        let no_rule_yet = loaded.rules().next().is_none();
+        if uncovered.1 > 0 && no_rule_yet {
+            ui.detail(&format!(
+                "You have no rule yet, so every folder uses the default profile. Add one with: {}",
+                ui.command("cprofile rule add")
+            ));
+        } else if uncovered.1 > 0 {
+            ui.warning(&format!(
+                "{} came from {} project(s) no rule names: '{name}' is used there only as the default.",
+                percent(uncovered.0, whole),
+                uncovered.1
+            ));
+            if let Some(folder) = uncovered.2 {
+                ui.detail(&format!(
+                    "If one belongs to another account, add a rule: {}",
+                    ui.command(&format!(
+                        "cd {} && cprofile rule add",
+                        short_path(env, folder)
+                    ))
+                ));
+            }
+        }
+        if elsewhere.1 > 0 {
+            ui.warning(&format!(
+                "{} came from {} project(s) where `claude` would use another profile today.",
+                percent(elsewhere.0, whole),
+                elsewhere.1
+            ));
+            ui.detail(&format!(
+                "They ran with '{name}' by an explicit choice, or the rules changed since."
+            ));
+            if let Some(folder) = elsewhere.2 {
+                ui.detail(&format!(
+                    "To keep one on '{name}': {}",
+                    ui.command(&format!(
+                        "cd {} && cprofile use {name}",
+                        short_path(env, folder)
+                    ))
+                ));
+            }
+        }
+        if uncovered.1 == 0 && elsewhere.1 == 0 {
+            ui.success("Every project used with this profile is sent here by a rule or a pin.");
+        }
+    }
+    println!();
+    ui.detail(
+        "Share: an estimate from the conversations kept on this Mac, not your plan's limits.",
+    );
+    ui.detail("Today's rules: where `claude` would go if you started it in that folder now.");
     Ok(0)
 }
 

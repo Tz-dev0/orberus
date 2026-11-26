@@ -96,6 +96,9 @@ app again from the Finder or Spotlight: its window appears.
 - **`setup` writes the `PATH` line for zsh and bash only.** With another
   shell, add it yourself.
 - **Editing through commands drops comments** in `config.toml`.
+- **`usage` is an estimate.** It reads the conversations Claude Code keeps on
+  this Mac, in a format that is not documented and may change. It does not
+  show how much of your plan is left.
 - **Two different accounts on one Mac**: logins in separate profiles are
   independent, but this was tested with one account logged in to two
   profiles, not yet with two different accounts.
