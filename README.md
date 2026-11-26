@@ -13,10 +13,42 @@ Not affiliated with Anthropic. Claude is a trademark of Anthropic.
 
 ## Install
 
+On a Mac (Apple Silicon or Intel), no Rust needed. This downloads the latest
+release into `~/.claude-profiles/bin`, then installs the `claude` shim next to it
+and offers to add that folder to your `PATH`:
+
+```sh
+mkdir -p ~/.claude-profiles/bin
+curl -fsSL https://github.com/Tz-dev0/claude-profile/releases/latest/download/cprofile-macos-universal.tar.gz \
+  | tar -xz -C ~/.claude-profiles/bin --strip-components 1 cprofile-macos-universal/cprofile
+~/.claude-profiles/bin/cprofile setup
+```
+
+Use the command above rather than a download from the browser: the binary is
+not signed with an Apple developer certificate, and macOS refuses to run an
+unsigned program that a browser downloaded.
+
+To update, run the same commands again. The CLI works on its own; the menu bar
+app is optional.
+
+### From source
+
 ```sh
 cargo install --path .
 cprofile setup          # installs the shim and offers to add it to your PATH
 ```
+
+### Publishing a release (maintainers)
+
+Set the version in `Cargo.toml`, commit, then push a tag with the same number:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The `Release` workflow runs the tests, builds one universal binary with
+`scripts/package.sh` and attaches it to a new GitHub release.
 
 ## Quick start
 

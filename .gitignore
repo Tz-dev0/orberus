@@ -1,3 +1,4 @@
 /target
 # Personal backlog, kept out of the repository
 /BACKLOG.md
+/dist
