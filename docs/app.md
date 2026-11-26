@@ -29,6 +29,7 @@ Opening the app again from the Finder or Spotlight shows the window.
 - **Conversations kept** (folded): how long each profile keeps its
   conversations.
 - **Storage** (folded): the disk space of each profile.
+- **Terminal** (folded): the app that "Open…" starts Claude Code in.
 
 ## What you can do
 
@@ -42,6 +43,7 @@ Opening the app again from the Finder or Spotlight shows the window.
 | Remove a profile | Hover the profile, then the bin icon. The row says what goes and what stays before you confirm |
 | Change how long conversations are kept | Unfold "Conversations kept": 30 days, 90 days, 1 year, or a number of days |
 | Move big conversations to the Trash | Unfold "Storage", click a profile, then the bin icon of a conversation and "Move to Trash" |
+| Choose the terminal app | Unfold "Terminal" and click one. "System default" is the app macOS opens `.command` files with, usually Terminal |
 | Open the config file | ⌘, |
 | Quit | ⌘Q |
 
@@ -56,6 +58,10 @@ folder is kept unless you tick "Also delete its folder and sign out", which is
 
 - A rule that needs both a folder and a git remote, or a pattern typed by
   hand, is created with `cprofile rule add` or in `config.toml`.
+- The terminal list holds the installed apps that declare they run script
+  files (Terminal, and others such as Ghostty, WezTerm or kitty). Opening
+  Claude Code was tested with Terminal only. An app that does not accept a
+  script file, such as Alacritty, is not listed.
 - Claude Desktop is not handled.
 - The app is in English only.
 - It is not signed with an Apple developer certificate. See

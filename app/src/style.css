@@ -716,6 +716,27 @@ h2 {
   background: var(--hover);
 }
 
+/* One choice among a few, as in a native menu: a check before the one in
+   use. */
+.pick-row {
+  gap: 4px;
+}
+
+.pick-mark {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+}
+
+.pick-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ----------------------------------------------------------- conversations */
 
 .talks {

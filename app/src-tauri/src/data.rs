@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
@@ -67,6 +68,9 @@ pub struct Overview {
     pub shim_installed: bool,
     /// True while no profile reuses `~/.claude`: a new one may take it.
     pub can_reuse_login: bool,
+    /// The terminal app chosen to open Claude Code in, by its name.
+    /// `None` leaves the choice to macOS.
+    pub terminal: Option<String>,
 }
 
 /// The disk space one profile takes, for the "Storage" lines.
@@ -447,6 +451,7 @@ pub fn overview(env: &Env) -> Result<Overview> {
         rules,
         shim_installed: shim_path(env).exists(),
         can_reuse_login: config::native_profile(config).is_none(),
+        terminal: terminal(env).map(|app| app_name(&app)),
     })
 }
 
@@ -577,6 +582,131 @@ fn run_dir(env: &Env) -> PathBuf {
 
 fn folder_note(env: &Env, name: &str) -> PathBuf {
     run_dir(env).join(format!("{name}.folder"))
+}
+
+/// Where the chosen terminal app is remembered. The name starts with a dot,
+/// which no profile name can, so it never clashes with a profile's files.
+fn terminal_note(env: &Env) -> PathBuf {
+    run_dir(env).join(".terminal")
+}
+
+/// "Ghostty" for `/Applications/Ghostty.app`.
+fn app_name(app: &Path) -> String {
+    app.file_stem()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// True when the app says, in its Info.plist, that it runs shell scripts:
+/// one of its document types has the role "Shell". Terminal does, and so do
+/// other terminal apps that accept a script file; a text editor declares
+/// the same files with the role "Editor" and is left out.
+fn runs_scripts(app: &Path) -> bool {
+    let plist = app.join("Contents/Info.plist");
+    // The file is XML or binary. In both, the word is there in plain
+    // bytes: this cheap look spares a process for most apps.
+    let Ok(bytes) = fs::read(&plist) else {
+        return false;
+    };
+    if !bytes.windows(5).any(|window| window == b"Shell") {
+        return false;
+    }
+    // `plutil` ships with macOS and reads both forms.
+    let Ok(output) = Command::new("plutil")
+        .args(["-extract", "CFBundleDocumentTypes", "json", "-o", "-"])
+        .arg(&plist)
+        .output()
+    else {
+        return false;
+    };
+    // Spaces are dropped so the look does not depend on how the JSON is
+    // laid out.
+    let json: String = String::from_utf8_lossy(&output.stdout)
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect();
+    output.status.success() && json.contains("\"CFBundleTypeRole\":\"Shell\"")
+}
+
+/// The apps in `folders` that can run a script file, by name.
+fn terminals_in(folders: &[PathBuf]) -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = folders
+        .iter()
+        .filter_map(|folder| fs::read_dir(folder).ok())
+        .flat_map(|entries| entries.flatten().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "app") && runs_scripts(path))
+        .collect();
+    found.sort_by_key(|app| app_name(app).to_lowercase());
+    found
+}
+
+/// The folders macOS keeps apps in.
+fn app_folders(env: &Env) -> Vec<PathBuf> {
+    vec![
+        PathBuf::from("/System/Applications/Utilities"),
+        PathBuf::from("/Applications"),
+        env.home.join("Applications"),
+    ]
+}
+
+/// One terminal app the user can choose, for the "Terminal" section.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalView {
+    pub name: String,
+    /// Where the app is: what `set_terminal` takes.
+    pub path: String,
+    pub selected: bool,
+}
+
+/// The terminal apps installed on this Mac that can run a script file.
+pub fn terminals(env: &Env) -> Vec<TerminalView> {
+    terminal_views(env, &app_folders(env))
+}
+
+fn terminal_views(env: &Env, folders: &[PathBuf]) -> Vec<TerminalView> {
+    let chosen = terminal(env);
+    terminals_in(folders)
+        .into_iter()
+        .map(|app| TerminalView {
+            name: app_name(&app),
+            selected: chosen.as_deref() == Some(app.as_path()),
+            path: app.display().to_string(),
+        })
+        .collect()
+}
+
+/// The terminal app chosen by the user, while it is still installed.
+/// `None` leaves the choice to macOS, as before there was a choice.
+pub fn terminal(env: &Env) -> Option<PathBuf> {
+    let text = fs::read_to_string(terminal_note(env)).ok()?;
+    let app = PathBuf::from(text.trim_end_matches('\n'));
+    app.is_dir().then_some(app)
+}
+
+/// Remembers which terminal app opens Claude Code. `None` goes back to
+/// the app macOS opens script files with.
+pub fn set_terminal(env: &Env, app: Option<&str>) -> Result<()> {
+    set_terminal_in(env, app, &app_folders(env))
+}
+
+fn set_terminal_in(env: &Env, app: Option<&str>, folders: &[PathBuf]) -> Result<()> {
+    let note = terminal_note(env);
+    let Some(app) = app else {
+        // Already gone is fine: there is nothing to forget.
+        let _ = fs::remove_file(&note);
+        return Ok(());
+    };
+    // The path comes from the page: it must be one of the apps offered.
+    if !terminals_in(folders)
+        .iter()
+        .any(|known| known == Path::new(app))
+    {
+        bail!("{app} is not a terminal app that can run a script file");
+    }
+    let dir = run_dir(env);
+    fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    fs::write(&note, app).with_context(|| format!("cannot write {}", note.display()))
 }
 
 /// The folder Claude Code was last opened in for this profile, if it still
@@ -1036,6 +1166,62 @@ mod tests {
         assert!(write_launcher(&env, "work", &project).is_err());
         assert!(write_launcher(&env, "nobody", &env.home).is_err());
         assert!(write_launcher(&env, "work; rm -rf ~", &env.home).is_err());
+    }
+
+    // `plutil` and the `.app` layout only exist on macOS.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn only_apps_that_run_scripts_are_offered_as_terminals() {
+        let (_temp, env) = world();
+        let apps = env.home.join("Applications");
+        let app = |name: &str, role: &str| {
+            let contents = apps.join(format!("{name}.app/Contents"));
+            fs::create_dir_all(&contents).unwrap();
+            fs::write(
+                contents.join("Info.plist"),
+                format!(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict>\
+                     <key>CFBundleDocumentTypes</key><array><dict>\
+                     <key>CFBundleTypeExtensions</key><array><string>command</string></array>\
+                     <key>CFBundleTypeRole</key><string>{role}</string>\
+                     </dict></array></dict></plist>\n"
+                ),
+            )
+            .unwrap();
+            apps.join(format!("{name}.app"))
+        };
+        let term = app("Zterm", "Shell");
+        app("Aterm", "Shell");
+        // An editor opens the same files to edit them, and a folder that is
+        // not an app is not looked at.
+        let editor = app("Editor", "Editor");
+        fs::create_dir_all(apps.join("Shell scripts")).unwrap();
+
+        let folders = [apps.clone()];
+        let names: Vec<String> = terminal_views(&env, &folders)
+            .into_iter()
+            .map(|view| view.name)
+            .collect();
+        assert_eq!(names, ["Aterm", "Zterm"]);
+        assert_eq!(overview(&env).unwrap().terminal, None);
+
+        let chosen = term.display().to_string();
+        set_terminal_in(&env, Some(&chosen), &folders).unwrap();
+        assert_eq!(terminal(&env), Some(term.clone()));
+        assert_eq!(overview(&env).unwrap().terminal.as_deref(), Some("Zterm"));
+        let views = terminal_views(&env, &folders);
+        assert!(views[1].selected && !views[0].selected);
+
+        // Not an app that was offered: refused, the choice stays.
+        let other = editor.display().to_string();
+        assert!(set_terminal_in(&env, Some(&other), &folders).is_err());
+        assert_eq!(terminal(&env), Some(term.clone()));
+
+        // An app removed since is forgotten, and so is a choice given up.
+        fs::remove_dir_all(&term).unwrap();
+        assert_eq!(terminal(&env), None);
+        set_terminal_in(&env, None, &folders).unwrap();
+        assert!(!terminal_note(&env).exists());
     }
 
     #[test]

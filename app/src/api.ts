@@ -136,6 +136,16 @@ export interface Overview {
   shimInstalled: boolean;
   /** True while no profile reuses ~/.claude: a new one may take it. */
   canReuseLogin: boolean;
+  /** The terminal app chosen to open Claude Code in; null leaves it to
+   *  macOS. */
+  terminal: string | null;
+}
+
+/** A terminal app installed on this Mac that can run a script file. */
+export interface Terminal {
+  name: string;
+  path: string;
+  selected: boolean;
 }
 
 export interface Api {
@@ -165,6 +175,10 @@ export interface Api {
   /** Asks for a project folder, then opens Claude Code there in a terminal.
    *  Resolves to false when the folder choice is cancelled. */
   openClaude(name: string): Promise<boolean>;
+  /** The terminal apps that can be chosen. */
+  terminals(): Promise<Terminal[]>;
+  /** Chooses the terminal app by its path; null goes back to macOS's own. */
+  setTerminal(path: string | null): Promise<void>;
   openConfig(): Promise<void>;
   /** Resizes the window to the height of its content. */
   fit(height: number): Promise<void>;
@@ -194,6 +208,8 @@ const tauri: Api = {
   setRetention: (name, days) => invoke("set_retention", { name, days }),
   removeProfile: (name, purge) => invoke("remove_profile", { name, purge }),
   openClaude: (name) => invoke<boolean>("open_claude", { name }),
+  terminals: () => invoke<Terminal[]>("terminals"),
+  setTerminal: (path) => invoke("set_terminal", { path }),
   openConfig: () => invoke("open_config"),
   fit: (height) => invoke("fit", { height }),
   hide: () => invoke("hide"),
@@ -217,6 +233,7 @@ function preview(): Api {
   const state: Overview = {
     shimInstalled: true,
     canReuseLogin: false,
+    terminal: null,
     profiles: [
       { name: "perso", account: "me@example.com", location: "~/.claude", isDefault: true, rules: 0, teamRules: 0, canPurge: false, keeps: "120 days", keepsDays: 120 },
       {
@@ -380,6 +397,15 @@ function preview(): Api {
     openClaude: async (name) => {
       if (name === "client") throw "Preview only: a browser cannot open a terminal.";
       return true;
+    },
+    terminals: async () =>
+      ["Ghostty", "Terminal"].map((name) => ({
+        name,
+        path: `/Applications/${name}.app`,
+        selected: state.terminal === name,
+      })),
+    setTerminal: async (path) => {
+      state.terminal = path ? path.replace(/^.*\/|\.app$/g, "") : null;
     },
     openConfig: async () => {},
     fit: async () => {},

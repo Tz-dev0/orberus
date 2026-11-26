@@ -11,6 +11,7 @@ import {
   type Rule,
   type RuleDraft,
   type StorageOverview,
+  type Terminal,
   type Usage,
   type UsageOverview,
 } from "./api";
@@ -958,6 +959,73 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
   return section;
 }
 
+// The terminal apps that can be chosen, read when the section unfolds.
+let terminalOpen = false;
+let terminalList: Terminal[] | null = null;
+
+/** Which terminal app "Open…" starts Claude Code in. Folded, it names the
+ *  one in use. */
+function terminalSection(overview: Overview): HTMLElement {
+  const section = el("section", "storage-section");
+  section.append(
+    foldLine(
+      "terminal",
+      "Terminal",
+      "The app a profile's “Open…” button starts Claude Code in",
+      terminalOpen,
+      overview.terminal ?? "System default",
+      () => {
+        terminalOpen = !terminalOpen;
+        terminalList = null;
+        render(overview);
+        if (!terminalOpen) return;
+        void api.terminals().then((found) => {
+          terminalList = found;
+          render(overview);
+        });
+      },
+    ),
+  );
+  if (!terminalOpen) return section;
+
+  const list = el("ul", "storage");
+  if (!terminalList) {
+    list.append(el("li", "talks-note", "Looking for terminal apps…"));
+    section.append(list);
+    return section;
+  }
+  const choice = (label: string, hint: string, selected: boolean, path: string | null) => {
+    const item = el("li", "storage-item");
+    const row = el("button", "storage-row storage-pick pick-row");
+    row.setAttribute("role", "menuitemradio");
+    row.setAttribute("aria-checked", String(selected));
+    row.title = hint;
+    row.append(el("span", "pick-mark", selected ? "✓" : ""), el("span", "pick-name", label));
+    if (selected) {
+      row.type = "button";
+    } else {
+      onClick(row, async () => {
+        await api.setTerminal(path);
+        terminalList = await api.terminals();
+      });
+    }
+    item.append(row);
+    return item;
+  };
+  list.append(
+    choice(
+      "System default",
+      "The app macOS opens .command files with: Terminal, unless you changed it",
+      !terminalList.some((terminal) => terminal.selected),
+      null,
+    ),
+    ...terminalList.map((terminal) => choice(terminal.name, terminal.path, terminal.selected, terminal.path)),
+    el("li", "talks-note", "Listed: the installed apps that can run a script file."),
+  );
+  section.append(list);
+  return section;
+}
+
 function menu(): HTMLElement {
   const footer = el("footer");
   footer.append(
@@ -1014,6 +1082,7 @@ function render(overview: Overview | null, loadError = ""): void {
     if (storage && storage.profiles.some((size) => hues.has(size.name))) {
       main.append(storageSection(storage, overview));
     }
+    if (overview.profiles.length > 0) main.append(terminalSection(overview));
     page.append(main);
   }
 

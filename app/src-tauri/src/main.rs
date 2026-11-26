@@ -217,9 +217,29 @@ async fn open_claude(app: AppHandle, name: String) -> Result<bool, String> {
     };
     run(|env| {
         let launcher = data::write_launcher(env, &name, &folder)?;
-        open(&[launcher.as_os_str()])
+        match data::terminal(env) {
+            // `open -a <app> <file>` hands the script to that app.
+            Some(terminal) => open(&[
+                std::ffi::OsStr::new("-a"),
+                terminal.as_os_str(),
+                launcher.as_os_str(),
+            ]),
+            // No choice: the app macOS opens `.command` files with.
+            None => open(&[launcher.as_os_str()]),
+        }
     })?;
     Ok(true)
+}
+
+/// `async`: finding the terminal apps reads the Applications folders.
+#[tauri::command]
+async fn terminals() -> Result<Vec<data::TerminalView>, String> {
+    run(|env| Ok(data::terminals(env)))
+}
+
+#[tauri::command]
+async fn set_terminal(path: Option<String>) -> Result<(), String> {
+    run(|env| data::set_terminal(env, path.as_deref()))
 }
 
 /// Opens `config.toml` in the default text editor.
@@ -363,6 +383,8 @@ fn main() {
             pick_rule_folder,
             add_rule,
             remove_rule,
+            terminals,
+            set_terminal,
             open_claude,
             open_config,
             fit,
