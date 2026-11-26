@@ -3,9 +3,8 @@
 # commands in an empty home. The .exe is kept as an artifact for 14 days.
 name: Windows
 
+# Started by hand from the Actions tab: macOS comes first for now.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
