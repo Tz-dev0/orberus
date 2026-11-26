@@ -95,6 +95,40 @@ button:focus-visible {
   outline-offset: -2px;
 }
 
+/* ------------------------------------------------------------------ header */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.mark {
+  flex: none;
+  width: 22px;
+  height: 16px;
+}
+
+/* The two colors of the app icon. */
+.mark-disc {
+  fill: #e9a15b;
+}
+
+.mark-ring {
+  fill: none;
+  stroke: #4fb5b3;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
 /* ---------------------------------------------------------------- profiles */
 
 .profile {
@@ -107,6 +141,24 @@ button:focus-visible {
 .profile:hover,
 .profile:focus-within {
   background: var(--hover);
+}
+
+/* Rows and their buttons light up quickly, without a hard flash. */
+.profile,
+.go,
+.menu-item,
+.remove,
+.set-default {
+  transition:
+    background-color 0.12s ease-out,
+    color 0.12s ease-out,
+    box-shadow 0.12s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }
 
 .profile-open {
@@ -134,9 +186,20 @@ button:focus-visible {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--hue);
+  /* Lit from above, like the disc of the app icon. */
+  background: linear-gradient(color-mix(in srgb, var(--hue) 80%, #fff), var(--hue));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 1px 2px rgb(0 0 0 / 0.18);
   color: var(--on-seal);
   font: 600 14px/1 ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+}
+
+/* The default profile wears a second ring: the one used where no rule
+   says otherwise. */
+.is-default .seal {
+  outline: 1.5px solid color-mix(in srgb, var(--hue) 70%, transparent);
+  outline-offset: 2px;
 }
 
 /* An empty profile: the seal is only an outline, waiting for an account. */
@@ -187,8 +250,7 @@ button:focus-visible {
   box-shadow: none;
 }
 
-.default-tag,
-.set-default {
+.default-tag {
   flex: none;
   font-size: 11px;
   margin: 0 8px 0 2px;
@@ -203,8 +265,9 @@ button:focus-visible {
   position: absolute;
   opacity: 0;
   pointer-events: none;
-  color: var(--muted);
-  padding: 3px 6px;
+  flex: none;
+  display: flex;
+  padding: 4px;
   border-radius: 5px;
 }
 
@@ -216,8 +279,11 @@ button:focus-visible {
 }
 
 .set-default:hover {
-  color: var(--text);
   background: var(--hover);
+}
+
+.set-default:hover .icon {
+  stroke: var(--hue);
 }
 
 /* The way to remove a profile, kept out of sight like "Set as default". */
@@ -249,9 +315,7 @@ button:focus-visible {
 
 /* With the bin next to it, the label keeps a smaller gap. */
 .profile:hover .default-tag,
-.profile:focus-within .default-tag,
-.profile:hover .set-default,
-.profile:focus-within .set-default {
+.profile:focus-within .default-tag {
   margin-right: 2px;
 }
 
@@ -482,8 +546,18 @@ footer {
 }
 
 .menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
   padding: 4px 8px;
   border-radius: 5px;
+}
+
+/* The shortcut, as in a native menu. */
+kbd {
+  font: inherit;
+  color: var(--faint);
+  letter-spacing: 0.04em;
 }
 
 .menu-item:hover {

@@ -28,6 +28,8 @@ const ICONS = {
   branch:
     "M5 3.2v9.6M5 5.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 8.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm6-6.2a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 0c0 2.2-2.6 2.6-6 3",
   lock: "M4.5 7.2V5.4a3.5 3.5 0 0 1 7 0v1.8M3.6 7.2h8.8v6H3.6z",
+  // A seal inside a ring: what the default profile wears.
+  ring: "M8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z",
   bin: "M3 4.5h10M6.5 4.5V3h3v1.5M4.3 4.5l.6 8.5h6.2l.6-8.5M6.8 7v3.5M9.2 7v3.5",
 } as const;
 
@@ -207,6 +209,7 @@ function profileRow(profile: Profile, overview: Overview): HTMLElement {
   const row = el("li", "profile");
   row.style.setProperty("--hue", hue(profile.name));
   if (!profile.account) row.classList.add("signed-out");
+  if (profile.isDefault) row.classList.add("is-default");
 
   // The whole left part is the main action: start Claude Code there.
   const open = el("button", "profile-open");
@@ -231,7 +234,11 @@ function profileRow(profile: Profile, overview: Overview): HTMLElement {
     tag.title = "Used where no rule applies";
     row.append(tag);
   } else {
-    const set = el("button", "set-default", "Set as default");
+    // An icon and not words: with the bin next to it, words would push
+    // the account's e-mail out of the row.
+    const set = el("button", "set-default");
+    set.title = `Use ${profile.name} where no rule applies`;
+    set.append(icon("ring", `Set ${profile.name} as default`));
     onClick(set, () => api.setDefault(profile.name));
     row.append(set);
   }
@@ -380,13 +387,47 @@ function ruleRow(rule: Rule): HTMLElement {
   return row;
 }
 
+/** The app's mark, as in its icon: a filled seal in front of a hollow one. */
+function mark(): SVGElement {
+  const space = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(space, "svg");
+  svg.setAttribute("viewBox", "0 0 22 16");
+  svg.setAttribute("class", "mark");
+  svg.setAttribute("aria-hidden", "true");
+  // The ring is an arc that stops short of the disc, so they never touch.
+  const ring = document.createElementNS(space, "path");
+  ring.setAttribute("d", "M12.6 3.1a5.6 5.6 0 1 1 0 9.8");
+  ring.setAttribute("class", "mark-ring");
+  const disc = document.createElementNS(space, "circle");
+  disc.setAttribute("cx", "7.5");
+  disc.setAttribute("cy", "8");
+  disc.setAttribute("r", "6");
+  disc.setAttribute("class", "mark-disc");
+  svg.append(ring, disc);
+  return svg;
+}
+
+function header(): HTMLElement {
+  const top = el("header");
+  top.append(mark(), el("h1", "", "Claude Profiles"));
+  return top;
+}
+
+/** A line of the menu at the bottom, with its keyboard shortcut. */
+function menuItem(label: string, keys: string, action: () => Promise<void>): HTMLElement {
+  const item = el("button", "menu-item");
+  item.append(el("span", "", label), el("kbd", "", keys));
+  onClick(item, action);
+  return item;
+}
+
 function menu(): HTMLElement {
   const footer = el("footer");
-  const edit = el("button", "menu-item", "Edit config file…");
-  onClick(edit, () => api.openConfig());
-  const quit = el("button", "menu-item", "Quit Claude Profiles");
-  onClick(quit, () => api.quit());
-  footer.append(edit, quit, el("p", "legal", "Not affiliated with Anthropic"));
+  footer.append(
+    menuItem("Edit config file…", "⌘,", () => api.openConfig()),
+    menuItem("Quit Claude Profiles", "⌘Q", () => api.quit()),
+    el("p", "legal", "Not affiliated with Anthropic"),
+  );
   return footer;
 }
 
@@ -398,6 +439,7 @@ function notice(text: string, kind = ""): HTMLElement {
 
 function render(overview: Overview | null, loadError = ""): void {
   const page = el("div", "page");
+  page.append(header());
 
   if (loadError) page.append(notice(loadError, "error"));
   if (errorText) page.append(notice(errorText, "error"));
@@ -456,6 +498,27 @@ window.addEventListener("focus", () => {
 });
 
 window.addEventListener("keydown", (event) => {
+  // The shortcuts written next to the menu lines, and ⌘N for a new profile.
+  if (event.metaKey && !event.altKey && !event.ctrlKey) {
+    const key = event.key.toLowerCase();
+    if (key === "q") {
+      event.preventDefault();
+      void api.quit();
+    } else if (key === ",") {
+      event.preventDefault();
+      api.openConfig().catch((error) => {
+        errorText = String(error);
+        errorAt = Date.now();
+        void refresh();
+      });
+    } else if (key === "n" && !adding) {
+      event.preventDefault();
+      adding = true;
+      removing = null;
+      void refresh();
+    }
+    return;
+  }
   if (event.key !== "Escape") return;
   // Escape first backs out of a form or a question, then closes the window.
   if (adding || removing) {
