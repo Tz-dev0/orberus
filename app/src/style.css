@@ -266,9 +266,11 @@ h1 {
   opacity: 0;
   pointer-events: none;
   flex: none;
-  display: flex;
-  padding: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 3px 6px;
   border-radius: 5px;
+  white-space: nowrap;
 }
 
 .profile:hover .set-default,
@@ -279,14 +281,16 @@ h1 {
 }
 
 .set-default:hover {
+  color: var(--text);
   background: var(--hover);
 }
 
-.set-default:hover .icon {
-  stroke: var(--hue);
+.profile:hover .default-tag,
+.profile:focus-within .default-tag {
+  margin-right: 2px;
 }
 
-/* The way to remove a profile, kept out of sight like "Set as default". */
+/* The bin: to remove a profile, or to send a conversation to the Trash. */
 .remove {
   position: absolute;
   opacity: 0;
@@ -311,12 +315,6 @@ h1 {
 
 .remove:hover .icon {
   stroke: var(--alert-text);
-}
-
-/* With the bin next to it, the label keeps a smaller gap. */
-.profile:hover .default-tag,
-.profile:focus-within .default-tag {
-  margin-right: 2px;
 }
 
 /* ------------------------------------------------------------- new profile */

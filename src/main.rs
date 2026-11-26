@@ -371,9 +371,9 @@ fn overview(ui: &Ui, env: &Env) -> Result<i32> {
         };
         println!("No profile yet. Start with: {}", ui.command(next));
     } else {
+        // Only where you stand. The table of profiles is one command
+        // away (`cprofile list`) and would push the commands off screen.
         status_block(ui, env, &loaded, None)?;
-        println!();
-        profiles_table(ui, env, &loaded)?;
     }
     println!();
     // The same text as `cprofile --help`, built by clap from the `Cli` type.

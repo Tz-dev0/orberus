@@ -28,8 +28,6 @@ const ICONS = {
   branch:
     "M5 3.2v9.6M5 5.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 8.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm6-6.2a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zm0 0c0 2.2-2.6 2.6-6 3",
   lock: "M4.5 7.2V5.4a3.5 3.5 0 0 1 7 0v1.8M3.6 7.2h8.8v6H3.6z",
-  // A seal inside a ring: what the default profile wears.
-  ring: "M8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z",
   chevron: "M6 3.5 10.5 8 6 12.5",
   bin: "M3 4.5h10M6.5 4.5V3h3v1.5M4.3 4.5l.6 8.5h6.2l.6-8.5M6.8 7v3.5M9.2 7v3.5",
 } as const;
@@ -234,12 +232,12 @@ function profileRow(profile: Profile, overview: Overview): HTMLElement {
     const tag = el("span", "default-tag", "Default");
     tag.title = "Used where no rule applies";
     row.append(tag);
-  } else {
-    // An icon and not words: with the bin next to it, words would push
-    // the account's e-mail out of the row.
-    const set = el("button", "set-default");
+  }
+
+  if (!profile.isDefault) {
+    // Words and not an icon: an icon alone did not say what it would do.
+    const set = el("button", "set-default", "Set as default");
     set.title = `Use ${profile.name} where no rule applies`;
-    set.append(icon("ring", `Set ${profile.name} as default`));
     onClick(set, () => api.setDefault(profile.name));
     row.append(set);
   }
