@@ -10,6 +10,7 @@ use anyhow::{bail, Context, Result};
 use serde::Serialize;
 
 use claude_profiles::config::{self, RuleSource};
+use claude_profiles::disk;
 use claude_profiles::paths::Env;
 use claude_profiles::purge;
 use claude_profiles::view;
@@ -53,6 +54,64 @@ pub struct Overview {
     pub shim_installed: bool,
     /// True while no profile reuses `~/.claude`: a new one may take it.
     pub can_reuse_login: bool,
+}
+
+/// The disk space one profile takes, for the "Storage" lines.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageView {
+    pub name: String,
+    /// In bytes, to draw the bars to scale.
+    pub total: u64,
+    /// The same, for people: "3.4 GB".
+    pub size: String,
+    /// What takes it, in words, biggest first.
+    pub detail: String,
+}
+
+/// The "Storage" section: every profile, and the sum shown while the
+/// section is folded.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageOverview {
+    pub profiles: Vec<StorageView>,
+    /// All profiles together, for people: "3.5 GB".
+    pub total: String,
+}
+
+/// Measures every profile. This walks whole folders, so the page asks for
+/// it apart from the profile list, which must show at once.
+pub fn storage(env: &Env) -> Result<StorageOverview> {
+    let config = config::load(env)?.config;
+    let mut views = Vec::new();
+    for name in config.profiles.keys() {
+        let usage = disk::profile_usage(env, &config, name)?;
+        let mut parts = [
+            (usage.sessions, "conversations"),
+            (usage.file_history, "file history"),
+            (usage.extensions, "plugins and skills"),
+            (usage.other, "other"),
+        ];
+        // Biggest first. `Reverse` flips the order of the comparison.
+        parts.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
+        let detail = parts
+            .iter()
+            .filter(|(size, _)| *size > 0)
+            .map(|(size, what)| format!("{} {what}", disk::human(*size)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        views.push(StorageView {
+            name: name.clone(),
+            total: usage.total(),
+            size: disk::human(usage.total()),
+            detail,
+        });
+    }
+    let total = disk::human(views.iter().map(|view| view.total).sum());
+    Ok(StorageOverview {
+        profiles: views,
+        total,
+    })
 }
 
 fn shim_path(env: &Env) -> PathBuf {
@@ -309,6 +368,29 @@ mod tests {
             Some("work")
         );
         assert!(set_default(&env, "nobody").is_err());
+    }
+
+    #[test]
+    fn storage_measures_each_profile_and_names_the_biggest_part_first() {
+        let (_temp, env) = world();
+        let sessions = env.profiles_dir().join("work/projects/app");
+        fs::create_dir_all(&sessions).unwrap();
+        fs::write(sessions.join("session.jsonl"), vec![b'x'; 300_000]).unwrap();
+        fs::write(env.profiles_dir().join("work/settings.json"), "{}").unwrap();
+
+        let overview = storage(&env).unwrap();
+        // Only "work" holds anything, so the sum is its size.
+        assert_eq!(overview.total, overview.profiles[1].size);
+        let storage = overview.profiles;
+        assert_eq!(storage.len(), 2);
+        // "perso" is native and its ~/.claude does not exist in this world.
+        assert_eq!(storage[0].total, 0);
+        assert_eq!(storage[0].detail, "");
+        let work = &storage[1];
+        assert!(work.total >= 300_000, "{work:?}");
+        assert!(work.size.ends_with("KB"), "{work:?}");
+        assert!(work.detail.contains("conversations, "), "{work:?}");
+        assert!(work.detail.ends_with(" other"), "{work:?}");
     }
 
     #[test]

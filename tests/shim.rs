@@ -236,6 +236,18 @@ fn profiles_and_rules_can_be_listed_and_removed() {
     assert!(list.contains("me@acme.test"), "{list}");
     assert_eq!(list.matches("not logged in").count(), 2, "{list}");
 
+    // `disk` measures each profile and says where the space goes.
+    fs::create_dir_all(world.root.join("profiles/work/projects/app")).unwrap();
+    fs::write(
+        world.root.join("profiles/work/projects/app/session.jsonl"),
+        vec![b'x'; 300_000],
+    )
+    .unwrap();
+    let disk = world.ok(&home, &["disk"]);
+    assert!(disk.contains("Sessions") && disk.contains("work"), "{disk}");
+    assert!(disk.contains("KB"), "{disk}");
+    assert!(disk.contains("Nothing is deleted"), "{disk}");
+
     // Output is plain text when it is not a terminal: no color codes.
     let list = world.ok(&home, &["ls"]);
     assert!(list.contains("perso") && list.contains("client"), "{list}");

@@ -516,6 +516,97 @@ h2 {
   background: var(--hue);
 }
 
+/* ----------------------------------------------------------------- storage */
+
+.storage-section {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line);
+}
+
+/* The line that folds and unfolds the section. */
+.fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 3px 8px 3px 5px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fold:hover {
+  background: var(--hover);
+}
+
+.fold .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.6;
+  transition: transform 0.12s ease-out;
+}
+
+/* The arrow points down when the section is open. */
+.fold[aria-expanded="true"] .icon {
+  transform: rotate(90deg);
+}
+
+.fold-title {
+  flex: 1;
+}
+
+.fold-sum {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.storage {
+  margin-top: 2px;
+}
+
+.storage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.storage-name {
+  flex: none;
+  width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The bars share one scale, so the profiles can be compared at a glance. */
+.bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--hue);
+}
+
+.storage-size {
+  flex: none;
+  width: 52px;
+  text-align: right;
+  color: var(--muted);
+  /* Digits of equal width, so the sizes line up. */
+  font-variant-numeric: tabular-nums;
+}
+
 /* -------------------------------------------------------- notices and menu */
 
 .notice {

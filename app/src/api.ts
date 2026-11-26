@@ -28,6 +28,23 @@ export interface Rule {
   source: string;
 }
 
+/** The disk space one profile takes. */
+export interface Storage {
+  name: string;
+  /** In bytes, to draw the bars to scale. */
+  total: number;
+  /** For people: "3.4 GB". */
+  size: string;
+  /** What takes it, in words. */
+  detail: string;
+}
+
+export interface StorageOverview {
+  profiles: Storage[];
+  /** All profiles together: "3.5 GB". */
+  total: string;
+}
+
 export interface Overview {
   profiles: Profile[];
   rules: Rule[];
@@ -38,6 +55,8 @@ export interface Overview {
 
 export interface Api {
   overview(): Promise<Overview>;
+  /** Measures every profile's folder. Slower than `overview`. */
+  storage(): Promise<StorageOverview>;
   setDefault(name: string): Promise<void>;
   addProfile(name: string, reuseLogin: boolean): Promise<void>;
   /** Takes the profile and its own rules out of the config. Its Claude Code
@@ -55,6 +74,7 @@ export interface Api {
 
 const tauri: Api = {
   overview: () => invoke<Overview>("overview"),
+  storage: () => invoke<StorageOverview>("storage"),
   setDefault: (name) => invoke("set_default", { name }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
   removeProfile: (name, purge) => invoke("remove_profile", { name, purge }),
@@ -99,6 +119,17 @@ function preview(): Api {
   };
   return {
     overview: async () => structuredClone(state),
+    storage: async () => {
+      const sample: Record<string, [number, string, string]> = {
+        perso: [3.5e9, "3.5 GB", "3.4 GB conversations, 41 MB plugins and skills, 35 MB file history"],
+        work: [6.4e8, "640 MB", "600 MB conversations, 31 MB plugins and skills, 9.0 MB other"],
+      };
+      const profiles = state.profiles.map(({ name }) => {
+        const [total, size, detail] = sample[name] ?? [0, "0 B", ""];
+        return { name, total, size, detail };
+      });
+      return { profiles, total: "4.1 GB" };
+    },
     setDefault: async (name) => {
       for (const profile of state.profiles) profile.isDefault = profile.name === name;
     },

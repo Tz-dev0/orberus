@@ -3,6 +3,7 @@
 //! on top of this library, and a future menu bar app will reuse it as is.
 
 pub mod config;
+pub mod disk;
 pub mod git;
 pub mod launch;
 pub mod paths;

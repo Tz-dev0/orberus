@@ -2,7 +2,7 @@
 // Plain TypeScript and DOM calls: the page is one small list, a framework
 // would add more code than it removes.
 
-import { api, insideApp, type Overview, type Profile, type Rule } from "./api";
+import { api, insideApp, type Overview, type Profile, type Rule, type StorageOverview } from "./api";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 // In the app the window itself is the frosted panel. In a browser there is
@@ -30,6 +30,7 @@ const ICONS = {
   lock: "M4.5 7.2V5.4a3.5 3.5 0 0 1 7 0v1.8M3.6 7.2h8.8v6H3.6z",
   // A seal inside a ring: what the default profile wears.
   ring: "M8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2z",
+  chevron: "M6 3.5 10.5 8 6 12.5",
   bin: "M3 4.5h10M6.5 4.5V3h3v1.5M4.3 4.5l.6 8.5h6.2l.6-8.5M6.8 7v3.5M9.2 7v3.5",
 } as const;
 
@@ -421,6 +422,53 @@ function menuItem(label: string, keys: string, action: () => Promise<void>): HTM
   return item;
 }
 
+// The last measure of each profile's folder. It arrives after the list,
+// and the previous one stays on screen until the new one is in.
+let storage: StorageOverview | null = null;
+// Folded until asked for: the sizes are a detail, not the reason the
+// window was opened. Kept as long as the app runs.
+let storageOpen = false;
+
+/** A line that unfolds to one line per profile: a bar to scale, then the
+ *  size. Folded, it shows the sum. */
+function storageSection(measured: StorageOverview, overview: Overview): HTMLElement {
+  const sizes = measured.profiles.filter((size) => hues.has(size.name));
+  const section = el("section", "storage-section");
+  const toggle = el("button", "fold");
+  toggle.type = "button";
+  toggle.title = "Disk space taken by each profile's Claude Code folder";
+  toggle.setAttribute("aria-expanded", String(storageOpen));
+  toggle.append(icon("chevron"), el("span", "fold-title", "Storage"));
+  if (!storageOpen) toggle.append(el("span", "fold-sum", measured.total));
+  toggle.addEventListener("click", () => {
+    storageOpen = !storageOpen;
+    render(overview);
+    // Keep the keyboard on the line that was just used.
+    document.querySelector<HTMLButtonElement>(".fold")?.focus();
+  });
+  section.append(toggle);
+  if (!storageOpen) return section;
+
+  const list = el("ul", "storage");
+  // The biggest profile fills the bar; the others are drawn against it.
+  const biggest = Math.max(...sizes.map((size) => size.total), 1);
+  for (const size of sizes) {
+    const row = el("li", "storage-row");
+    row.style.setProperty("--hue", hue(size.name));
+    row.title = size.detail || "Nothing stored yet";
+    const bar = el("span", "bar");
+    const fill = el("span", "bar-fill");
+    // A profile with anything at all keeps a visible sliver.
+    const share = size.total > 0 ? Math.max(size.total / biggest, 0.02) : 0;
+    fill.style.width = `${(share * 100).toFixed(1)}%`;
+    bar.append(fill);
+    row.append(el("span", "storage-name", size.name), bar, el("span", "storage-size", size.total > 0 ? size.size : "Empty"));
+    list.append(row);
+  }
+  section.append(list);
+  return section;
+}
+
 function menu(): HTMLElement {
   const footer = el("footer");
   footer.append(
@@ -468,6 +516,10 @@ function render(overview: Overview | null, loadError = ""): void {
       section.append(title, list);
       main.append(section);
     }
+    // Only the profiles still in the list: a measure can be a moment old.
+    if (storage && storage.profiles.some((size) => hues.has(size.name))) {
+      main.append(storageSection(storage, overview));
+    }
     page.append(main);
   }
 
@@ -480,11 +532,24 @@ function render(overview: Overview | null, loadError = ""): void {
 }
 
 async function refresh(): Promise<void> {
+  let overview: Overview;
   try {
-    render(await api.overview());
+    overview = await api.overview();
   } catch (error) {
     // The config could not be read: say why instead of showing stale data.
     render(null, String(error));
+    return;
+  }
+  render(overview);
+  // Measuring reads whole folders: the list above does not wait for it.
+  try {
+    const measured = await api.storage();
+    const changed = JSON.stringify(measured) !== JSON.stringify(storage);
+    storage = measured;
+    // Not while a form is open: rebuilding the page would disturb typing.
+    if (changed && !adding && !removing) render(overview);
+  } catch {
+    // Sizes are a comfort, not worth an error message: keep the last ones.
   }
 }
 

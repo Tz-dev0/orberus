@@ -50,6 +50,7 @@ From then on, just type `claude`.
 | `cprofile setup` | Install the `claude` shim and put it in your PATH |
 | `cprofile add [name]` | Create a profile (`--native` reuses `~/.claude`) |
 | `cprofile list`, `ls` | List profiles: account logged in, default, and the one used here |
+| `cprofile disk` | Show how much disk space each profile takes, and what takes it. Deletes nothing |
 | `cprofile remove [name]`, `rm` | Remove a profile and its rules; its folder is kept. `--purge` also deletes the folder and its login in the keychain |
 | `cprofile default [name]`, `global` | Profile used when no rule applies |
 | `cprofile use [name]` | Pin the current folder (writes `.claude-profile`) |
@@ -68,7 +69,8 @@ removal needs `--yes`. Colors follow `NO_COLOR`.
 A small app that lives in the menu bar. Click its icon to see your profiles
 and who is logged in to each, create or remove a profile, start Claude Code
 in one of them (you pick the project folder, a terminal window opens there),
-or change the default profile. Removing a profile keeps its Claude Code
+or change the default profile. A “Storage” section shows the disk space of
+each profile. Removing a profile keeps its Claude Code
 folder unless you tick the box to delete it, as `cprofile remove` and
 `cprofile remove --purge` do. It reads and writes the same config as
 the CLI.
