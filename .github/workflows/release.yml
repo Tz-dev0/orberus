@@ -3,7 +3,7 @@
 #
 #   git tag v0.1.0 && git push origin v0.1.0
 #
-# The menu bar app is not built here.
+# The release holds the CLI and the menu bar app, each in its own archive.
 name: Release
 
 on:
@@ -28,12 +28,20 @@ jobs:
       - name: Test
         run: cargo test --locked
 
-      - name: Build the archive
+      - name: Build the CLI archive
         run: scripts/package.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Build the app archive
+        run: scripts/package-app.sh "${GITHUB_REF_NAME#v}"
+
+      # After the build: compiling the app needs the frontend it just built.
+      - name: Test the app
+        working-directory: app/src-tauri
+        run: cargo test --locked
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --verify-tag --generate-notes --title "cprofile ${GITHUB_REF_NAME#v}"
+            --verify-tag --generate-notes --title "Claude Profiles ${GITHUB_REF_NAME#v}"

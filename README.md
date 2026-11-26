@@ -40,15 +40,17 @@ cprofile setup          # installs the shim and offers to add it to your PATH
 
 ### Publishing a release (maintainers)
 
-Set the version in `Cargo.toml`, commit, then push a tag with the same number:
+Set the version in `Cargo.toml` and in `app/src-tauri/tauri.conf.json`, commit,
+then push a tag with the same number:
 
 ```sh
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The `Release` workflow runs the tests, builds one universal binary with
-`scripts/package.sh` and attaches it to a new GitHub release.
+The `Release` workflow runs the tests, builds a universal CLI with `scripts/package.sh` and
+a universal app with `scripts/package-app.sh`, and attaches both archives to a
+new GitHub release.
 
 ## Quick start
 
@@ -111,6 +113,25 @@ folder unless you tick the box to delete it, as `cprofile remove` and
 `cprofile remove --purge` do. It reads and writes the same config as
 the CLI.
 
+Install the CLI first (the app starts Claude Code through its shim), then
+put the app in `/Applications` and open it:
+
+```sh
+curl -fsSL https://github.com/Tz-dev0/claude-profile/releases/latest/download/Claude-Profiles-macos-universal.tar.gz \
+  | tar -xz -C /Applications
+open "/Applications/Claude Profiles.app"
+```
+
+As for the CLI, use this command rather than a download from the browser: the
+app is not signed with an Apple developer certificate, and macOS refuses to
+open an unsigned app that a browser downloaded. To update, quit the app and
+run the same commands again.
+
+Rules are still created with `cprofile`; the app shows them. It does not
+handle Claude Desktop yet.
+
+To build it from source:
+
 ```sh
 cd app
 npm install
@@ -118,9 +139,7 @@ npm run tauri build     # builds "Claude Profiles.app"
 npm run tauri dev       # or run it while working on it
 ```
 
-The built app is in `app/src-tauri/target/release/bundle/macos/`. Rules are
-still created with `cprofile`; the app shows them. It does not handle Claude
-Desktop yet.
+The built app is in `app/src-tauri/target/release/bundle/macos/`.
 
 ## How it works
 
@@ -174,5 +193,6 @@ repository is cloned, including worktrees.
 - IDE extensions that start their own Claude Code binary may not go through
   the shim.
 - Claude Desktop is not handled yet.
-- The menu bar app is not signed: macOS asks for confirmation the first time
-  it is opened.
+- Neither the CLI nor the menu bar app is signed with an Apple developer
+  certificate: install them with the `curl` commands above, not from the
+  browser.
