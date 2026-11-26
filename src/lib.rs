@@ -7,3 +7,4 @@ pub mod git;
 pub mod launch;
 pub mod paths;
 pub mod resolve;
+pub mod view;

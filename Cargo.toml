@@ -13,8 +13,8 @@ path = "src/main.rs"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-# Reads the account name from Claude Code's .claude.json, for `cprofile list`.
-# Never used on the shim path.
+# Reads the account name from Claude Code's .claude.json, for `cprofile list`
+# and the menu bar app. Never used on the shim path.
 serde_json = "1"
 toml = "0.8"
 

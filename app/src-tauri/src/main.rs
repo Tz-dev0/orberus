@@ -1,0 +1,228 @@
+//! Claude Profiles in the menu bar: an icon, and a small window under it
+//! that lists the profiles and starts Claude Code in one of them.
+//!
+//! This file only wires things to Tauri. What is shown and done lives in
+//! `data.rs`, on top of the core shared with the `cprofile` CLI.
+
+// A release build on Windows would otherwise open a console window.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod data;
+
+use std::process::Command;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+use anyhow::{bail, Context, Result};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Rect, WebviewWindow, WindowEvent};
+
+use claude_profiles::paths::Env;
+
+const WINDOW: &str = "main";
+// Window size in points. The width matches tauri.conf.json.
+const WIDTH: f64 = 320.0;
+const MIN_HEIGHT: f64 = 80.0;
+const MAX_HEIGHT: f64 = 560.0;
+
+/// When the popover was last hidden because it lost focus. Shared state must
+/// be safe to touch from several threads, hence the `Mutex`.
+struct LastHidden(Mutex<Option<Instant>>);
+
+/// Runs a core function and turns its error into a text. Tauri sends command
+/// errors to the page as JSON, and `anyhow::Error` is not serializable.
+/// `{error:#}` keeps the whole chain: "cannot read X: permission denied".
+fn run<T>(action: impl FnOnce(&Env) -> Result<T>) -> Result<T, String> {
+    Env::from_process()
+        .and_then(|env| action(&env))
+        .map_err(|error| format!("{error:#}"))
+}
+
+/// Asks macOS to open a file or a folder, as a double click would.
+fn open(arguments: &[&std::ffi::OsStr]) -> Result<()> {
+    let status = Command::new("open")
+        .args(arguments)
+        .status()
+        .context("cannot run `open`")?;
+    if !status.success() {
+        bail!("`open` failed");
+    }
+    Ok(())
+}
+
+// Each `#[tauri::command]` function can be called from the page with
+// `invoke("name", { arguments })`.
+
+#[tauri::command]
+fn overview() -> Result<data::Overview, String> {
+    run(data::overview)
+}
+
+#[tauri::command]
+fn set_default(name: String) -> Result<(), String> {
+    run(|env| data::set_default(env, &name))
+}
+
+/// Opens a terminal window running Claude Code in the given profile.
+#[tauri::command]
+fn open_claude(name: String) -> Result<(), String> {
+    run(|env| {
+        let launcher = data::write_launcher(env, &name)?;
+        open(&[launcher.as_os_str()])
+    })
+}
+
+/// Opens `config.toml` in the default text editor.
+#[tauri::command]
+fn open_config() -> Result<(), String> {
+    run(|env| {
+        let file = env.config_file();
+        if !file.exists() {
+            bail!("no config yet: create a profile with `cprofile add` in a terminal");
+        }
+        open(&["-t".as_ref(), file.as_os_str()])
+    })
+}
+
+/// Gives the window the height of its content, so a short list does not
+/// leave an empty panel. The page measures itself and calls this.
+#[tauri::command]
+fn fit(window: WebviewWindow, height: f64) {
+    // Never trust a number coming from the page: keep it in a sane range.
+    let height = height.clamp(MIN_HEIGHT, MAX_HEIGHT);
+    let _ = window.set_size(LogicalSize::new(WIDTH, height));
+}
+
+#[tauri::command]
+fn hide(window: WebviewWindow) {
+    let _ = window.hide();
+}
+
+#[tauri::command]
+fn quit(app: AppHandle) {
+    app.exit(0);
+}
+
+/// Puts the window right under the menu bar icon, centered on it.
+fn place_under(window: &WebviewWindow, icon: Rect) {
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let position = icon.position.to_physical::<f64>(scale);
+    let size = icon.size.to_physical::<f64>(scale);
+    let Ok(own) = window.outer_size() else {
+        return;
+    };
+    let width = f64::from(own.width);
+    let mut x = position.x + size.width / 2.0 - width / 2.0;
+    let y = position.y + size.height;
+
+    // Near the right edge of the screen the window would stick out.
+    if let Ok(Some(monitor)) = window
+        .app_handle()
+        .monitor_from_point(position.x, position.y)
+    {
+        let left = f64::from(monitor.position().x) + 8.0;
+        let right = f64::from(monitor.position().x) + f64::from(monitor.size().width) - 8.0;
+        x = x.min(right - width).max(left);
+    }
+    let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
+/// A click on the icon shows the window, or hides it when it is open.
+fn toggle(app: &AppHandle, icon: Rect) {
+    let Some(window) = app.get_webview_window(WINDOW) else {
+        return;
+    };
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        return;
+    }
+    // Clicking the icon while the window is open first takes the focus away,
+    // which hides the window. Without this check the same click would then
+    // open it again.
+    let just_hidden = app
+        .state::<LastHidden>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .is_some_and(|at| at.elapsed() < Duration::from_millis(300));
+    if just_hidden {
+        return;
+    }
+    place_under(&window, icon);
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+fn main() {
+    tauri::Builder::default()
+        .manage(LastHidden(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![
+            overview,
+            set_default,
+            open_claude,
+            open_config,
+            fit,
+            hide,
+            quit
+        ])
+        .setup(|app| {
+            // A menu bar app: no icon in the Dock, no entry in Cmd-Tab.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // Right click on the icon: a one-line menu to quit.
+            let quit = MenuItem::with_id(app, "quit", "Quit Claude Profiles", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&quit])?;
+            // `include_bytes!` puts the PNG inside the binary at build time.
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+
+            TrayIconBuilder::with_id("main")
+                .icon(icon)
+                // A template icon is drawn by macOS in the menu bar color,
+                // so it stays readable in light and dark mode.
+                .icon_as_template(true)
+                .tooltip("Claude Profiles")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    if event.id.as_ref() == "quit" {
+                        app.exit(0);
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        rect,
+                        ..
+                    } = event
+                    {
+                        toggle(tray.app_handle(), rect);
+                    }
+                })
+                .build(app)?;
+
+            // Like any menu bar popover, it closes when you click elsewhere.
+            let window = app
+                .get_webview_window(WINDOW)
+                .context("the main window is missing from tauri.conf.json")?;
+            // The closure outlives `setup`, so it needs its own handle
+            // (`clone` + `move`) rather than a borrow of `app`.
+            let handle = app.handle().clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::Focused(false) = event {
+                    if let Some(window) = handle.get_webview_window(WINDOW) {
+                        let _ = window.hide();
+                    }
+                    if let Ok(mut last) = handle.state::<LastHidden>().0.lock() {
+                        *last = Some(Instant::now());
+                    }
+                }
+            });
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("cannot start Claude Profiles");
+}

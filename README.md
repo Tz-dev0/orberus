@@ -63,6 +63,23 @@ From then on, just type `claude`.
 In a script or a pipe nothing is asked: a missing argument is an error, and a
 removal needs `--yes`. Colors follow `NO_COLOR`.
 
+## Menu bar app (macOS, early)
+
+A small app that lives in the menu bar. Click its icon to see your profiles
+and who is logged in to each, start Claude Code in one of them in a terminal
+window, or change the default profile. It reads the same config as the CLI.
+
+```sh
+cd app
+npm install
+npm run tauri build     # builds "Claude Profiles.app"
+npm run tauri dev       # or run it while working on it
+```
+
+The built app is in `app/src-tauri/target/release/bundle/macos/`. Profiles and
+rules are still created with `cprofile`; the app shows them. It does not
+handle Claude Desktop yet.
+
 ## How it works
 
 `cprofile setup` creates `~/.claude-profiles/bin/claude`, a link to `cprofile`.
@@ -115,3 +132,5 @@ repository is cloned, including worktrees.
 - IDE extensions that start their own Claude Code binary may not go through
   the shim.
 - Claude Desktop is not handled yet.
+- The menu bar app is not signed: macOS asks for confirmation the first time
+  it is opened.

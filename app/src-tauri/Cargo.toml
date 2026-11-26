@@ -1,0 +1,29 @@
+[package]
+name = "claude-profiles-app"
+version = "0.1.0"
+edition = "2021"
+description = "Menu bar app for Claude Profiles"
+license = "MIT"
+publish = false
+
+# An empty table makes this crate its own workspace. The app keeps its own
+# Cargo.lock and target folder, so Tauri's many dependencies never slow down
+# or weigh on the CLI build at the repository root.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# The core shared with the CLI: config, rules, resolution, display helpers.
+claude-profiles = { path = "../.." }
+# `tray-icon` for the menu bar icon, `image-png` to load that icon from a PNG.
+# `macos-private-api` allows a transparent window, needed for the frosted
+# panel with rounded corners. It rules out the Mac App Store, which is not a
+# target for this app.
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"

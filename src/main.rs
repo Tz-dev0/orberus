@@ -19,6 +19,7 @@ use claude_profiles::git;
 use claude_profiles::launch::{self, Target};
 use claude_profiles::paths::Env;
 use claude_profiles::resolve::{self, REPO_FILE};
+use claude_profiles::view::{account, location, short_path, when};
 
 use ui::{Cell, Style, Ui};
 
@@ -238,41 +239,6 @@ fn cli() -> Result<i32> {
 // Small helpers shared by the commands
 // ---------------------------------------------------------------------------
 
-/// Shows a path the way people write it: `~/code` rather than `/Users/me/code`.
-fn short_path(env: &Env, path: &Path) -> String {
-    match path.strip_prefix(&env.home) {
-        Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
-        Ok(rest) => format!("~/{}", rest.display()),
-        Err(_) => path.display().to_string(),
-    }
-}
-
-/// Where a profile keeps its Claude Code config, for display.
-fn location(env: &Env, config: &Config, name: &str) -> Result<String> {
-    Ok(match config::profile_dir(env, config, name)? {
-        Some(dir) => short_path(env, &dir),
-        None => "~/.claude (Claude Code default)".to_string(),
-    })
-}
-
-/// The account a profile is logged in to, or `None` when it has no login.
-///
-/// Read from the state file Claude Code keeps for each config folder
-/// (`.claude.json`). That file is not a documented interface: we only read
-/// it, and any surprise (missing file, other layout) means "no login" rather
-/// than an error. The `?` after each step returns `None` as soon as one fails.
-fn account(env: &Env, config: &Config, name: &str) -> Option<String> {
-    let file = match config::profile_dir(env, config, name).ok()? {
-        Some(dir) => dir.join(".claude.json"),
-        // Without CLAUDE_CONFIG_DIR, Claude Code keeps it in the home folder.
-        None => env.home.join(".claude.json"),
-    };
-    let text = fs::read_to_string(file).ok()?;
-    let state: serde_json::Value = serde_json::from_str(&text).ok()?;
-    let email = state.get("oauthAccount")?.get("emailAddress")?.as_str()?;
-    Some(email.to_string())
-}
-
 /// The account as a table cell or a status value.
 fn account_cell(env: &Env, config: &Config, name: &str) -> Cell {
     match account(env, config, name) {
@@ -335,21 +301,6 @@ fn confirmed(ui: &Ui, question: &str, yes: bool) -> Result<bool> {
         bail!("this needs a confirmation: run it again with --yes");
     }
     ui.confirm(question, false)
-}
-
-/// A rule condition in plain words, for lists and messages.
-fn when(rule: &Rule) -> String {
-    let mut parts = Vec::new();
-    if let Some(path) = &rule.path {
-        parts.push(format!("folder {path}"));
-    }
-    if let Some(remote) = &rule.git_remote {
-        parts.push(format!("git remote {remote}"));
-    }
-    if parts.is_empty() {
-        return "no condition (never matches)".to_string();
-    }
-    parts.join(" and ")
 }
 
 // ---------------------------------------------------------------------------
