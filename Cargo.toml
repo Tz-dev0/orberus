@@ -1,0 +1,22 @@
+[package]
+name = "claude-profiles"
+version = "0.1.0"
+edition = "2021"
+description = "Automatic account profiles for Claude Code: the right account for each folder"
+license = "MIT"
+
+[[bin]]
+name = "cprofile"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+# Reads the account name from Claude Code's .claude.json, for `cprofile list`.
+# Never used on the shim path.
+serde_json = "1"
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
