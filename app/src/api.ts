@@ -15,6 +15,10 @@ export interface Profile {
   teamRules: number;
   /** False when its folder must never be deleted, as for ~/.claude. */
   canPurge: boolean;
+  /** How long it keeps its conversations, in words: "30 days". */
+  keeps: string;
+  /** The same in days; null when its settings file cannot be read. */
+  keepsDays: number | null;
 }
 
 export interface Rule {
@@ -62,6 +66,8 @@ export interface Api {
   /** Takes the profile and its own rules out of the config. Its Claude Code
    *  folder is kept, unless `purge` asks to delete it with its login. */
   removeProfile(name: string, purge: boolean): Promise<void>;
+  /** Sets how many days the profile keeps its conversations. */
+  setRetention(name: string, days: number): Promise<void>;
   /** Asks for a project folder, then opens Claude Code there in a terminal.
    *  Resolves to false when the folder choice is cancelled. */
   openClaude(name: string): Promise<boolean>;
@@ -77,6 +83,7 @@ const tauri: Api = {
   storage: () => invoke<StorageOverview>("storage"),
   setDefault: (name) => invoke("set_default", { name }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
+  setRetention: (name, days) => invoke("set_retention", { name, days }),
   removeProfile: (name, purge) => invoke("remove_profile", { name, purge }),
   openClaude: (name) => invoke<boolean>("open_claude", { name }),
   openConfig: () => invoke("open_config"),
@@ -92,7 +99,7 @@ function preview(): Api {
     shimInstalled: true,
     canReuseLogin: false,
     profiles: [
-      { name: "perso", account: "me@example.com", location: "~/.claude", isDefault: true, rules: 0, teamRules: 0, canPurge: false },
+      { name: "perso", account: "me@example.com", location: "~/.claude", isDefault: true, rules: 0, teamRules: 0, canPurge: false, keeps: "120 days", keepsDays: 120 },
       {
         name: "work",
         account: "me@acme.example",
@@ -101,6 +108,8 @@ function preview(): Api {
         rules: 2,
         teamRules: 1,
         canPurge: true,
+        keeps: "30 days",
+        keepsDays: 30,
       },
       {
         name: "client",
@@ -110,6 +119,8 @@ function preview(): Api {
         rules: 0,
         teamRules: 0,
         canPurge: true,
+        keeps: "30 days",
+        keepsDays: 30,
       },
     ],
     rules: [
@@ -150,9 +161,20 @@ function preview(): Api {
         rules: 0,
         teamRules: 0,
         canPurge: !reuseLogin,
+        keeps: "30 days",
+        keepsDays: 30,
       });
       state.profiles.sort((a, b) => a.name.localeCompare(b.name));
       if (reuseLogin) state.canReuseLogin = false;
+    },
+    setRetention: async (name, days) => {
+      const profile = state.profiles.find((profile) => profile.name === name);
+      if (!profile) throw `unknown profile '${name}'`;
+      profile.keepsDays = days;
+      if (!Number.isInteger(days) || days < 1) {
+        throw "Claude Code refuses 0: the shortest it accepts is 1 day";
+      }
+      profile.keeps = days === 365 ? "1 year" : days === 1 ? "1 day" : `${days} days`;
     },
     removeProfile: async (name, _purge) => {
       state.profiles = state.profiles.filter((profile) => profile.name !== name);

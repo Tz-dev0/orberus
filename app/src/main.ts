@@ -429,24 +429,148 @@ let storage: StorageOverview | null = null;
 // window was opened. Kept as long as the app runs.
 let storageOpen = false;
 
+let historyOpen = false;
+
+/** The line that folds and unfolds a section. Folded, it shows `sum`. */
+function foldLine(
+  id: string,
+  label: string,
+  hint: string,
+  open: boolean,
+  sum: string,
+  flip: () => void,
+): HTMLButtonElement {
+  const toggle = el("button", "fold");
+  toggle.type = "button";
+  toggle.dataset.fold = id;
+  toggle.title = hint;
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.append(icon("chevron"), el("span", "fold-title", label));
+  if (!open) toggle.append(el("span", "fold-sum", sum));
+  toggle.addEventListener("click", () => {
+    flip();
+    // The page was rebuilt: keep the keyboard on the line just used.
+    document.querySelector<HTMLButtonElement>(`[data-fold="${id}"]`)?.focus();
+  });
+  return toggle;
+}
+
+// The choices offered for how long conversations are kept. Claude Code
+// deletes them after 30 days unless told otherwise. Any other number of
+// days goes in the field next to them.
+const KEEP = [
+  { days: 30, label: "30 days" },
+  { days: 90, label: "90 days" },
+  { days: 365, label: "1 year" },
+];
+
+/** The exact number of days, to read and to type. Enter, or leaving the
+ *  field, applies it. */
+function daysField(profile: Profile): HTMLElement {
+  const field = el("label", "days-field");
+  field.title = "Number of days, 1 or more";
+  const input = el("input", "days-input");
+  input.type = "number";
+  input.min = "1";
+  input.step = "1";
+  input.inputMode = "numeric";
+  input.value = String(profile.keepsDays);
+  input.setAttribute("aria-label", `Days ${profile.name} keeps its conversations`);
+  input.addEventListener("change", async () => {
+    const days = Number(input.value);
+    if (days === profile.keepsDays) return;
+    errorText = "";
+    // What is not a whole number of days, 1 or more, is not sent: the
+    // field goes back to the value in use.
+    if (Number.isInteger(days) && days >= 1) {
+      try {
+        await api.setRetention(profile.name, days);
+      } catch (error) {
+        errorText = String(error);
+        errorAt = Date.now();
+      }
+    }
+    await refresh();
+  });
+  // Enter applies, like leaving the field.
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") input.blur();
+  });
+  field.append(input, el("span", "", "d"));
+  return field;
+}
+
+/** How long each profile keeps its conversations, with a way to change it. */
+function historySection(overview: Overview): HTMLElement {
+  const section = el("section", "storage-section");
+  const kept = new Set(overview.profiles.map((profile) => profile.keeps));
+  const sum = kept.size === 1 ? overview.profiles[0].keeps : "Varies";
+  section.append(
+    foldLine(
+      "history",
+      "Conversations kept",
+      "Claude Code deletes older conversations by itself, without a message",
+      historyOpen,
+      sum,
+      () => {
+        historyOpen = !historyOpen;
+        render(overview);
+      },
+    ),
+  );
+  if (!historyOpen) return section;
+
+  const list = el("ul", "storage");
+  for (const profile of overview.profiles) {
+    const row = el("li", "storage-row");
+    row.style.setProperty("--hue", hue(profile.name));
+    row.append(el("span", "storage-name", profile.name));
+    if (profile.keepsDays === null) {
+      // Its settings file cannot be read: say so, and offer nothing.
+      const unknown = el("span", "keep-unknown", "Settings file unreadable");
+      unknown.title = profile.keeps;
+      row.append(unknown);
+    } else {
+      const choices = el("span", "segments");
+      choices.setAttribute("role", "group");
+      choices.setAttribute("aria-label", `How long ${profile.name} keeps its conversations`);
+      for (const choice of KEEP) {
+        const button = el("button", "segment", choice.label);
+        const current = profile.keepsDays === choice.days;
+        button.setAttribute("aria-pressed", String(current));
+        if (current) {
+          button.type = "button";
+        } else {
+          onClick(button, () => api.setRetention(profile.name, choice.days));
+        }
+        choices.append(button);
+      }
+      row.append(choices, daysField(profile));
+    }
+    list.append(row);
+  }
+  section.append(list);
+  return section;
+}
+
 /** A line that unfolds to one line per profile: a bar to scale, then the
  *  size. Folded, it shows the sum. */
 function storageSection(measured: StorageOverview, overview: Overview): HTMLElement {
   const sizes = measured.profiles.filter((size) => hues.has(size.name));
   const section = el("section", "storage-section");
-  const toggle = el("button", "fold");
-  toggle.type = "button";
-  toggle.title = "Disk space taken by each profile's Claude Code folder";
-  toggle.setAttribute("aria-expanded", String(storageOpen));
-  toggle.append(icon("chevron"), el("span", "fold-title", "Storage"));
-  if (!storageOpen) toggle.append(el("span", "fold-sum", measured.total));
-  toggle.addEventListener("click", () => {
-    storageOpen = !storageOpen;
-    render(overview);
-    // Keep the keyboard on the line that was just used.
-    document.querySelector<HTMLButtonElement>(".fold")?.focus();
-  });
-  section.append(toggle);
+  section.append(
+    foldLine(
+      "storage",
+      "Storage",
+      "Disk space taken by each profile's Claude Code folder",
+      storageOpen,
+      measured.total,
+      () => {
+        storageOpen = !storageOpen;
+        render(overview);
+      },
+    ),
+  );
   if (!storageOpen) return section;
 
   const list = el("ul", "storage");
@@ -517,6 +641,7 @@ function render(overview: Overview | null, loadError = ""): void {
       main.append(section);
     }
     // Only the profiles still in the list: a measure can be a moment old.
+    if (overview.profiles.length > 0) main.append(historySection(overview));
     if (storage && storage.profiles.some((size) => hues.has(size.name))) {
       main.append(storageSection(storage, overview));
     }

@@ -21,6 +21,7 @@ use claude_profiles::launch::{self, Target};
 use claude_profiles::paths::Env;
 use claude_profiles::purge;
 use claude_profiles::resolve::{self, REPO_FILE};
+use claude_profiles::retention::{self, Retention};
 use claude_profiles::view::{account, location, short_path, when};
 
 use ui::{Cell, Style, Ui};
@@ -61,6 +62,10 @@ enum Command {
         /// Use a custom config folder for this profile
         #[arg(long, conflicts_with = "native")]
         dir: Option<String>,
+        /// Keep its conversations this many days (Claude Code deletes them
+        /// after 30 by default)
+        #[arg(long, value_name = "DAYS")]
+        keep_days: Option<u64>,
     },
     /// List profiles
     #[command(visible_alias = "ls")]
@@ -80,6 +85,13 @@ enum Command {
     },
     /// Show how much disk space each profile takes
     Disk,
+    /// Show or set how long each profile keeps its conversations
+    Retention {
+        /// Name of the profile to change. Without it, all are listed
+        name: Option<String>,
+        /// Number of days to keep conversations. Asked when left out
+        days: Option<u64>,
+    },
     /// Set the profile used when no rule applies
     #[command(visible_alias = "global")]
     Default {
@@ -219,10 +231,16 @@ fn cli() -> Result<i32> {
     };
     match command {
         Command::Setup => setup(&ui, &env),
-        Command::Add { name, native, dir } => add(&ui, &env, name, native, dir),
+        Command::Add {
+            name,
+            native,
+            dir,
+            keep_days,
+        } => add(&ui, &env, name, native, dir, keep_days),
         Command::List => list(&ui, &env),
         Command::Remove { name, purge, yes } => remove(&ui, &env, name, purge, yes),
         Command::Disk => disk_usage(&ui, &env),
+        Command::Retention { name, days } => retention_command(&ui, &env, name, days),
         Command::Default { name } => set_default(&ui, &env, name),
         Command::Use { name } => pin(&ui, &env, name),
         Command::Status { profile } => status(&ui, &env, profile),
@@ -475,6 +493,7 @@ fn add(
     name: Option<String>,
     mut native: bool,
     dir: Option<String>,
+    keep_days: Option<u64>,
 ) -> Result<i32> {
     let mut config = config::load(env)?.config;
     // `map(str::to_string)` copies the name, so `config` is free to change
@@ -518,6 +537,30 @@ fn add(
         if first { " and set as default" } else { "" }
     ));
     ui.detail(&location(env, &config, &name)?);
+
+    // Claude Code deletes conversations after 30 days unless told otherwise,
+    // and each profile has its own setting: say so now, not after a loss.
+    let keep_days = match keep_days {
+        Some(days) => Some(days),
+        None if guided && ui.interactive() => ask_retention(ui, env, &config, &name)?,
+        None => None,
+    };
+    match keep_days {
+        Some(days) => {
+            retention::set(env, &config, &name, days)?;
+            ui.detail(&format!(
+                "keeps its conversations {}",
+                retention::days_text(days)
+            ));
+        }
+        None => {
+            let current = retention::read(env, &config, &name)?;
+            ui.detail(&format!(
+                "keeps its conversations {}; change it with: cprofile retention {name}",
+                current.describe()
+            ));
+        }
+    }
     if native {
         return Ok(0);
     }
@@ -592,6 +635,87 @@ fn list(ui: &Ui, env: &Env) -> Result<i32> {
     }
     profiles_table(ui, env, &loaded)?;
     ui.detail("Default: used when no rule applies.   Here: used in this folder.");
+    Ok(0)
+}
+
+/// Asks how long a profile should keep its conversations. `None` means
+/// "leave it as it is".
+fn ask_retention(ui: &Ui, env: &Env, config: &Config, name: &str) -> Result<Option<u64>> {
+    let current = retention::read(env, config, name)?;
+    let options = vec![
+        format!("Leave it: {}", current.describe()),
+        "90 days".to_string(),
+        "1 year".to_string(),
+        "Another number of days".to_string(),
+    ];
+    let picked = ui.select(
+        "Claude Code deletes old conversations. How long should this profile keep them?",
+        &options,
+        &[],
+        Some(0),
+    )?;
+    Ok(match picked {
+        0 => None,
+        1 => Some(90),
+        2 => Some(365),
+        // Asked again until it is a whole number of days, 1 or more.
+        _ => loop {
+            match ui.input("Number of days:")?.parse::<u64>() {
+                Ok(days) if days >= 1 => break Some(days),
+                _ => println!("Type a whole number of days, 1 or more."),
+            }
+        },
+    })
+}
+
+/// `cprofile retention`: how long each profile keeps its conversations.
+fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>) -> Result<i32> {
+    let loaded = config::load(env)?;
+    let config = &loaded.config;
+    let Some(name) = name else {
+        if config.profiles.is_empty() {
+            println!(
+                "No profile yet. Create one with: {}",
+                ui.command("cprofile add")
+            );
+            return Ok(0);
+        }
+        let mut rows = Vec::new();
+        for name in config.profiles.keys() {
+            let kept = retention::read(env, config, name)?;
+            let style = match kept {
+                Retention::Days(_) => Style::Plain,
+                _ => Style::Yellow,
+            };
+            rows.push(vec![Cell::new(name), Cell::styled(kept.describe(), style)]);
+        }
+        ui.table(&["Profile", "Keeps conversations"], &rows);
+        ui.detail("Older conversations are deleted by Claude Code, without a message.");
+        ui.detail(&format!(
+            "Change it with: {}   (a project or company settings file can still override it)",
+            ui.command("cprofile retention <profile> <days>")
+        ));
+        return Ok(0);
+    };
+    if !config.profiles.contains_key(&name) {
+        bail!("unknown profile '{name}'");
+    }
+    let days = match days {
+        Some(days) => days,
+        None if ui.interactive() => match ask_retention(ui, env, config, &name)? {
+            Some(days) => days,
+            None => {
+                println!("Nothing changed.");
+                return Ok(0);
+            }
+        },
+        None => bail!("missing number of days, for example: cprofile retention {name} 365"),
+    };
+    retention::set(env, config, &name, days)?;
+    ui.success(&format!(
+        "Profile '{name}' keeps its conversations {}",
+        retention::days_text(days)
+    ));
     Ok(0)
 }
 
@@ -1048,6 +1172,23 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         "CLAUDE_CONFIG_DIR is not set by something else",
         "remove it from your shell config: cprofile sets it for each launch",
     );
+
+    // Not a failure: a warning about what Claude Code will delete by itself.
+    for name in loaded.config.profiles.keys() {
+        match retention::read(env, &loaded.config, name) {
+            Ok(Retention::Days(_)) | Err(_) => {}
+            Ok(kept) => {
+                ui.warning(&format!(
+                    "'{name}' keeps its conversations {}",
+                    kept.describe()
+                ));
+                ui.detail(&format!(
+                    "older ones are deleted by Claude Code; to keep them: cprofile retention {name} {}",
+                    retention::SUGGESTED_DAYS
+                ));
+            }
+        }
+    }
 
     println!();
     if failures == 0 {

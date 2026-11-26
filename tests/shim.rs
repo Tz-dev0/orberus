@@ -248,6 +248,31 @@ fn profiles_and_rules_can_be_listed_and_removed() {
     assert!(disk.contains("KB"), "{disk}");
     assert!(disk.contains("Nothing is deleted"), "{disk}");
 
+    // `retention` shows the 30-day default, sets a value in the profile's
+    // own settings file, and keeps what was already there.
+    let kept = world.ok(&home, &["retention"]);
+    assert_eq!(kept.matches("Claude Code default").count(), 3, "{kept}");
+    fs::write(
+        world.root.join("profiles/work/settings.json"),
+        r#"{"theme": "dark"}"#,
+    )
+    .unwrap();
+    world.ok(&home, &["retention", "work", "120"]);
+    let settings = fs::read_to_string(world.root.join("profiles/work/settings.json")).unwrap();
+    assert!(settings.contains(r#""theme": "dark""#), "{settings}");
+    assert!(
+        settings.contains(r#""cleanupPeriodDays": 120"#),
+        "{settings}"
+    );
+    let kept = world.ok(&home, &["retention"]);
+    assert!(kept.contains("120 days"), "{kept}");
+    assert!(refused(&world, &home, &["retention", "work"]).contains("missing number of days"));
+    assert!(refused(&world, &home, &["retention", "work", "0"]).contains("1 day"));
+    // It can be chosen when the profile is created.
+    world.ok(&home, &["add", "short", "--keep-days", "365"]);
+    assert!(world.ok(&home, &["retention"]).contains("1 year"));
+    world.ok(&home, &["remove", "short", "--yes"]);
+
     // Output is plain text when it is not a terminal: no color codes.
     let list = world.ok(&home, &["ls"]);
     assert!(list.contains("perso") && list.contains("client"), "{list}");

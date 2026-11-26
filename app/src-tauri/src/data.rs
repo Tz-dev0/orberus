@@ -13,6 +13,7 @@ use claude_profiles::config::{self, RuleSource};
 use claude_profiles::disk;
 use claude_profiles::paths::Env;
 use claude_profiles::purge;
+use claude_profiles::retention::{self, Retention};
 use claude_profiles::view;
 
 // `Serialize` lets Tauri turn these structs into JSON for the TypeScript
@@ -31,6 +32,11 @@ pub struct ProfileView {
     pub team_rules: usize,
     /// False when its folder must never be deleted, as for `~/.claude`.
     pub can_purge: bool,
+    /// How long it keeps its conversations, in words: "30 days".
+    pub keeps: String,
+    /// The same in days. `None` when its settings file cannot be read,
+    /// and then it cannot be changed from here either.
+    pub keeps_days: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,6 +130,16 @@ pub fn overview(env: &Env) -> Result<Overview> {
 
     let mut profiles = Vec::new();
     for name in config.profiles.keys() {
+        let kept = retention::read(env, config, name)?;
+        let (keeps, keeps_days) = match &kept {
+            // Claude Code's default is shown as the number it stands for.
+            Retention::Default => (
+                retention::days_text(retention::DEFAULT_DAYS),
+                Some(retention::DEFAULT_DAYS),
+            ),
+            Retention::Days(days) => (retention::days_text(*days), Some(*days)),
+            Retention::Unknown(_) => (kept.describe(), None),
+        };
         profiles.push(ProfileView {
             name: name.clone(),
             account: view::account(env, config, name),
@@ -138,6 +154,8 @@ pub fn overview(env: &Env) -> Result<Overview> {
                 .filter(|(rule, source)| rule.profile == *name && *source == RuleSource::Team)
                 .count(),
             can_purge: purge::folder(env, config, name).is_ok(),
+            keeps,
+            keeps_days,
         });
     }
     let rules = loaded
@@ -184,6 +202,16 @@ pub fn remove_profile(env: &Env, name: &str, purge: bool) -> Result<()> {
     let _ = fs::remove_file(folder_note(env, name));
     let _ = fs::remove_file(run_dir(env).join(format!("{name}.command")));
     Ok(())
+}
+
+/// Sets how long a profile keeps its conversations, like
+/// `cprofile retention <profile> <days>`.
+pub fn set_retention(env: &Env, name: &str, days: u64) -> Result<()> {
+    let config = config::load(env)?.config;
+    if !config.profiles.contains_key(name) {
+        bail!("unknown profile '{name}'");
+    }
+    retention::set(env, &config, name, days)
 }
 
 pub fn set_default(env: &Env, name: &str) -> Result<()> {
@@ -391,6 +419,30 @@ mod tests {
         assert!(work.size.ends_with("KB"), "{work:?}");
         assert!(work.detail.contains("conversations, "), "{work:?}");
         assert!(work.detail.ends_with(" other"), "{work:?}");
+    }
+
+    #[test]
+    fn retention_is_shown_and_set_per_profile() {
+        let (_temp, env) = world();
+        let before = overview(&env).unwrap();
+        assert_eq!(before.profiles[1].keeps, "30 days");
+        assert_eq!(before.profiles[1].keeps_days, Some(30));
+
+        set_retention(&env, "work", 120).unwrap();
+        let after = overview(&env).unwrap();
+        assert_eq!(after.profiles[1].keeps, "120 days");
+        assert_eq!(after.profiles[1].keeps_days, Some(120));
+        // The other profile keeps its own value.
+        assert_eq!(after.profiles[0].keeps_days, Some(30));
+
+        assert!(set_retention(&env, "work", 0).is_err());
+        assert!(set_retention(&env, "nobody", 365).is_err());
+
+        // A settings file that cannot be read: shown, and not changeable.
+        fs::write(env.profiles_dir().join("work/settings.json"), "{ nope").unwrap();
+        let broken = overview(&env).unwrap();
+        assert_eq!(broken.profiles[1].keeps_days, None);
+        assert!(broken.profiles[1].keeps.starts_with("unknown"));
     }
 
     #[test]

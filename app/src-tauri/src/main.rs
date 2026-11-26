@@ -91,6 +91,11 @@ fn add_profile(name: String, reuse_login: bool) -> Result<(), String> {
     run(|env| data::add_profile(env, &name, reuse_login))
 }
 
+#[tauri::command]
+fn set_retention(name: String, days: u64) -> Result<(), String> {
+    run(|env| data::set_retention(env, &name, days))
+}
+
 /// `async` so the measuring, which reads whole folders, runs off the main
 /// thread and the window stays responsive meanwhile.
 #[tauri::command]
@@ -281,6 +286,7 @@ fn main() {
             set_default,
             add_profile,
             remove_profile,
+            set_retention,
             storage,
             open_claude,
             open_config,
