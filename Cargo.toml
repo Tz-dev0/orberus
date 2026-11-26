@@ -1,6 +1,6 @@
 [package]
 name = "claude-profiles"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Automatic account profiles for Claude Code: the right account for each folder"
 license = "MIT"
