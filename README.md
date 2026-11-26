@@ -124,7 +124,7 @@ Rules, the config files and team rules are described in
 | `cprofile default [name]` | Profile used when no rule applies |
 | `cprofile run [-p name] [-- args]` | Start Claude Code, optionally forcing a profile |
 | `cprofile rule add`, `list`, `remove` | Manage the rules |
-| `cprofile usage [name]` | Which projects used each account, checked against your rules |
+| `cprofile usage [name]` | Which projects used each account, checked against your rules; `-c` for the heaviest conversations |
 | `cprofile disk` | Disk space of each profile. Deletes nothing |
 | `cprofile retention [name] [days]` | How long each profile keeps its conversations |
 | `cprofile clean [name]` | Biggest conversations of a profile; move some to the Trash |
@@ -173,6 +173,10 @@ work  me@acme.example, last 7 days
 └───────┴─────────────────┴─────────┴────────────────────────────────────────────────┘
 ! 26% came from 1 project(s) where `claude` would use another profile today.
 ```
+
+`cprofile usage --conversations` lists the conversations instead, with how
+many tokens each one sends again at every answer: the long ones are where a
+`/compact` or a fresh conversation saves the most.
 
 The share is an estimate from the conversations kept on this Mac. It is not
 what your plan counts against its limits.
@@ -235,7 +239,8 @@ It reads and writes the same config as the CLI and is optional. See
 - If the config cannot be read, or a locked rule forbids the profile you asked
   for, Claude Code does not start. It never falls back to another account.
 - `usage`, `disk`, `list`, `status` and `doctor` change nothing. `usage` reads
-  only the token counts and the folder of each answer, never its text.
+  only the token counts and the folder of each answer, and the title of a
+  conversation, never what was said.
 - `clean` moves conversations to the Trash and refuses one that changed in the
   last hour, since it may still be open. It never touches `memory/` folders.
 - `remove` keeps the profile's folder, so its login and history stay on disk.

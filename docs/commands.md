@@ -220,7 +220,7 @@ Rule types and the order of checks are described in [rules.md](rules.md).
 ## usage
 
 ```sh
-cprofile usage [profile] [--days N] [--all]
+cprofile usage [profile] [--days N] [--conversations] [--all]
 ```
 
 Which projects used each account over the last 7 days, and what your rules
@@ -267,10 +267,40 @@ The last column reads:
 | Option | Effect |
 |---|---|
 | `--days N` | Look N days back instead of 7 |
-| `--all` | List every project, not only the 10 heaviest |
+| `--conversations`, `-c` | Show conversations instead of projects (see below) |
+| `--all` | List every line, not only the 10 heaviest |
 
 A project is a git repository: sessions started in its subfolders are counted
 together. A folder outside any repository counts on its own.
+
+### Conversations that weigh the most
+
+With each answer, Claude reads the whole conversation again. A long
+conversation therefore costs more per answer than a short one, whatever you
+ask. `--conversations` shows which ones carry the most:
+
+```text
+$ cprofile usage work --conversations
+work  me@acme.example, last 7 days
+┌───────┬─────────┬─────────┬─────────────────┬────────────────────────────┬──────────┐
+│ Share │ Context │ Answers │ Project         │ Title                      │ Id       │
+├───────┼─────────┼─────────┼─────────────────┼────────────────────────────┼──────────┤
+│ 61%   │ 417k    │ 612     │ ~/code/acme-api │ Payment retries            │ 3f2a9c1e │
+│ 20%   │ 229k    │ 330     │ ~/code/acme-api │ Migrate the invoices table │ 7b8d0e2f │
+│ 16%   │ 142k    │ 402     │ ~/code/blog     │ Blog redesign              │ c0d1e2f3 │
+│ 3%    │ 64k     │ 148     │ ~/code/acme-web │ Fix flaky login test       │ a1c4e5f6 │
+│ <1%   │ 38k     │ 31      │ ~/code/dotfiles │ (untitled)                 │ e5f6a7b8 │
+└───────┴─────────┴─────────┴─────────────────┴────────────────────────────┴──────────┘
+  About 88% of this usage went to reading context again, the rest to writing answers.
+! 2 conversation(s) send more than 200k tokens with each answer, for 80% of this usage.
+  To lighten one: /compact inside it, or a new conversation when the subject changes.
+```
+
+**Context** is the number of tokens sent to Claude with each answer, averaged
+over the period. Subagents count in the share of their conversation, not in
+its context, since each starts with a context of its own. A conversation is
+flagged from 200k tokens. An answer copied into several conversations (a
+resumed or forked one) counts once, for the conversation written last.
 
 **Share is an estimate.** It is computed from the conversations Claude Code
 keeps on this Mac, each answer counted once, with output tokens weighted more

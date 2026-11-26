@@ -122,6 +122,11 @@ fn describe(transcript: &Path) -> (Option<String>, Option<String>) {
     (title, folder)
 }
 
+/// The title of a conversation, when it has one.
+pub fn title(transcript: &Path) -> Option<String> {
+    describe(transcript).0
+}
+
 /// Lists the conversations kept in a Claude Code config folder, biggest
 /// first. A folder without any measures as an empty list.
 pub fn list(config_dir: &Path) -> Vec<Session> {

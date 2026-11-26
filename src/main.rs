@@ -95,7 +95,11 @@ enum Command {
         /// How many days back to look
         #[arg(long, default_value_t = 7, value_name = "N")]
         days: u64,
-        /// List every project, not only the 10 heaviest
+        /// Show conversations instead of projects: which ones weigh the
+        /// most, and how much each sends again at every answer
+        #[arg(long, short)]
+        conversations: bool,
+        /// List every line, not only the 10 heaviest
         #[arg(long)]
         all: bool,
     },
@@ -279,7 +283,12 @@ fn cli() -> Result<i32> {
         Command::List => list(&ui, &env),
         Command::Remove { name, purge, yes } => remove(&ui, &env, name, purge, yes),
         Command::Disk => disk_usage(&ui, &env),
-        Command::Usage { profile, days, all } => usage_command(&ui, &env, profile, days, all),
+        Command::Usage {
+            profile,
+            days,
+            conversations,
+            all,
+        } => usage_command(&ui, &env, profile, days, conversations, all),
         Command::Clean {
             profile,
             sessions,
@@ -949,7 +958,14 @@ fn rule_text(reason: &resolve::Reason) -> String {
 
 /// `cprofile usage`: which folders used each account, checked against the
 /// rules as they are today.
-fn usage_command(ui: &Ui, env: &Env, profile: Option<String>, days: u64, all: bool) -> Result<i32> {
+fn usage_command(
+    ui: &Ui,
+    env: &Env,
+    profile: Option<String>,
+    days: u64,
+    conversations: bool,
+    all: bool,
+) -> Result<i32> {
     const SHOWN: usize = 10;
     let loaded = config::load(env)?;
     let config = &loaded.config;
@@ -990,6 +1006,11 @@ fn usage_command(ui: &Ui, env: &Env, profile: Option<String>, days: u64, all: bo
             continue;
         }
         let whole = used.total.weight();
+        if conversations {
+            let shown = if all { usize::MAX } else { SHOWN };
+            conversations_table(ui, env, &used, shown);
+            continue;
+        }
 
         let mut rows = Vec::new();
         // Projects no rule names, and projects that would use another
@@ -1102,8 +1123,99 @@ fn usage_command(ui: &Ui, env: &Env, profile: Option<String>, days: u64, all: bo
     ui.detail(
         "Share: an estimate from the conversations kept on this Mac, not your plan's limits.",
     );
-    ui.detail("Today's rules: where `claude` would go if you started it in that folder now.");
+    if conversations {
+        ui.detail("Context: what is sent to Claude with each answer, on average. It grows with the conversation.");
+    } else {
+        ui.detail("Today's rules: where `claude` would go if you started it in that folder now.");
+    }
     Ok(0)
+}
+
+/// A number of tokens, short: "850", "482k", "1.2M".
+fn tokens_text(count: u64) -> String {
+    if count < 1_000 {
+        count.to_string()
+    } else if count < 999_500 {
+        format!("{:.0}k", count as f64 / 1_000.0)
+    } else {
+        format!("{:.1}M", count as f64 / 1_000_000.0)
+    }
+}
+
+/// The conversations of a profile, heaviest first, with what each one sends
+/// again at every answer.
+fn conversations_table(ui: &Ui, env: &Env, used: &usage::ProfileUsage, shown: usize) {
+    // From this size on, a conversation is flagged: it carries at least
+    // 200k tokens along at each answer.
+    const HEAVY: u64 = 200_000;
+    let whole = used.total.weight();
+    let mut rows = Vec::new();
+    let mut heavy = (0.0, 0usize);
+    let mut hidden = (0.0, 0usize);
+    for (rank, conversation) in used.conversations.iter().enumerate() {
+        let weight = conversation.tokens.weight();
+        let is_heavy = conversation.context >= HEAVY;
+        if is_heavy {
+            heavy = (heavy.0 + weight, heavy.1 + 1);
+        }
+        if rank >= shown {
+            hidden = (hidden.0 + weight, hidden.1 + 1);
+            continue;
+        }
+        // Read only for the lines shown: it opens the file.
+        let title = match sessions::title(&conversation.transcript) {
+            Some(title) => Cell::new(shorten(&title, 32)),
+            None => Cell::styled("(untitled)", Style::Dim),
+        };
+        let context_style = if is_heavy {
+            Style::Yellow
+        } else {
+            Style::Plain
+        };
+        rows.push(vec![
+            Cell::styled(percent(weight, whole), Style::Bold),
+            Cell::styled(tokens_text(conversation.context), context_style),
+            Cell::new(conversation.answers.to_string()),
+            Cell::new(shorten(&short_path(env, &conversation.folder), 30)),
+            title,
+            // `chars` and not a byte slice: an id shorter than 8 bytes must
+            // not panic.
+            Cell::styled(
+                conversation.id.chars().take(8).collect::<String>(),
+                Style::Dim,
+            ),
+        ]);
+    }
+    if hidden.1 > 0 {
+        rows.push(vec![
+            Cell::styled(percent(hidden.0, whole), Style::Dim),
+            Cell::new(""),
+            Cell::new(""),
+            Cell::styled(format!("{} more, see --all", hidden.1), Style::Dim),
+            Cell::new(""),
+            Cell::new(""),
+        ]);
+    }
+    ui.table(
+        &["Share", "Context", "Answers", "Project", "Title", "Id"],
+        &rows,
+    );
+    ui.detail(&format!(
+        "About {:.0}% of this usage went to reading context again, the rest to writing answers.",
+        used.total.reread_share() * 100.0
+    ));
+    if heavy.1 > 0 {
+        ui.warning(&format!(
+            "{} conversation(s) send more than {} tokens with each answer, for {} of this usage.",
+            heavy.1,
+            tokens_text(HEAVY),
+            percent(heavy.0, whole)
+        ));
+        ui.detail(&format!(
+            "To lighten one: {} inside it, or a new conversation when the subject changes.",
+            ui.command("/compact")
+        ));
+    }
 }
 
 /// `cprofile disk`: the space each profile takes, and what takes it.

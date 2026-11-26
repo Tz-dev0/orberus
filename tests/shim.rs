@@ -644,3 +644,56 @@ fn usage_shows_each_folder_against_the_rules() {
 
     assert!(world.cprofile(&home, &["usage", "nope"]).status.code() != Some(0));
 }
+
+#[test]
+fn usage_lists_conversations_and_flags_the_ones_that_carry_a_lot() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["add", "work"]);
+    let api = world.repo("code/acme-api", "git@github.com:acme/api.git");
+
+    // `read` is what the conversation sent again with that answer.
+    let answer = |id: &str, read: u64| {
+        format!(
+            "{{\"type\":\"assistant\",\"cwd\":\"{}\",\"timestamp\":\"2026-11-26T10:00:00.000Z\",\"requestId\":\"r-{id}\",\"message\":{{\"id\":\"{id}\",\"usage\":{{\"input_tokens\":0,\"output_tokens\":1000,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":{read}}}}}}}\n",
+            api.display()
+        )
+    };
+    let project = world.root.join("profiles/work/projects/-p");
+    fs::create_dir_all(&project).unwrap();
+    let long = "aaaaaaaa-2222-3333-4444-555555555555";
+    let short = "bbbbbbbb-2222-3333-4444-555555555555";
+    fs::write(
+        project.join(format!("{long}.jsonl")),
+        [
+            "{\"type\":\"custom-title\",\"customTitle\":\"Payment retries\"}\n".to_string(),
+            answer("a", 400_000),
+            answer("b", 500_000),
+        ]
+        .concat(),
+    )
+    .unwrap();
+    fs::write(project.join(format!("{short}.jsonl")), answer("c", 30_000)).unwrap();
+
+    let out = world.ok(
+        &home,
+        &["usage", "work", "--conversations", "--days", "36500"],
+    );
+    let row = |id: &str| {
+        out.lines()
+            .find(|line| line.contains(id))
+            .unwrap_or_else(|| panic!("no row for {id} in:\n{out}"))
+            .to_string()
+    };
+    // The average of what its two answers sent.
+    assert!(row("aaaaaaaa").contains("450k"), "{out}");
+    assert!(row("aaaaaaaa").contains("Payment retries"), "{out}");
+    assert!(row("aaaaaaaa").contains("~/code/acme-api"), "{out}");
+    assert!(row("bbbbbbbb").contains("30k"), "{out}");
+    assert!(row("bbbbbbbb").contains("(untitled)"), "{out}");
+    assert!(
+        out.contains("1 conversation(s) send more than 200k tokens with each answer"),
+        "{out}"
+    );
+    assert!(out.contains("/compact"), "{out}");
+}

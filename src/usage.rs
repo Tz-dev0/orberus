@@ -75,11 +75,99 @@ pub struct FolderUsage {
     pub answers: u64,
 }
 
-/// The usage of one profile over a period, heaviest folder first.
+/// What one conversation consumed, its subagents included.
+#[derive(Debug, Clone)]
+pub struct ConversationUsage {
+    /// The session id, as `claude --resume` takes it.
+    pub id: String,
+    /// Its main file. It may be gone when only subagent files are left.
+    pub transcript: PathBuf,
+    /// The folder of its latest answer.
+    pub folder: PathBuf,
+    pub tokens: Tokens,
+    pub answers: u64,
+    /// Tokens sent to the model with each answer, on average: the whole
+    /// conversation so far, read again every time. Subagents are left out,
+    /// since each starts from a context of its own.
+    pub context: u64,
+}
+
+/// The usage of one profile over a period, heaviest first in both lists.
 #[derive(Debug, Default)]
 pub struct ProfileUsage {
     pub folders: Vec<FolderUsage>,
+    pub conversations: Vec<ConversationUsage>,
     pub total: Tokens,
+}
+
+impl Tokens {
+    /// What was sent to the model: everything but the answer itself.
+    pub fn context(&self) -> u64 {
+        self.input + self.cache_write + self.cache_read
+    }
+
+    /// The share of the weight that went to reading context rather than to
+    /// writing answers, between 0 and 1.
+    pub fn reread_share(&self) -> f64 {
+        let weight = self.weight();
+        if weight <= 0.0 {
+            return 0.0;
+        }
+        (weight - self.output as f64 * 5.0) / weight
+    }
+}
+
+/// One transcript file, and the conversation it belongs to.
+struct Source {
+    conversation: String,
+    transcript: PathBuf,
+    subagent: bool,
+}
+
+/// Works out which conversation a file under `projects/` belongs to, from
+/// its place: `<project>/<id>.jsonl` is the conversation itself, and
+/// `<project>/<id>/subagents/*.jsonl` are its subagents.
+///
+/// The place and not the `sessionId` written inside: a resumed or forked
+/// conversation carries lines copied from another one, with the other id.
+fn source(projects: &Path, file: &Path) -> Option<Source> {
+    let relative = file.strip_prefix(projects).ok()?;
+    let mut parts = relative.components();
+    let project = parts.next()?;
+    let second = Path::new(parts.next()?.as_os_str());
+    // Anything left after the second part means the file sits deeper.
+    let subagent = parts.next().is_some();
+    let conversation = if subagent {
+        second.to_str()?
+    } else {
+        second.file_stem()?.to_str()?
+    };
+    Some(Source {
+        conversation: conversation.to_string(),
+        transcript: projects.join(project).join(format!("{conversation}.jsonl")),
+        subagent,
+    })
+}
+
+/// One answer, as kept while the files are read.
+struct Answer {
+    cwd: String,
+    timestamp: String,
+    tokens: Tokens,
+    /// Index of its file in the list of sources.
+    source: usize,
+}
+
+/// What is added up for one conversation.
+#[derive(Default)]
+struct Tally {
+    tokens: Tokens,
+    answers: u64,
+    /// Context of the answers of the conversation itself, and how many.
+    context: u64,
+    own_answers: u64,
+    /// Time and folder of the latest answer.
+    latest: (String, String),
 }
 
 // Only the fields we need. Serde ignores the others, and `Option` everywhere
@@ -165,26 +253,45 @@ fn iso_utc(time: SystemTime) -> String {
 
 /// Reads what the profile stored in `config_dir` consumed since `since`.
 pub fn scan(config_dir: &Path, since: SystemTime) -> ProfileUsage {
-    let mut files = Vec::new();
-    transcripts(&config_dir.join("projects"), &mut files);
+    let projects = config_dir.join("projects");
+    let mut found = Vec::new();
+    transcripts(&projects, &mut found);
     let cutoff = iso_utc(since);
+
+    // A file not written since the start of the period holds nothing from
+    // it: leaving it out avoids reading gigabytes of old history.
+    let mut files: Vec<(SystemTime, PathBuf)> = found
+        .into_iter()
+        .filter_map(|file| {
+            let changed = fs::metadata(&file).and_then(|metadata| metadata.modified());
+            match changed {
+                Ok(changed) if changed < since => None,
+                Ok(changed) => Some((changed, file)),
+                Err(_) => Some((SystemTime::UNIX_EPOCH, file)),
+            }
+        })
+        .collect();
+    // Most recently written first. An answer copied into several files then
+    // counts for the conversation that is still alive, the one the user can
+    // act on. The path makes the order the same on every run.
+    files.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
 
     // One entry per answer. Claude Code copies an answer into several files
     // when a conversation is resumed or forked, always with the same two
     // identifiers: counting each pair once is what keeps the totals honest.
-    let mut answers: HashMap<(String, String), (String, Tokens)> = HashMap::new();
+    let mut answers: HashMap<(String, String), Answer> = HashMap::new();
+    let mut sources: Vec<Source> = Vec::new();
 
     let mut line = Vec::new();
-    for file in files {
-        // A file not written since the start of the period holds nothing
-        // from it: skipping it avoids reading gigabytes of old history.
-        let changed = fs::metadata(&file).and_then(|metadata| metadata.modified());
-        if changed.is_ok_and(|changed| changed < since) {
+    for (_, file) in files {
+        let Some(origin) = source(&projects, &file) else {
             continue;
-        }
+        };
         let Ok(opened) = File::open(&file) else {
             continue;
         };
+        sources.push(origin);
+        let source = sources.len() - 1;
         let mut reader = BufReader::new(opened);
         loop {
             line.clear();
@@ -230,27 +337,75 @@ pub fn scan(config_dir: &Path, since: SystemTime) -> ProfileUsage {
             let key = (id, record.request_id.unwrap_or_default());
             answers
                 .entry(key)
-                .and_modify(|(_, seen)| seen.max(&tokens))
-                .or_insert((cwd, tokens));
+                .and_modify(|seen| seen.tokens.max(&tokens))
+                .or_insert(Answer {
+                    cwd,
+                    timestamp,
+                    tokens,
+                    source,
+                });
         }
     }
 
     let mut by_folder: HashMap<String, FolderUsage> = HashMap::new();
+    let mut by_conversation: HashMap<&str, (usize, Tally)> = HashMap::new();
     let mut total = Tokens::default();
     // `into_values` consumes the map: each folder name is moved, not copied.
-    for (cwd, tokens) in answers.into_values() {
+    for answer in answers.into_values() {
+        let tokens = answer.tokens;
         total.add(&tokens);
-        let entry = by_folder.entry(cwd).or_insert_with_key(|cwd| FolderUsage {
-            folder: PathBuf::from(cwd),
-            tokens: Tokens::default(),
-            answers: 0,
-        });
+
+        let origin = &sources[answer.source];
+        let (_, tally) = by_conversation
+            .entry(origin.conversation.as_str())
+            .or_insert_with(|| (answer.source, Tally::default()));
+        tally.tokens.add(&tokens);
+        tally.answers += 1;
+        if !origin.subagent {
+            tally.context += tokens.context();
+            tally.own_answers += 1;
+        }
+        if answer.timestamp > tally.latest.0 {
+            tally.latest = (answer.timestamp, answer.cwd.clone());
+        }
+
+        let entry = by_folder
+            .entry(answer.cwd)
+            .or_insert_with_key(|cwd| FolderUsage {
+                folder: PathBuf::from(cwd),
+                tokens: Tokens::default(),
+                answers: 0,
+            });
         entry.tokens.add(&tokens);
         entry.answers += 1;
     }
     let mut folders: Vec<FolderUsage> = by_folder.into_values().collect();
     sort(&mut folders);
-    ProfileUsage { folders, total }
+
+    let mut conversations: Vec<ConversationUsage> = by_conversation
+        .into_iter()
+        .map(|(id, (source, tally))| ConversationUsage {
+            id: id.to_string(),
+            transcript: sources[source].transcript.clone(),
+            folder: PathBuf::from(tally.latest.1),
+            tokens: tally.tokens,
+            answers: tally.answers,
+            // `checked_div` gives `None` for a conversation seen only
+            // through its subagents, where there is nothing to average.
+            context: tally.context.checked_div(tally.own_answers).unwrap_or(0),
+        })
+        .collect();
+    conversations.sort_by(|a, b| {
+        b.tokens
+            .weight()
+            .total_cmp(&a.tokens.weight())
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    ProfileUsage {
+        folders,
+        conversations,
+        total,
+    }
 }
 
 /// Heaviest first; the name breaks ties so the order never changes between
@@ -292,8 +447,17 @@ impl ProfileUsage {
         }
         let mut folders: Vec<FolderUsage> = projects.into_values().collect();
         sort(&mut folders);
+        let conversations = self
+            .conversations
+            .into_iter()
+            .map(|mut conversation| {
+                conversation.folder = project_root(&conversation.folder).to_path_buf();
+                conversation
+            })
+            .collect();
         ProfileUsage {
             folders,
+            conversations,
             total: self.total,
         }
     }
@@ -438,6 +602,83 @@ mod tests {
         let usage = scan(temp.path(), since);
         assert_eq!(usage.total.output, 7);
         assert_eq!(usage.folders.len(), 1);
+    }
+
+    #[test]
+    fn a_conversation_counts_its_subagents_but_not_in_its_context() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("projects/-p");
+        let line = |id: &str, time: &str, cwd: &str, read: u64| {
+            format!(
+                r#"{{"type":"assistant","cwd":"{cwd}","timestamp":"{time}","requestId":"r-{id}","message":{{"id":"{id}","usage":{{"input_tokens":0,"output_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":{read}}}}}}}"#
+            )
+        };
+        write(
+            &project.join("long.jsonl"),
+            &[
+                line("a", "2026-11-26T10:00:00.000Z", "/work/api", 100_000),
+                line("b", "2026-11-26T11:00:00.000Z", "/work/api/src", 300_000),
+            ],
+        );
+        write(
+            &project.join("long/subagents/agent-1.jsonl"),
+            &[line("c", "2026-11-26T10:30:00.000Z", "/work/api", 5_000)],
+        );
+        write(
+            &project.join("short.jsonl"),
+            &[line("d", "2026-11-26T12:00:00.000Z", "/work/blog", 2_000)],
+        );
+
+        let usage = scan(temp.path(), SystemTime::UNIX_EPOCH);
+        assert_eq!(usage.conversations.len(), 2);
+        let long = &usage.conversations[0];
+        assert_eq!(long.id, "long");
+        assert_eq!(long.transcript, project.join("long.jsonl"));
+        assert_eq!(long.answers, 3);
+        assert_eq!(long.tokens.cache_read, 405_000);
+        // The average of its own two answers: the subagent is left out.
+        assert_eq!(long.context, 200_000);
+        // Where it was last used.
+        assert_eq!(long.folder, Path::new("/work/api/src"));
+        assert_eq!(usage.conversations[1].id, "short");
+        assert_eq!(usage.conversations[1].context, 2_000);
+    }
+
+    #[test]
+    fn a_copied_answer_goes_to_the_conversation_written_last() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("projects/-p");
+        let now = "2026-11-26T10:00:00.000Z";
+        let copy = [answer("m1", "r1", "/work/api", now, 5)];
+        write(&project.join("original.jsonl"), &copy);
+        write(&project.join("fork.jsonl"), &copy);
+        // The original was last written an hour before its fork.
+        let earlier = SystemTime::now() - Duration::from_secs(3_600);
+        File::options()
+            .write(true)
+            .open(project.join("original.jsonl"))
+            .unwrap()
+            .set_modified(earlier)
+            .unwrap();
+
+        let usage = scan(temp.path(), SystemTime::UNIX_EPOCH);
+        assert_eq!(usage.conversations.len(), 1);
+        assert_eq!(usage.conversations[0].id, "fork");
+        assert_eq!(usage.total.output, 5);
+    }
+
+    #[test]
+    fn most_of_a_long_conversation_is_reading_it_again() {
+        let tokens = Tokens {
+            input: 0,
+            output: 1_000,
+            cache_write: 0,
+            cache_read: 450_000,
+        };
+        assert_eq!(tokens.context(), 450_000);
+        // 45 000 for the context against 5 000 for the answer.
+        assert!((tokens.reread_share() - 0.9).abs() < 1e-9);
+        assert_eq!(Tokens::default().reread_share(), 0.0);
     }
 
     #[test]
