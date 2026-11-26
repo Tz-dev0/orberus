@@ -51,6 +51,7 @@ From then on, just type `claude`.
 | `cprofile add [name]` | Create a profile (`--native` reuses `~/.claude`) |
 | `cprofile list`, `ls` | List profiles: account logged in, default, and the one used here |
 | `cprofile disk` | Show how much disk space each profile takes, and what takes it. Deletes nothing |
+| `cprofile clean [name]` | List a profile's biggest conversations and move the ones you pick to the Trash. Without a pick it only lists |
 | `cprofile retention [name] [days]` | Show or set how long each profile keeps its conversations (Claude Code deletes them after 30 days by default) |
 | `cprofile remove [name]`, `rm` | Remove a profile and its rules; its folder is kept. `--purge` also deletes the folder and its login in the keychain |
 | `cprofile default [name]`, `global` | Profile used when no rule applies |
@@ -72,7 +73,8 @@ and who is logged in to each, create or remove a profile, start Claude Code
 in one of them (you pick the project folder, a terminal window opens there),
 or change the default profile. Two folded sections show how long each
 profile keeps its conversations, with a way to change it, and the disk
-space each profile takes. Removing a profile keeps its Claude Code
+space each profile takes. Click a profile there to see its biggest
+conversations and move some to the Trash. Removing a profile keeps its Claude Code
 folder unless you tick the box to delete it, as `cprofile remove` and
 `cprofile remove --purge` do. It reads and writes the same config as
 the CLI.

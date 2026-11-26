@@ -341,6 +341,78 @@ fn purge_deletes_the_profile_folder_but_never_the_native_one() {
     assert!(home.is_dir());
 }
 
+// The Trash is only known on macOS for now.
+#[cfg(target_os = "macos")]
+#[test]
+fn clean_lists_conversations_and_moves_the_chosen_one_to_the_trash() {
+    use std::time::{Duration, SystemTime};
+
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["add", "work"]);
+    assert!(world
+        .ok(&home, &["clean", "work"])
+        .contains("no conversation"));
+
+    let project = world.root.join("profiles/work/projects/-Users-me-app");
+    fs::create_dir_all(project.join("memory")).unwrap();
+    fs::write(project.join("memory/MEMORY.md"), "- a note").unwrap();
+    let old = "11111111-2222-3333-4444-555555555555";
+    let fresh = "99999999-2222-3333-4444-555555555555";
+    for id in [old, fresh] {
+        fs::write(
+            project.join(format!("{id}.jsonl")),
+            "{\"type\":\"custom-title\",\"customTitle\":\"Fix the login\"}\n",
+        )
+        .unwrap();
+    }
+    // Last used three days ago. The other one was written just now.
+    let three_days_ago = SystemTime::now() - Duration::from_secs(3 * 86_400);
+    fs::File::options()
+        .write(true)
+        .open(project.join(format!("{old}.jsonl")))
+        .unwrap()
+        .set_modified(three_days_ago)
+        .unwrap();
+
+    // Without a choice it only lists.
+    let list = world.ok(&home, &["clean", "work"]);
+    assert!(list.contains("Fix the login"), "{list}");
+    assert!(
+        list.contains("3 days ago") && list.contains("in use?"),
+        "{list}"
+    );
+    assert!(list.contains("Nothing was changed"), "{list}");
+    assert!(project.join(format!("{old}.jsonl")).exists());
+
+    // A choice still needs a confirmation, and an unknown id is an error.
+    assert!(refused(&world, &home, &["clean", "work", "--session", "1111"]).contains("--yes"));
+    assert!(
+        refused(&world, &home, &["clean", "work", "--session", "abcd", "-y"])
+            .contains("no conversation")
+    );
+
+    fs::create_dir_all(home.join(".Trash")).unwrap();
+    let done = world.ok(&home, &["clean", "work", "--session", "1111", "--yes"]);
+    assert!(done.contains("moved to the Trash"), "{done}");
+    assert!(!project.join(format!("{old}.jsonl")).exists());
+    let moved = home
+        .join(".Trash")
+        .join(format!("Claude conversation {old}"));
+    assert!(moved.join(format!("{old}.jsonl")).is_file());
+    assert!(moved.join("where it came from.txt").is_file());
+    // Memory and the other conversation are untouched.
+    assert!(project.join("memory/MEMORY.md").is_file());
+    assert!(project.join(format!("{fresh}.jsonl")).is_file());
+
+    // One used in the last hour is refused: it may still be open.
+    let output = world.cprofile(&home, &["clean", "work", "--session", "9999", "--yes"]);
+    assert_eq!(output.status.code(), Some(1));
+    // Each conversation reports on its own line, on standard output.
+    assert!(String::from_utf8_lossy(&output.stdout).contains("last hour"));
+    assert!(project.join(format!("{fresh}.jsonl")).is_file());
+}
+
 #[test]
 fn a_team_rule_cannot_be_removed_and_beats_a_pinned_folder() {
     let world = World::new();

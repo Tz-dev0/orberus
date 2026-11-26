@@ -10,4 +10,5 @@ pub mod paths;
 pub mod purge;
 pub mod resolve;
 pub mod retention;
+pub mod sessions;
 pub mod view;

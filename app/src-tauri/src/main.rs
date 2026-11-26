@@ -28,7 +28,7 @@ const TRAY: &str = "main";
 // Window size in points. The width matches tauri.conf.json.
 const WIDTH: f64 = 320.0;
 const MIN_HEIGHT: f64 = 80.0;
-const MAX_HEIGHT: f64 = 560.0;
+const MAX_HEIGHT: f64 = 680.0;
 
 /// When the popover was last hidden because it lost focus. Shared state must
 /// be safe to touch from several threads, hence the `Mutex`.
@@ -89,6 +89,17 @@ fn set_default(name: String) -> Result<(), String> {
 #[tauri::command]
 fn add_profile(name: String, reuse_login: bool) -> Result<(), String> {
     run(|env| data::add_profile(env, &name, reuse_login))
+}
+
+// Both read whole folders, hence `async`: off the main thread.
+#[tauri::command]
+async fn conversations(name: String) -> Result<data::Conversations, String> {
+    run(|env| data::conversations(env, &name))
+}
+
+#[tauri::command]
+async fn trash_conversation(name: String, id: String) -> Result<(), String> {
+    run(|env| data::trash_conversation(env, &name, &id))
 }
 
 #[tauri::command]
@@ -287,6 +298,8 @@ fn main() {
             add_profile,
             remove_profile,
             set_retention,
+            conversations,
+            trash_conversation,
             storage,
             open_claude,
             open_config,

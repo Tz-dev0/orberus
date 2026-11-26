@@ -43,6 +43,24 @@ export interface Storage {
   detail: string;
 }
 
+/** One conversation of a profile. */
+export interface Conversation {
+  id: string;
+  title: string;
+  /** Where it worked and when it was last used. */
+  detail: string;
+  size: string;
+  /** Changed in the last hour: it may still be open. */
+  inUse: boolean;
+}
+
+export interface Conversations {
+  /** The biggest ones, biggest first. */
+  items: Conversation[];
+  /** How many smaller ones are not listed. */
+  more: number;
+}
+
 export interface StorageOverview {
   profiles: Storage[];
   /** All profiles together: "3.5 GB". */
@@ -66,6 +84,10 @@ export interface Api {
   /** Takes the profile and its own rules out of the config. Its Claude Code
    *  folder is kept, unless `purge` asks to delete it with its login. */
   removeProfile(name: string, purge: boolean): Promise<void>;
+  /** The biggest conversations of a profile. */
+  conversations(name: string): Promise<Conversations>;
+  /** Moves one conversation to the Trash. */
+  trashConversation(name: string, id: string): Promise<void>;
   /** Sets how many days the profile keeps its conversations. */
   setRetention(name: string, days: number): Promise<void>;
   /** Asks for a project folder, then opens Claude Code there in a terminal.
@@ -83,6 +105,8 @@ const tauri: Api = {
   storage: () => invoke<StorageOverview>("storage"),
   setDefault: (name) => invoke("set_default", { name }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
+  conversations: (name) => invoke<Conversations>("conversations", { name }),
+  trashConversation: (name, id) => invoke("trash_conversation", { name, id }),
   setRetention: (name, days) => invoke("set_retention", { name, days }),
   removeProfile: (name, purge) => invoke("remove_profile", { name, purge }),
   openClaude: (name) => invoke<boolean>("open_claude", { name }),
@@ -95,6 +119,17 @@ const tauri: Api = {
 // Sample data, used only when the page is opened in a plain browser with
 // `npm run dev`. It makes the layout easy to work on without the app shell.
 function preview(): Api {
+  const talks: Record<string, Conversation[]> = {
+    perso: [
+      { id: "a1", title: "Check the invoices export", detail: "~/Desktop, 2 days ago", size: "815 MB", inUse: false },
+      { id: "a2", title: "Mobile career and recognition", detail: "~/Desktop, 1 day ago", size: "779 MB", inUse: false },
+      { id: "a3", title: "Check the invoices export", detail: "~/Desktop, 20 minutes ago", size: "581 MB", inUse: true },
+      { id: "a4", title: "Untitled (9879d850)", detail: "~/code/app, 13 days ago", size: "37 MB", inUse: false },
+    ],
+    work: [
+      { id: "b1", title: "Payment retries", detail: "~/clients/acme, 4 days ago", size: "600 MB", inUse: false },
+    ],
+  };
   const state: Overview = {
     shimInstalled: true,
     canReuseLogin: false,
@@ -166,6 +201,13 @@ function preview(): Api {
       });
       state.profiles.sort((a, b) => a.name.localeCompare(b.name));
       if (reuseLogin) state.canReuseLogin = false;
+    },
+    conversations: async (name) => ({
+      items: structuredClone(talks[name] ?? []),
+      more: name === "perso" ? 54 : 0,
+    }),
+    trashConversation: async (name, id) => {
+      talks[name] = (talks[name] ?? []).filter((talk) => talk.id !== id);
     },
     setRetention: async (name, days) => {
       const profile = state.profiles.find((profile) => profile.name === name);

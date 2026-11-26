@@ -2,7 +2,7 @@
 // Plain TypeScript and DOM calls: the page is one small list, a framework
 // would add more code than it removes.
 
-import { api, insideApp, type Overview, type Profile, type Rule, type StorageOverview } from "./api";
+import { api, insideApp, type Overview, type Profile, type Conversations, type Rule, type StorageOverview } from "./api";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 // In the app the window itself is the frosted panel. In a browser there is
@@ -430,6 +430,80 @@ let storage: StorageOverview | null = null;
 let storageOpen = false;
 
 let historyOpen = false;
+// The profile whose conversations are listed under its storage line, and
+// that list once it is read.
+let pickedProfile: string | null = null;
+let conversations: Conversations | null = null;
+// The conversation whose move to the Trash waits for a second click.
+let trashing: string | null = null;
+
+/** Reads the conversations of the picked profile, then shows them. */
+async function loadConversations(overview: Overview): Promise<void> {
+  const name = pickedProfile;
+  if (!name) return;
+  try {
+    const read = await api.conversations(name);
+    // The user may have picked another profile meanwhile.
+    if (pickedProfile !== name) return;
+    conversations = read;
+  } catch (error) {
+    errorText = String(error);
+    errorAt = Date.now();
+  }
+  render(overview);
+}
+
+/** The biggest conversations of a profile, each with a way to the Trash. */
+function conversationList(name: string, overview: Overview): HTMLElement {
+  const list = el("ul", "talks");
+  if (!conversations) {
+    list.append(el("li", "talks-note", "Reading…"));
+    return list;
+  }
+  if (conversations.items.length === 0) {
+    list.append(el("li", "talks-note", "No conversation on disk."));
+    return list;
+  }
+  for (const talk of conversations.items) {
+    const row = el("li", "talk");
+    const text = el("span", "talk-text");
+    text.append(el("span", "talk-title", talk.title), el("span", "talk-detail", talk.detail));
+    row.title = talk.title;
+    row.append(text);
+
+    if (talk.inUse) {
+      const busy = el("span", "talk-size", "In use?");
+      busy.title = "Changed in the last hour: it may still be open, so it stays";
+      row.append(busy);
+    } else if (trashing === talk.id) {
+      // Second click: it really goes.
+      const go = el("button", "talk-go", "Move to Trash");
+      onClick(go, async () => {
+        trashing = null;
+        await api.trashConversation(name, talk.id);
+        conversations = await api.conversations(name);
+      });
+      row.append(go);
+    } else {
+      row.append(el("span", "talk-size", talk.size));
+      const bin = el("button", "remove talk-bin");
+      bin.type = "button";
+      bin.title = "Move to the Trash. Claude Code will no longer list it to resume";
+      bin.append(icon("bin", `Move ${talk.title} to the Trash`));
+      bin.addEventListener("click", () => {
+        trashing = talk.id;
+        render(overview);
+      });
+      row.append(bin);
+    }
+    list.append(row);
+  }
+  if (conversations.more > 0) {
+    const others = conversations.more === 1 ? "1 smaller one" : `${conversations.more} smaller ones`;
+    list.append(el("li", "talks-note", `And ${others}: cprofile clean ${name}`));
+  }
+  return list;
+}
 
 /** The line that folds and unfolds a section. Folded, it shows `sum`. */
 function foldLine(
@@ -577,17 +651,35 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
   // The biggest profile fills the bar; the others are drawn against it.
   const biggest = Math.max(...sizes.map((size) => size.total), 1);
   for (const size of sizes) {
-    const row = el("li", "storage-row");
-    row.style.setProperty("--hue", hue(size.name));
-    row.title = size.detail || "Nothing stored yet";
+    const item = el("li", "storage-item");
+    item.style.setProperty("--hue", hue(size.name));
+    // The line is a button: it unfolds the profile's biggest conversations.
+    const picked = pickedProfile === size.name;
+    const row = el("button", "storage-row storage-pick");
+    row.type = "button";
+    row.setAttribute("aria-expanded", String(picked));
+    row.title = `${size.detail || "Nothing stored yet"}\nClick to see its biggest conversations`;
+    row.addEventListener("click", () => {
+      pickedProfile = picked ? null : size.name;
+      conversations = null;
+      trashing = null;
+      render(overview);
+      void loadConversations(overview);
+    });
     const bar = el("span", "bar");
     const fill = el("span", "bar-fill");
     // A profile with anything at all keeps a visible sliver.
     const share = size.total > 0 ? Math.max(size.total / biggest, 0.02) : 0;
     fill.style.width = `${(share * 100).toFixed(1)}%`;
     bar.append(fill);
-    row.append(el("span", "storage-name", size.name), bar, el("span", "storage-size", size.total > 0 ? size.size : "Empty"));
-    list.append(row);
+    row.append(
+      el("span", "storage-name", size.name),
+      bar,
+      el("span", "storage-size", size.total > 0 ? size.size : "Empty"),
+    );
+    item.append(row);
+    if (picked) item.append(conversationList(size.name, overview));
+    list.append(item);
   }
   section.append(list);
   return section;
@@ -711,9 +803,10 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.key !== "Escape") return;
   // Escape first backs out of a form or a question, then closes the window.
-  if (adding || removing) {
+  if (adding || removing || trashing) {
     closeForm();
     removing = null;
+    trashing = null;
     void refresh();
   } else {
     void api.hide();

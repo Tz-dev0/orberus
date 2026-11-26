@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
@@ -14,6 +15,7 @@ use claude_profiles::disk;
 use claude_profiles::paths::Env;
 use claude_profiles::purge;
 use claude_profiles::retention::{self, Retention};
+use claude_profiles::sessions;
 use claude_profiles::view;
 
 // `Serialize` lets Tauri turn these structs into JSON for the TypeScript
@@ -118,6 +120,77 @@ pub fn storage(env: &Env) -> Result<StorageOverview> {
         profiles: views,
         total,
     })
+}
+
+/// One conversation of a profile, for the list under its storage line.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationView {
+    pub id: String,
+    /// Its title, or the start of its id when it has none.
+    pub title: String,
+    /// Where it worked and when it was last used: "~/app, 2 days ago".
+    pub detail: String,
+    /// "815 MB".
+    pub size: String,
+    /// Changed in the last hour: it may still be open, so it cannot go.
+    pub in_use: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Conversations {
+    /// The biggest ones, biggest first.
+    pub items: Vec<ConversationView>,
+    /// How many smaller ones are not listed.
+    pub more: usize,
+}
+
+/// How many conversations the window lists for a profile.
+const LISTED: usize = 8;
+
+/// The biggest conversations of a profile, like `cprofile clean`.
+pub fn conversations(env: &Env, name: &str) -> Result<Conversations> {
+    let config = config::load(env)?.config;
+    let found = sessions::profile_sessions(env, &config, name)?;
+    let now = SystemTime::now();
+    let items = found
+        .iter()
+        .take(LISTED)
+        .map(|session| {
+            let used = sessions::ago(session.last_used, now);
+            ConversationView {
+                id: session.id.clone(),
+                title: match &session.title {
+                    Some(title) => title.clone(),
+                    None => format!("Untitled ({})", &session.id[..8]),
+                },
+                detail: match &session.folder {
+                    Some(folder) => format!("{}, {used}", view::short_path(env, Path::new(folder))),
+                    None => used,
+                },
+                size: disk::human(session.size),
+                in_use: session.in_use(now),
+            }
+        })
+        .collect();
+    Ok(Conversations {
+        items,
+        more: found.len().saturating_sub(LISTED),
+    })
+}
+
+/// Moves one conversation of a profile to the Trash, by its full id.
+pub fn trash_conversation(env: &Env, name: &str, id: &str) -> Result<()> {
+    let config = config::load(env)?.config;
+    let found = sessions::profile_sessions(env, &config, name)?;
+    // The id comes from the page: it must be one this profile really has.
+    let Some(session) = found.iter().find(|session| session.id == id) else {
+        bail!("this conversation is no longer in profile '{name}'");
+    };
+    let trash = sessions::trash_dir(env)?;
+    sessions::move_to_trash(session, &trash, SystemTime::now())?;
+    Ok(())
 }
 
 fn shim_path(env: &Env) -> PathBuf {
@@ -419,6 +492,62 @@ mod tests {
         assert!(work.size.ends_with("KB"), "{work:?}");
         assert!(work.detail.contains("conversations, "), "{work:?}");
         assert!(work.detail.ends_with(" other"), "{work:?}");
+    }
+
+    // The Trash is only known on macOS for now.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn conversations_are_listed_and_one_can_go_to_the_trash() {
+        use std::time::Duration;
+
+        let (_temp, env) = world();
+        let project = env.profiles_dir().join("work/projects/-Users-me-app");
+        fs::create_dir_all(project.join("memory")).unwrap();
+        let old = "11111111-2222-3333-4444-555555555555";
+        let fresh = "99999999-2222-3333-4444-555555555555";
+        fs::write(
+            project.join(format!("{old}.jsonl")),
+            format!(
+                "{{\"customTitle\":\"Fix the login\"}}\n{{\"cwd\":\"{}\"}}\n{}",
+                env.home.join("app").display(),
+                "x".repeat(200_000)
+            ),
+        )
+        .unwrap();
+        fs::write(project.join(format!("{fresh}.jsonl")), "{}\n").unwrap();
+        fs::File::options()
+            .write(true)
+            .open(project.join(format!("{old}.jsonl")))
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(3 * 86_400))
+            .unwrap();
+
+        let listed = conversations(&env, "work").unwrap();
+        assert_eq!(listed.more, 0);
+        assert_eq!(listed.items.len(), 2);
+        let big = &listed.items[0];
+        assert_eq!(big.title, "Fix the login");
+        assert_eq!(big.detail, "~/app, 3 days ago");
+        assert!(big.size.ends_with("KB") && !big.in_use, "{big:?}");
+        let small = &listed.items[1];
+        assert_eq!(small.title, "Untitled (99999999)");
+        assert!(small.in_use);
+
+        fs::create_dir_all(env.home.join(".Trash")).unwrap();
+        // In use, unknown, and from another profile: all refused.
+        assert!(trash_conversation(&env, "work", fresh).is_err());
+        assert!(trash_conversation(&env, "work", "nope").is_err());
+        assert!(trash_conversation(&env, "perso", old).is_err());
+        assert!(project.join(format!("{old}.jsonl")).exists());
+
+        trash_conversation(&env, "work", old).unwrap();
+        assert!(!project.join(format!("{old}.jsonl")).exists());
+        assert!(env
+            .home
+            .join(format!(".Trash/Claude conversation {old}/{old}.jsonl"))
+            .is_file());
+        assert!(project.join("memory").is_dir());
+        assert_eq!(conversations(&env, "work").unwrap().items.len(), 1);
     }
 
     #[test]

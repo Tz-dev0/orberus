@@ -197,6 +197,11 @@ impl Ui {
         border("└", "┴", "┘");
     }
 
+    /// A question whose answer may be empty: just Enter means "nothing".
+    pub fn answer(&self, question: &str) -> Result<String> {
+        self.ask(&format!("{} ", self.paint(question, Style::Bold)))
+    }
+
     /// Prints `prompt` and reads one line. Fails when the input is closed
     /// (Ctrl-D), so a cancelled question never turns into a silent default.
     fn ask(&self, prompt: &str) -> Result<String> {

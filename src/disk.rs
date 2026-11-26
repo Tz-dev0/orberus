@@ -55,7 +55,7 @@ fn size_of(metadata: &fs::Metadata) -> u64 {
 /// A symbolic link counts for itself and is not followed: a skills folder
 /// shared between profiles must not be counted once per profile. What cannot
 /// be read is skipped, since a rough number beats no number here.
-fn tree_size(path: &Path) -> u64 {
+pub fn tree_size(path: &Path) -> u64 {
     let mut total = 0;
     // A list of folders still to visit, instead of a function calling
     // itself: a very deep tree cannot overflow the stack this way.

@@ -65,7 +65,7 @@ body {
 .page {
   display: flex;
   flex-direction: column;
-  max-height: 560px;
+  max-height: 680px;
   padding: 6px;
 }
 
@@ -603,6 +603,87 @@ h2 {
   height: 100%;
   border-radius: 3px;
   background: var(--hue);
+}
+
+/* A profile's storage line is a button that unfolds its conversations. */
+.storage-pick {
+  width: 100%;
+  border-radius: 5px;
+}
+
+.storage-pick:hover,
+.storage-pick[aria-expanded="true"] {
+  background: var(--hover);
+}
+
+/* ----------------------------------------------------------- conversations */
+
+.talks {
+  margin: 2px 0 6px;
+}
+
+.talk {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 16px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.talk:hover {
+  background: var(--hover);
+}
+
+.talk-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.talk-title,
+.talk-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.talk-detail {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.talk-size {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The bin shows on the line being pointed at, as on a profile. */
+.talk:hover .talk-bin,
+.talk:focus-within .talk-bin {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+  margin-right: 0;
+}
+
+.talk-go {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--alert-text);
+  color: var(--on-alert);
+}
+
+.talks-note {
+  padding: 3px 8px 3px 16px;
+  font-size: 11px;
+  color: var(--faint);
 }
 
 /* Three choices side by side; the current one is filled. */
