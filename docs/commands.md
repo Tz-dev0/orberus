@@ -10,7 +10,7 @@ removing something needs `--yes`. Colours follow `NO_COLOR`.
 
 The outputs below are shortened examples.
 
-- Setup: [`setup`](#setup), [`doctor`](#doctor), [`uninstall`](#uninstall)
+- Setup: [`setup`](#setup), [`ide`](#ide), [`doctor`](#doctor), [`uninstall`](#uninstall)
 - Profiles: [`add`](#add), [`list`](#list), [`default`](#default), [`remove`](#remove)
 - Choosing a profile: [`status`](#status), [`use`](#use), [`run`](#run), [`rule`](#rule)
 - Usage: [`usage`](#usage)
@@ -25,6 +25,55 @@ orberus setup
 Installs the `claude` shim in `~/.orberus/bin` and offers to add that
 folder to your `PATH` (zsh and bash). Safe to run again, for instance after
 an update.
+
+It also installs the wrapper that editor extensions can start,
+`~/.orberus/ide/claude-wrapper`. Nothing uses it until you run
+[`orberus ide on`](#ide).
+
+## ide
+
+```sh
+orberus ide [on|off] [editor]
+```
+
+For VS Code, Cursor and the other editors built on VS Code, whose Claude Code
+extension starts its own copy of Claude Code and so never meets the shim.
+Alone, it lists the editors found and says whether their extension goes
+through Orberus:
+
+```text
+$ orberus ide
+┌─────────┬───────────────────────┬─────────────────────────────────────────────────────────┐
+│ Editor  │ Claude Code extension │ Settings                                                │
+├─────────┼───────────────────────┼─────────────────────────────────────────────────────────┤
+│ Cursor  │ skips Orberus         │ ~/Library/Application Support/Cursor/User/settings.json │
+│ VS Code │ skips Orberus         │ ~/Library/Application Support/Code/User/settings.json   │
+└─────────┴───────────────────────┴─────────────────────────────────────────────────────────┘
+
+To pick the account by folder there too: orberus ide on
+```
+
+`orberus ide on` writes the extension's `claudeCode.claudeProcessWrapper`
+setting in each editor's user settings, so the extension starts Orberus'
+wrapper, which picks the profile for the folder the editor has open and then
+starts the extension's own copy of Claude Code. `orberus ide off` removes the
+setting. Both act on every editor found, or on the one you name, as the list
+shows it: `orberus ide on "VS Code"`. Reload the editor's window after
+either.
+
+An editor where the extension is not installed is listed as `not installed`.
+`orberus ide on` leaves it alone, unless you name it.
+
+```text
+$ orberus ide on
+✓ Cursor: its Claude Code extension now goes through Orberus
+✓ VS Code: its Claude Code extension now goes through Orberus
+```
+
+Only that one setting is touched; the rest of the file, comments included,
+stays as it is. A setting that already names another program is left alone.
+JetBrains IDEs need none of this: their plugin runs the `claude` command.
+See [editors.md](editors.md).
 
 ## doctor
 
@@ -44,6 +93,8 @@ Checks the installation and says how to fix what is wrong. It changes nothing.
 ✓ default profile exists
 ✓ every rule points to an existing profile
 ✓ CLAUDE_CONFIG_DIR is not set by something else
+! the Claude Code extension skips Orberus in VS Code
+  it starts its own copy of Claude Code; to pick the account by folder there too: orberus ide on
 ! 'work' keeps its conversations 30 days (Claude Code default)
   older ones are deleted by Claude Code; to keep them: orberus retention work 365
 
@@ -66,6 +117,7 @@ $ orberus uninstall
 This removes
   the claude shim: `claude` is the real Claude Code again
   the PATH line that setup added to your shell config
+  the setting that sends VS Code's Claude Code extension through Orberus
   orberus itself: ~/.orberus/bin/orberus
   the menu bar app, moved to the Trash: /Applications/Orberus.app
   kept: your profiles and rules, in ~/.orberus (to delete them too: --purge)
@@ -78,6 +130,8 @@ What it removes:
 - the `PATH` line that `setup` wrote in `~/.zshrc`, `~/.zprofile`,
   `~/.bash_profile` or `~/.bashrc`. A line you wrote yourself in another way is left alone, and
   you are told about it;
+- the setting that `orberus ide on` wrote in your editors, then the wrapper
+  it names. Your editors' extension starts Claude Code itself again;
 - `orberus` itself, when it sits in `~/.orberus/bin`. Installed
   another way (`cargo install`), it tells you how to remove it;
 - the menu bar app, moved to the Trash.

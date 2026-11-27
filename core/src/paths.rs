@@ -38,6 +38,11 @@ impl Env {
         self.root.join("bin")
     }
 
+    /// Where the wrappers that editor extensions start are kept.
+    pub fn ide_dir(&self) -> PathBuf {
+        self.root.join("ide")
+    }
+
     pub fn profiles_dir(&self) -> PathBuf {
         self.root.join("profiles")
     }

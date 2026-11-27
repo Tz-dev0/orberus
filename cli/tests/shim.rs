@@ -81,6 +81,67 @@ impl World {
         command.output().unwrap()
     }
 
+    /// Starts the wrapper the way an editor extension does: its own copy
+    /// of claude first, then claude's arguments.
+    fn wrapper(&self, cwd: &Path, args: &[&str], env: &[(&str, &str)]) -> Output {
+        let mut command = self.command(&self.root.join("ide/claude-wrapper"), cwd);
+        command.args(args);
+        for (key, value) in env {
+            command.env(key, value);
+        }
+        command.output().unwrap()
+    }
+
+    /// The copy of claude an editor extension carries. It says so, to tell
+    /// it apart from the one in PATH.
+    fn bundled(&self) -> PathBuf {
+        let folder = self
+            .home
+            .join(".vscode/extensions/anthropic.claude-code-1.0/bin");
+        fs::create_dir_all(&folder).unwrap();
+        let copy = folder.join("claude");
+        fs::write(
+            &copy,
+            "#!/bin/sh\necho \"bundled dir=${CLAUDE_CONFIG_DIR:-unset} session=${ORBERUS_SESSION:-unset} args=$*\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&copy, fs::Permissions::from_mode(0o755)).unwrap();
+        copy
+    }
+
+    /// An editor of the VS Code family, as it leaves its folders behind,
+    /// with these settings. Returns its settings file.
+    fn editor(&self, name: &str, settings: &str) -> PathBuf {
+        let base = if cfg!(target_os = "macos") {
+            "Library/Application Support"
+        } else {
+            ".config"
+        };
+        let user = self.home.join(base).join(name).join("User");
+        fs::create_dir_all(user.join("globalStorage")).unwrap();
+        let file = user.join("settings.json");
+        fs::write(&file, settings).unwrap();
+        file
+    }
+
+    /// The app of an editor, with the two names its `product.json` gives:
+    /// its settings folder and, under the home folder, its data folder.
+    fn app(&self, name: &str, settings_folder: &str, data_folder: &str) {
+        let folder = self
+            .home
+            .join("Applications")
+            .join(name)
+            .join("Contents/Resources/app");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("product.json"),
+            format!(
+                "{{\"nameShort\": \"{settings_folder}\", \"dataFolderName\": \"{data_folder}\"}}"
+            ),
+        )
+        .unwrap();
+    }
+
     fn repo(&self, relative: &str, remote: &str) -> PathBuf {
         let repo = self.home.join(relative);
         fs::create_dir_all(repo.join(".git")).unwrap();
@@ -693,4 +754,259 @@ fn usage_lists_conversations_and_flags_the_ones_that_carry_a_lot() {
         "{out}"
     );
     assert!(out.contains("/compact"), "{out}");
+}
+
+#[test]
+fn the_wrapper_starts_the_extensions_own_copy_with_the_account_of_the_folder() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    world.ok(&home, &["add", "perso", "--native"]);
+    world.ok(&home, &["add", "work"]);
+    world.ok(
+        &home,
+        &[
+            "rule",
+            "add",
+            "--git-remote",
+            "github.com/acme/*",
+            "--profile",
+            "work",
+            "--locked",
+        ],
+    );
+    let work_repo = world.repo("code/app", "git@github.com:acme/app.git");
+    let own_repo = world.repo("code/mine", "git@github.com:me/mine.git");
+    let work_dir = world.root.join("profiles/work");
+    let copy = world.bundled();
+    let copy = copy.to_str().unwrap();
+
+    // The extension's copy runs, not the one in PATH; its path is taken
+    // out of the arguments, the others are untouched.
+    let output = world.wrapper(&work_repo, &[copy, "auth", "status", "--json"], &[]);
+    assert!(output.status.success());
+    assert_eq!(
+        text(&output),
+        format!(
+            "bundled dir={} session=work args=auth status --json\n",
+            work_dir.display()
+        )
+    );
+
+    // Native profile: the variable is unset, whatever the editor had.
+    let output = world.wrapper(
+        &own_repo,
+        &[copy, "--print"],
+        &[("CLAUDE_CONFIG_DIR", "/somewhere/else")],
+    );
+    assert_eq!(
+        text(&output),
+        "bundled dir=unset session=perso args=--print\n"
+    );
+
+    // An editor opened from a session's terminal carries that session's
+    // variables. Its windows still get the account of their own folder.
+    let output = world.wrapper(
+        &work_repo,
+        &[copy],
+        &[("ORBERUS_SESSION", "perso"), ("CLAUDE_CONFIG_DIR", "/kept")],
+    );
+    assert_eq!(
+        text(&output),
+        format!("bundled dir={} session=work args=\n", work_dir.display())
+    );
+
+    // The guard holds in an editor too, and its message reaches stderr,
+    // which the extension shows.
+    let output = world.wrapper(&work_repo, &[copy], &[("ORBERUS_PROFILE", "perso")]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(text(&output).is_empty(), "claude must not start");
+    let message = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(message.contains("locked to profile 'work'"), "{message}");
+
+    // An extension with no copy of its own passes only arguments: the
+    // real claude of PATH is started, never the wrapper or the shim again.
+    let output = world.wrapper(&work_repo, &["--print", "hello"], &[]);
+    assert_eq!(
+        text(&output),
+        format!(
+            "dir={}\nsession=work\nargs=--print hello\n",
+            work_dir.display()
+        )
+    );
+
+    // A copy that is not there is an error, not a prompt for claude.
+    let output = world.wrapper(&work_repo, &["/nowhere/claude", "--print"], &[]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(text(&output).is_empty());
+}
+
+#[test]
+fn without_config_the_wrapper_changes_nothing() {
+    let world = World::new();
+    fs::create_dir_all(world.root.join("ide")).unwrap();
+    symlink(ORBERUS, world.root.join("ide/claude-wrapper")).unwrap();
+    let copy = world.bundled();
+    let output = world.wrapper(
+        &world.home,
+        &[copy.to_str().unwrap(), "--version"],
+        &[("CLAUDE_CONFIG_DIR", "/set/by/the/editor")],
+    );
+    assert!(output.status.success());
+    assert_eq!(
+        text(&output),
+        "bundled dir=/set/by/the/editor session=unset args=--version\n"
+    );
+}
+
+#[test]
+fn ide_sends_the_editors_through_the_wrapper_and_back() {
+    let world = World::new();
+    let home = world.home.clone();
+    let wrapper = world.root.join("ide/claude-wrapper");
+    let before = "{\n    // my settings\n    \"editor.fontSize\": 13,\n}\n";
+    let code = world.editor("Code", before);
+    let cursor = world.editor("Cursor", "{}");
+    let key = "claudeCode.claudeProcessWrapper";
+
+    // Nothing is on yet, and the command says how to change that.
+    let listed = world.ok(&home, &["ide"]);
+    assert!(listed.contains("VS Code"), "{listed}");
+    assert!(listed.contains("Cursor"), "{listed}");
+    assert!(listed.contains("skips Orberus"), "{listed}");
+    assert!(listed.contains("orberus ide on"), "{listed}");
+
+    // `on` works before `setup`: it installs the wrapper it points to.
+    let done = world.ok(&home, &["ide", "on"]);
+    assert!(done.contains("VS Code"), "{done}");
+    assert!(wrapper.symlink_metadata().is_ok());
+    let line = format!("\"{key}\": \"{}\"", wrapper.display());
+    let written = fs::read_to_string(&code).unwrap();
+    assert!(written.contains(&line), "{written}");
+    assert!(written.contains("// my settings"), "{written}");
+    assert!(fs::read_to_string(&cursor).unwrap().contains(&line));
+    let listed = world.ok(&home, &["ide"]);
+    assert!(listed.contains("through Orberus"), "{listed}");
+    assert!(!listed.contains("skips Orberus"), "{listed}");
+
+    // With the extension installed, doctor has nothing to say about them.
+    world.bundled();
+    let doctor = text(&world.orberus(&home, &["doctor"]));
+    assert!(
+        doctor.contains("the wrapper your editors start is installed"),
+        "{doctor}"
+    );
+    assert!(!doctor.contains("skips Orberus"), "{doctor}");
+
+    // `off` gives each file back as it was.
+    world.ok(&home, &["ide", "off"]);
+    assert_eq!(fs::read_to_string(&code).unwrap(), before);
+    assert!(!fs::read_to_string(&cursor).unwrap().contains(key));
+    let doctor = text(&world.orberus(&home, &["doctor"]));
+    assert!(
+        doctor.contains("skips Orberus in Cursor, VS Code"),
+        "{doctor}"
+    );
+}
+
+#[test]
+fn ide_can_be_turned_on_for_one_editor_only() {
+    let world = World::new();
+    let home = world.home.clone();
+    let code = world.editor("Code", "{}");
+    let cursor = world.editor("Cursor", "{}");
+    let key = "claudeCode.claudeProcessWrapper";
+
+    // By the name the list shows, in any case.
+    world.ok(&home, &["ide", "on", "vs code"]);
+    assert!(fs::read_to_string(&code).unwrap().contains(key));
+    assert_eq!(fs::read_to_string(&cursor).unwrap(), "{}");
+
+    // A name that is not there changes nothing and says what is.
+    let error = refused(&world, &home, &["ide", "on", "zed"]);
+    assert!(error.contains("found: Cursor, VS Code"), "{error}");
+    assert_eq!(fs::read_to_string(&cursor).unwrap(), "{}");
+
+    world.ok(&home, &["ide", "off", "Cursor"]);
+    assert!(fs::read_to_string(&code).unwrap().contains(key));
+    world.ok(&home, &["ide", "off", "VS Code"]);
+    assert!(!fs::read_to_string(&code).unwrap().contains(key));
+}
+
+#[test]
+fn an_editor_without_the_extension_is_not_said_to_skip_orberus() {
+    let world = World::new();
+    let home = world.home.clone();
+    let code = world.editor("Code", "{}");
+    let cursor = world.editor("Cursor", "{}");
+    world.app("Visual Studio Code.app", "Code", ".vscode");
+    world.app("Cursor.app", "Cursor", ".cursor");
+    // The extension is installed in VS Code only.
+    world.bundled();
+    let key = "claudeCode.claudeProcessWrapper";
+
+    let listed = world.ok(&home, &["ide"]);
+    let line = |name: &str| listed.lines().find(|line| line.contains(name)).unwrap();
+    assert!(line("VS Code").contains("skips Orberus"), "{listed}");
+    assert!(line("Cursor").contains("not installed"), "{listed}");
+    let doctor = text(&world.orberus(&home, &["doctor"]));
+    assert!(doctor.contains("skips Orberus in VS Code\n"), "{doctor}");
+
+    // Without a name, only the editor that has the extension is written.
+    let done = world.ok(&home, &["ide", "on"]);
+    assert!(
+        done.contains("Cursor: the Claude Code extension is not installed there"),
+        "{done}"
+    );
+    assert!(fs::read_to_string(&code).unwrap().contains(key));
+    assert_eq!(fs::read_to_string(&cursor).unwrap(), "{}");
+    // Nothing is left to say, here or in doctor.
+    let listed = world.ok(&home, &["ide"]);
+    assert!(!listed.contains("orberus ide on"), "{listed}");
+    let doctor = text(&world.orberus(&home, &["doctor"]));
+    assert!(!doctor.contains("skips Orberus"), "{doctor}");
+
+    // Asked for by its name, it is prepared for the day the extension comes.
+    world.ok(&home, &["ide", "on", "cursor"]);
+    assert!(fs::read_to_string(&cursor).unwrap().contains(key));
+}
+
+#[test]
+fn ide_leaves_another_wrapper_alone() {
+    let world = World::new();
+    let home = world.home.clone();
+    let before = "{\n    \"claudeCode.claudeProcessWrapper\": \"/opt/company/wrap\"\n}\n";
+    let code = world.editor("Code", before);
+
+    let output = world.orberus(&home, &["ide", "on"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        text(&output).contains("another program"),
+        "{}",
+        text(&output)
+    );
+    world.ok(&home, &["ide", "off"]);
+    world.ok(&home, &["setup"]);
+    world.ok(&home, &["uninstall", "--yes"]);
+    assert_eq!(fs::read_to_string(&code).unwrap(), before);
+}
+
+#[test]
+fn uninstall_takes_the_wrapper_out_of_the_editors() {
+    let world = World::new();
+    let home = world.home.clone();
+    let before = "{\n    \"editor.fontSize\": 13\n}\n";
+    let code = world.editor("Code", before);
+    world.ok(&home, &["setup"]);
+    let wrapper = world.root.join("ide/claude-wrapper");
+    assert!(wrapper.symlink_metadata().is_ok(), "setup installs it");
+    world.ok(&home, &["ide", "on"]);
+    assert_ne!(fs::read_to_string(&code).unwrap(), before);
+
+    let done = world.ok(&home, &["uninstall", "--yes"]);
+    assert!(done.contains("VS Code"), "{done}");
+    // The editor no longer names the wrapper, and the wrapper is gone.
+    assert_eq!(fs::read_to_string(&code).unwrap(), before);
+    assert!(wrapper.symlink_metadata().is_err());
+    assert!(!world.root.join("ide").exists());
 }

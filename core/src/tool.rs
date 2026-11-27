@@ -6,6 +6,13 @@
 //! and `uninstall` read this table instead of spelling `claude` themselves,
 //! so adding a tool starts with one more entry in `ALL`.
 //!
+//! A tool can be started in two ways, and Orberus stands in front of both.
+//! People and most editors run its command, which finds the shim first in
+//! `PATH`. An editor extension that carries its own copy of the tool starts
+//! that copy directly instead: for those there is the wrapper, a second
+//! name of this program that the extension is told to start in place of its
+//! copy (see [`crate::ide`]).
+//!
 //! What a tool entry does not cover, on purpose: reading who is logged in
 //! (`view::account`), the conversations and their size (`sessions`, `disk`,
 //! `usage`), how long they are kept (`retention`) and the keychain entry
@@ -35,6 +42,20 @@ pub struct Tool {
     /// The folder the tool uses when that variable is not set, under the
     /// home folder. A native profile keeps using it.
     native_dir: &'static str,
+    /// The extension that brings the tool into editors of the VS Code
+    /// family, when it has one.
+    pub extension: Option<Extension>,
+}
+
+/// An editor extension that starts its own copy of a tool.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Extension {
+    /// Its identifier. An installed copy is a folder whose name starts
+    /// with it: `anthropic.claude-code-2.1.325-darwin-arm64`.
+    pub id: &'static str,
+    /// Its setting that names a program to start in place of its own copy
+    /// of the tool. That program is handed the copy as its first argument.
+    pub wrapper_setting: &'static str,
 }
 
 pub const CLAUDE: Tool = Tool {
@@ -43,6 +64,12 @@ pub const CLAUDE: Tool = Tool {
     command: "claude",
     config_env: "CLAUDE_CONFIG_DIR",
     native_dir: ".claude",
+    // Both names are read in the extension's own package.json, and the
+    // setting is in Claude Code's documentation of its VS Code extension.
+    extension: Some(Extension {
+        id: "anthropic.claude-code",
+        wrapper_setting: "claudeCode.claudeProcessWrapper",
+    }),
 };
 
 /// Every tool Orberus knows. `setup` installs one shim per entry.
@@ -55,6 +82,18 @@ pub fn for_command(invoked: &OsStr) -> Option<&'static Tool> {
     let stem = Path::new(invoked).file_stem()?;
     ALL.iter().copied().find(|tool| stem == tool.command)
 }
+
+/// The tool this program was started as a wrapper for, if any:
+/// `claude-wrapper` means "an editor extension starts me in place of its own
+/// copy of Claude Code".
+pub fn for_wrapper(invoked: &OsStr) -> Option<&'static Tool> {
+    let stem = Path::new(invoked).file_stem()?.to_str()?;
+    let command = stem.strip_suffix(WRAPPER_SUFFIX)?;
+    ALL.iter().copied().find(|tool| tool.command == command)
+}
+
+/// What follows a tool's command in the name of its wrapper.
+const WRAPPER_SUFFIX: &str = "-wrapper";
 
 impl Tool {
     /// The tool's own default config folder: `~/.claude`.
@@ -74,6 +113,19 @@ impl Tool {
     /// Where the shim of this tool is installed.
     pub fn shim_path(&self, env: &Env) -> PathBuf {
         env.bin_dir().join(self.shim_name())
+    }
+
+    /// The file name of the wrapper: `claude-wrapper`.
+    pub fn wrapper_name(&self) -> String {
+        let extension = if cfg!(windows) { ".exe" } else { "" };
+        format!("{}{WRAPPER_SUFFIX}{extension}", self.command)
+    }
+
+    /// Where the wrapper of this tool is installed. Not in the `bin`
+    /// folder: that one is in `PATH`, and a second name starting with
+    /// `claude` there would get in the way each time `claude` is typed.
+    pub fn wrapper_path(&self, env: &Env) -> PathBuf {
+        env.ide_dir().join(self.wrapper_name())
     }
 
     /// The file names the real tool can have in a PATH folder.
@@ -130,6 +182,22 @@ mod tests {
     }
 
     #[test]
+    fn the_wrapper_has_its_own_name() {
+        assert_eq!(for_wrapper(OsStr::new("claude-wrapper")), Some(&CLAUDE));
+        assert_eq!(
+            for_wrapper(OsStr::new("/home/me/.orberus/ide/claude-wrapper")),
+            Some(&CLAUDE)
+        );
+        assert_eq!(for_wrapper(OsStr::new("claude-wrapper.exe")), Some(&CLAUDE));
+        // The shim and the command line are not the wrapper, and the
+        // wrapper of a tool we do not know is nothing.
+        assert_eq!(for_wrapper(OsStr::new("claude")), None);
+        assert_eq!(for_wrapper(OsStr::new("orberus")), None);
+        assert_eq!(for_wrapper(OsStr::new("codex-wrapper")), None);
+        assert_eq!(for_wrapper(OsStr::new("-wrapper")), None);
+    }
+
+    #[test]
     fn every_tool_has_its_own_command_and_variable() {
         // Two tools sharing a command would install the same shim; sharing
         // a variable would send both to the same config folder.
@@ -152,6 +220,11 @@ mod tests {
         assert_eq!(
             CLAUDE.shim_path(&env),
             PathBuf::from("/home/me/.orberus/bin").join(CLAUDE.shim_name())
+        );
+        // The wrapper stays out of the folder that is in PATH.
+        assert_eq!(
+            CLAUDE.wrapper_path(&env),
+            PathBuf::from("/home/me/.orberus/ide").join(CLAUDE.wrapper_name())
         );
     }
 }

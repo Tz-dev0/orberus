@@ -53,6 +53,9 @@ logos belong to their owners and only say what Orberus works with.
   forget.
 - **Guard rail**: a locked rule wins over everything, and Claude Code does not
   start with another account in that folder.
+- **In your editor too**: the same rules pick the account in the Claude Code
+  panel of VS Code, Cursor and the editors built on VS Code, and in JetBrains
+  IDEs.
 - **Team rules**: a company can hand out a `team.toml`; its rules are checked
   before yours.
 - **Separate logins**: each profile has its own Claude Code folder and its own
@@ -147,6 +150,7 @@ Rules, the config files and team rules are described in
 |---|---|
 | `orberus` | Profile used in this folder, then the list of commands |
 | `orberus setup` | Install the `claude` shim and put it in your `PATH` |
+| `orberus ide [on\|off] [editor]` | Send the Claude Code extension of VS Code, Cursor and the like through Orberus |
 | `orberus add [name]` | Create a profile (`--native` reuses `~/.claude`) |
 | `orberus list` | Profiles, the account logged in to each, the default |
 | `orberus status` | Which profile applies here, and why |
@@ -268,6 +272,8 @@ It reads and writes the same config as the CLI and is optional. See
 - The shim only chooses a config folder, then hands over to the real Claude
   Code. It does not read your conversations or your credentials, and it makes
   no network request.
+- `ide on` writes one setting in your editors' settings and leaves the rest
+  of the file as it is; `ide off` and `uninstall` take it out again.
 - If the config cannot be read, or a locked rule forbids the profile you asked
   for, Claude Code does not start. It never falls back to another account.
 - `usage`, `disk`, `list`, `status` and `doctor` change nothing. `usage` reads
@@ -288,6 +294,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 - [Installation](docs/installation.md): install, update, uninstall, build from source
 - [Rules and configuration](docs/rules.md): rule types, `config.toml`, team rules
 - [Commands](docs/commands.md): every command and its options
+- [Editors and IDEs](docs/editors.md): VS Code, Cursor, JetBrains
 - [Menu bar app](docs/app.md)
 - [How it works](docs/how-it-works.md)
 - [Troubleshooting](docs/troubleshooting.md): known limits and common problems

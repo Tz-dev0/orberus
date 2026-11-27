@@ -4,6 +4,7 @@
 pub(crate) mod clean;
 pub(crate) mod disk;
 pub(crate) mod doctor;
+pub(crate) mod ide;
 pub(crate) mod limits;
 pub(crate) mod profiles;
 pub(crate) mod retention;
@@ -19,6 +20,13 @@ use orberus_core::paths::Env;
 use orberus_core::view::account;
 
 use crate::ui::{Cell, Style, Ui};
+
+/// `on` or `off`, as typed after `orberus limits` or `orberus ide`.
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub(crate) enum Switch {
+    On,
+    Off,
+}
 
 /// The account as a table cell or a status value.
 pub(crate) fn account_cell(env: &Env, config: &Config, name: &str) -> Cell {

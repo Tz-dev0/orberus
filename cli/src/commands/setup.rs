@@ -1,9 +1,11 @@
-//! `orberus setup`: the `claude` link and the `PATH` line.
+//! `orberus setup`: the `claude` link, the editors' wrapper and the `PATH`
+//! line.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use orberus_core::ide;
 use orberus_core::paths::Env;
 use orberus_core::shell;
 use orberus_core::tool;
@@ -37,49 +39,69 @@ pub(crate) fn path_missing_in(env: &Env) -> Vec<PathBuf> {
         .collect()
 }
 
-pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
-    let bin = env.bin_dir();
-    fs::create_dir_all(&bin).with_context(|| format!("cannot create {}", bin.display()))?;
-    fs::create_dir_all(env.profiles_dir())?;
+/// Puts this program at `link` under another name: the name it is started
+/// under is how it knows what to be (the shim, the wrapper). A link on Unix,
+/// a copy where links need special rights (Windows).
+pub(crate) fn install_link(link: &Path) -> Result<()> {
     let me = std::env::current_exe()?.canonicalize()?;
-
-    // One shim today. With a second tool, this block runs once per entry
-    // of `tool::ALL`.
-    let tool = &tool::CLAUDE;
+    if let Some(dir) = link.parent() {
+        fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    }
     #[cfg(unix)]
-    let link = {
-        let link = tool.shim_path(env);
-        match fs::remove_file(&link) {
+    {
+        match fs::remove_file(link) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => {
                 return Err(err).with_context(|| format!("cannot replace {}", link.display()))
             }
         }
-        std::os::unix::fs::symlink(&me, &link)
+        std::os::unix::fs::symlink(&me, link)
             .with_context(|| format!("cannot create {}", link.display()))?;
-        link
-    };
+    }
     #[cfg(not(unix))]
-    let link = {
-        let link = tool.shim_path(env);
-        fs::copy(&me, &link).with_context(|| format!("cannot create {}", link.display()))?;
-        link
-    };
+    {
+        fs::copy(&me, link).with_context(|| format!("cannot create {}", link.display()))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
+    let bin = env.bin_dir();
+    fs::create_dir_all(env.profiles_dir())?;
+
+    // One shim today. With a second tool, this block runs once per entry
+    // of `tool::ALL`.
+    let tool = &tool::CLAUDE;
+    let link = tool.shim_path(env);
+    install_link(&link)?;
+    // The wrapper is installed with it, so that turning it on in an editor
+    // later never points that editor to a file that is not there.
+    if tool.extension.is_some() {
+        install_link(&tool.wrapper_path(env))?;
+    }
 
     ui.success(&format!("Shim installed: {}", short_path(env, &link)));
     setup_path(ui, env, &bin)?;
 
     println!();
     ui.title("Next steps");
-    ui.commands(&[
+    let mut steps = vec![
         ("orberus add", "create a profile, step by step"),
         (
             "orberus rule add",
             "send a repository or a folder to a profile",
         ),
-        ("orberus doctor", "check the installation"),
-    ]);
+    ];
+    // Only for someone who has such an editor, and has not done it yet.
+    if !ide::skipping(env, tool).is_empty() {
+        steps.push((
+            "orberus ide on",
+            "use it in VS Code, Cursor and the like too",
+        ));
+    }
+    steps.push(("orberus doctor", "check the installation"));
+    ui.commands(&steps);
     Ok(0)
 }
 

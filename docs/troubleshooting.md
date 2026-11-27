@@ -47,6 +47,17 @@ nothing says so.
 `orberus setup` again: it adds the line to `~/.zprofile`. Installations made
 before version 0.1.5 only have it in `~/.zshrc`.
 
+### The Claude Code panel of my editor does not use the profile I expect
+
+In VS Code, Cursor and the other editors built on VS Code, the extension
+starts its own copy of Claude Code and never meets the shim. Run
+`orberus ide`: an editor shown as "skips Orberus" uses one account
+everywhere. `orberus ide on` sends it through Orberus; reload the editor's
+window afterwards.
+
+To see which profile a conversation got, ask Claude Code to run
+`echo "profile=$ORBERUS_SESSION"`. See [editors.md](editors.md).
+
 ### "real Claude Code is found" fails
 
 The shim found no other `claude` in your `PATH`. Install Claude Code, or tell
@@ -99,9 +110,10 @@ app again from the Finder or Spotlight: its window appears.
 
 - **A running session keeps its account.** The choice is made when Claude
   Code starts. Quit and start again in the right folder to change it.
-- **IDE extensions** that start their own copy of Claude Code, instead of the
-  `claude` in your `PATH`, do not go through the shim. Terminals inside an IDE
-  do.
+- **Editors**: the VS Code family needs `orberus ide on`, and JetBrains IDEs
+  go through the shim. Zed's own Claude agent is not handled. The wrapper was
+  tried in VS Code, not in each editor built on it. See
+  [editors.md](editors.md).
 - **Claude Desktop** accounts are not handled: it keeps the one account you
   logged it in to. Orberus only reads the plan usage it notes, for
   `orberus limits`.

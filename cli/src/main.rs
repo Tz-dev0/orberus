@@ -1,7 +1,8 @@
 //! `orberus`: the command line tool. When this same binary is started under
 //! the name `claude` (through the link created by `orberus setup`), it acts
 //! as the shim: it picks the account for the current folder, then hands over
-//! to the real Claude Code.
+//! to the real Claude Code. Under the name `claude-wrapper`, it does the
+//! same for an editor extension that starts its own copy of Claude Code.
 
 mod commands;
 mod shim;
@@ -20,7 +21,8 @@ use orberus_core::tool;
 use commands::clean::clean;
 use commands::disk::disk_usage;
 use commands::doctor::doctor;
-use commands::limits::{limits_command, statusline, Switch};
+use commands::ide::ide_command;
+use commands::limits::{limits_command, statusline};
 use commands::profiles::{add, list, pin, remove, set_default};
 use commands::retention::retention_command;
 use commands::rules::{rule_add, rule_list, rule_remove};
@@ -28,7 +30,8 @@ use commands::setup::setup;
 use commands::status::{overview, status};
 use commands::uninstall::uninstall_command;
 use commands::usage::usage_command;
-use shim::{run_tool, shim};
+use commands::Switch;
+use shim::{run_tool, shim, wrapper};
 use ui::{Style, Ui};
 
 const EXAMPLES: &str = "\
@@ -168,6 +171,15 @@ enum Command {
         #[command(subcommand)]
         command: RuleCommand,
     },
+    /// Show your editors, or send their Claude Code extension through Orberus
+    Ide {
+        /// `on` or `off`. Without it, the editors are listed
+        #[arg(value_enum)]
+        switch: Option<Switch>,
+        /// One editor, by the name it is listed under. Without it, every
+        /// editor found
+        editor: Option<String>,
+    },
     /// Check that everything is wired correctly
     Doctor,
     /// Remove Orberus from this Mac. Profiles are kept unless you ask
@@ -217,19 +229,24 @@ fn main() -> ExitCode {
     let mut args = std::env::args_os();
     let invoked = args.next().unwrap_or_default();
     // Started under a tool's name (the `claude` link made by `setup`), this
-    // program is that tool's shim; under its own name, the command line.
+    // program is that tool's shim; under the name of a tool's wrapper, the
+    // program an editor extension starts in place of its own copy of the
+    // tool; under its own name, the command line.
     let as_tool = tool::for_command(&invoked);
-    let as_shim = as_tool.is_some();
+    let as_wrapper = tool::for_wrapper(&invoked);
+    let as_shim = as_tool.is_some() || as_wrapper.is_some();
 
-    let result = match as_tool {
-        Some(tool) => shim(tool, args.collect()),
-        None => cli(),
+    let result = match (as_tool, as_wrapper) {
+        (Some(tool), _) => shim(tool, args.collect()),
+        (None, Some(tool)) => wrapper(tool, args.collect()),
+        (None, None) => cli(),
     };
     match result {
         Ok(code) => ExitCode::from(code.clamp(0, 255) as u8),
         Err(error) => {
-            // The shim names itself, since the user typed `claude` and would
-            // not know where the message comes from otherwise.
+            // The shim names itself, since the user typed `claude` (or
+            // opened an editor) and would not know where the message comes
+            // from otherwise.
             let prefix = if as_shim { "orberus:" } else { "error:" };
             eprintln!("{} {error:#}", ui::paint_stderr(prefix, Style::Red));
             ExitCode::from(2)
@@ -288,6 +305,7 @@ fn cli() -> Result<i32> {
             RuleCommand::List => rule_list(&ui, &env),
             RuleCommand::Remove { number, yes } => rule_remove(&ui, &env, number, yes),
         },
+        Command::Ide { switch, editor } => ide_command(&ui, &env, switch, editor),
         Command::Doctor => doctor(&ui, &env),
         Command::Uninstall { purge, yes } => uninstall_command(&ui, &env, purge, yes),
     }

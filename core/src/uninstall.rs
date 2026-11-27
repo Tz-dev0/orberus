@@ -1,6 +1,7 @@
 //! Undoing what `orberus setup` and the install commands put on the
-//! machine: the shim, the `PATH` line in the shell config, the binary, the
-//! menu bar app and, on request only, the profiles themselves.
+//! machine: the shim, the editors' wrapper, the `PATH` line in the shell
+//! config, the binary, the menu bar app and, on request only, the profiles
+//! themselves.
 //!
 //! Each step is a small function that says what it did, so the CLI can
 //! report it line by line. `~/.claude` is never touched by any of them.
@@ -138,6 +139,24 @@ pub fn remove_shim(env: &Env) -> Result<bool> {
     Ok(true)
 }
 
+/// Removes the wrapper that editor extensions start, and its folder.
+/// Returns false when there was none.
+///
+/// To be called after [`crate::ide::turn_off`] for every editor: a setting
+/// left behind would name a file that is gone, and the extension would no
+/// longer start.
+pub fn remove_wrapper(env: &Env) -> Result<bool> {
+    let wrapper = tool::CLAUDE.wrapper_path(env);
+    let existed = wrapper.symlink_metadata().is_ok();
+    if existed {
+        fs::remove_file(&wrapper)
+            .with_context(|| format!("cannot remove {}", wrapper.display()))?;
+    }
+    // Only an empty folder goes, as for `bin` below.
+    let _ = fs::remove_dir(env.ide_dir());
+    Ok(existed)
+}
+
 /// Where the running `orberus` is, and whether `uninstall` may remove it.
 #[derive(Debug)]
 pub enum Binary {
@@ -189,6 +208,19 @@ pub fn remove_launchers(env: &Env) -> Result<bool> {
     Ok(true)
 }
 
+/// The folders where apps are installed: the one named by `ORBERUS_APPS`
+/// when it is set (tests), the usual two on a Mac, none elsewhere.
+pub(crate) fn app_folders(env: &Env) -> Vec<PathBuf> {
+    match std::env::var_os(APPS_ENV) {
+        Some(folder) if !folder.is_empty() => vec![PathBuf::from(folder)],
+        _ if cfg!(target_os = "macos") => vec![
+            PathBuf::from("/Applications"),
+            env.home.join("Applications"),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 /// The copies of the menu bar app that are installed.
 ///
 /// A folder named like the app is only counted when its Info.plist carries
@@ -197,14 +229,7 @@ pub fn installed_apps(env: &Env) -> Vec<PathBuf> {
     if !cfg!(target_os = "macos") {
         return Vec::new();
     }
-    let folders = match std::env::var_os(APPS_ENV) {
-        Some(folder) if !folder.is_empty() => vec![PathBuf::from(folder)],
-        _ => vec![
-            PathBuf::from("/Applications"),
-            env.home.join("Applications"),
-        ],
-    };
-    folders
+    app_folders(env)
         .into_iter()
         .map(|folder| folder.join(APP_NAME))
         .filter(|app| {

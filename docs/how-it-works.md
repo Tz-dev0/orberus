@@ -65,6 +65,33 @@ stops. It never starts Claude Code with a fallback account.
 With no config file at all, the shim changes nothing: `claude` runs as if
 Orberus was not installed.
 
+## The wrapper, for editor extensions
+
+The Claude Code extension of VS Code, Cursor and the other editors built on
+VS Code carries its own copy of Claude Code and starts it directly, without
+looking in your `PATH`. The shim never runs there.
+
+The extension has a setting for this, `claudeCode.claudeProcessWrapper`: a
+program it starts in place of its copy, with the copy's path as the first
+argument. `orberus setup` installs such a program,
+`~/.orberus/ide/claude-wrapper`: one more link to the `orberus` binary, which
+behaves as the wrapper when it is started under that name. `orberus ide on`
+writes the setting in your editors.
+
+The wrapper does what the shim does, with two differences:
+
+- it starts the copy it was handed, not the `claude` found in your `PATH`
+  (which it falls back to when the extension has no copy of its own);
+- it always chooses from the folder the editor has open. It has no
+  "inside a session" shortcut, since only an editor starts it.
+
+It is kept out of `~/.orberus/bin` on purpose: that folder is in your `PATH`,
+and a second name starting with `claude` there would get in the way each time
+you type `claude`.
+
+JetBrains IDEs do not need it: their plugin runs the `claude` command, which
+is the shim. See [editors.md](editors.md).
+
 ## Logins
 
 On macOS, Claude Code stores each login in the keychain, under a name that
@@ -96,10 +123,12 @@ Claude Code's own files.
 |---|---|
 | `~/.orberus/config.toml` | Your profiles and rules |
 | `~/.orberus/bin/` | `orberus` and the `claude` shim |
+| `~/.orberus/ide/` | The wrapper that editor extensions start |
 | `~/.orberus/profiles/<name>/` | The Claude Code folder of a profile. Claude Code fills it |
 | `~/.orberus/run/` | Small launch scripts written by the menu bar app |
 | `<profile folder>/settings.json` | Only the `cleanupPeriodDays` key, when you use `orberus retention` |
 | `.orberus-profile` in a folder | When you use `orberus use` |
 | Your shell config | One `PATH` line, if you accept it during `setup` |
+| Your editors' `settings.json` | One setting, `claudeCode.claudeProcessWrapper`, when you run `orberus ide on` |
 
 It reads, and never edits, `~/.orberus/team.toml`.
