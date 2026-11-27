@@ -8,6 +8,7 @@ use orberus_core::retention::{self, Retention};
 use orberus_core::tool;
 use orberus_core::view::short_path;
 
+use crate::commands::setup::path_missing_in;
 use crate::ui::Ui;
 
 pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
@@ -45,6 +46,19 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         &format!(
             "put {} first in your PATH (orberus setup can do it), then open a new terminal",
             short_path(env, &env.bin_dir())
+        ),
+    );
+
+    // A terminal can be fine while apps and scripts skip the shim: they
+    // start a shell that reads other files.
+    let missing = path_missing_in(env);
+    let names: Vec<String> = missing.iter().map(|file| short_path(env, file)).collect();
+    check(
+        missing.is_empty(),
+        "apps and scripts get the shim too",
+        &format!(
+            "no PATH line for the shim in {}: run orberus setup",
+            names.join(" and ")
         ),
     );
 

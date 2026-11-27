@@ -75,8 +75,8 @@ Uninstall Orberus? [y/N]
 What it removes:
 
 - the `claude` shim, so `claude` is the real Claude Code again;
-- the `PATH` line that `setup` wrote in `~/.zshrc`, `~/.bash_profile` or
-  `~/.bashrc`. A line you wrote yourself in another way is left alone, and
+- the `PATH` line that `setup` wrote in `~/.zshrc`, `~/.zprofile`,
+  `~/.bash_profile` or `~/.bashrc`. A line you wrote yourself in another way is left alone, and
   you are told about it;
 - `orberus` itself, when it sits in `~/.orberus/bin`. Installed
   another way (`cargo install`), it tells you how to remove it;
