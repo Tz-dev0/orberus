@@ -15,7 +15,7 @@ For a security problem, see [SECURITY.md](SECURITY.md) instead.
 You need [Rust](https://rustup.rs). The menu bar app also needs Node.js.
 
 ```sh
-cargo build                 # the CLI
+cargo build                 # the core and the command
 cargo test                  # unit tests, and end-to-end tests with a fake claude
 
 cd app
@@ -28,7 +28,7 @@ To try your build without touching your own setup, point it at a throwaway
 folder:
 
 ```sh
-ORBERUS_HOME=/tmp/cp-test cargo run -- add work
+ORBERUS_HOME=/tmp/orberus-test cargo run -- add work
 ```
 
 `scripts/smoke.sh <path to orberus>` runs the everyday commands in an empty
@@ -38,10 +38,11 @@ folder and prints how each one ends.
 
 | Path | Content |
 |---|---|
-| `src/` | The core and the CLI. `resolve.rs` picks the profile, `launch.rs` finds and starts the real Claude Code, `main.rs` is the CLI and the shim |
-| `tests/shim.rs` | End-to-end tests |
+| `core/` | The core, a library with no interface: everything Orberus knows and does. `config.rs` reads and writes the config, `resolve.rs` picks the profile, `launch.rs` finds and starts the real Claude Code, `tool.rs` describes the tools it manages |
+| `cli/` | The `orberus` command, and the shim when it is started as `claude`. `main.rs` holds the commands, `ui.rs` how they are printed |
+| `cli/tests/shim.rs` | End-to-end tests, against a fake `claude` |
 | `app/src/` | The app's interface, in TypeScript without a framework |
-| `app/src-tauri/` | The app's Rust side (Tauri 2). It is a separate crate, so the CLI does not pull Tauri's dependencies |
+| `app/src-tauri/` | The app's Rust side (Tauri 2). It is kept out of the workspace, so the command does not pull Tauri's dependencies |
 | `scripts/` | Packaging and smoke test |
 | `docs/` | The documentation |
 
@@ -83,12 +84,18 @@ A few rules the project holds to:
   way unless you tried it or the official documentation says so.
 - Code, comments and messages are in English.
 
+The command and the app are two faces of the same core. A rule, a check
+or a file format goes in `core/`, so both get it; `cli/` and `app/` only
+ask the core and show the answer. The core never reads global state: it is
+handed an `Env` (home folder, data folder), which is what lets its tests run
+against a temporary folder.
+
 The project is for people with several legitimate, paid accounts. Features
 that rotate accounts to get around usage limits will not be merged.
 
 ## Releasing (maintainers)
 
-Set the version in `Cargo.toml`, `app/src-tauri/Cargo.toml`,
+Set the version in `Cargo.toml` (once, for the core and the command), `app/src-tauri/Cargo.toml`,
 `app/src-tauri/tauri.conf.json` and `app/package.json`, run `cargo build` in
 both crates so the lock files follow, commit, then push a tag with the same
 number:

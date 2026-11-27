@@ -16,16 +16,16 @@ use std::time::SystemTime;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 
-use orberus::config::{self, RuleSource};
-use orberus::disk;
-use orberus::paths::Env;
-use orberus::purge;
-use orberus::resolve::Reason;
-use orberus::retention::{self, Retention};
-use orberus::rules;
-use orberus::sessions;
-use orberus::usage::{self, Verdict};
-use orberus::view;
+use orberus_core::config::{self, RuleSource};
+use orberus_core::disk;
+use orberus_core::paths::Env;
+use orberus_core::purge;
+use orberus_core::resolve::Reason;
+use orberus_core::retention::{self, Retention};
+use orberus_core::rules;
+use orberus_core::sessions;
+use orberus_core::usage::{self, Verdict};
+use orberus_core::view;
 
 // `Serialize` lets Tauri turn these structs into JSON for the TypeScript
 // side. `camelCase` gives the field names JavaScript expects (`isDefault`).
@@ -413,7 +413,7 @@ pub fn usage(env: &Env) -> Result<UsageOverview> {
 }
 
 fn shim_path(env: &Env) -> PathBuf {
-    orberus::tool::CLAUDE.shim_path(env)
+    orberus_core::tool::CLAUDE.shim_path(env)
 }
 
 pub fn overview(env: &Env) -> Result<Overview> {
@@ -432,7 +432,7 @@ pub fn overview(env: &Env) -> Result<Overview> {
         // `None` is the native profile: the tool's own default folder.
         let dir = config::profile_dir(env, config, name)?;
         let native = dir.is_none();
-        let dir = dir.unwrap_or_else(|| orberus::tool::CLAUDE.native_dir(env));
+        let dir = dir.unwrap_or_else(|| orberus_core::tool::CLAUDE.native_dir(env));
         profiles.push(ProfileView {
             name: name.clone(),
             account: view::account(env, config, name),
@@ -787,7 +787,7 @@ pub fn write_launcher(env: &Env, name: &str, folder: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use orberus::config::{Config, Profile, Rule};
+    use orberus_core::config::{Config, Profile, Rule};
 
     /// A throwaway home with two profiles and one locked rule.
     fn world() -> (tempfile::TempDir, Env) {

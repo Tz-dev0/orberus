@@ -14,19 +14,19 @@ use std::process::ExitCode;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Parser, Subcommand};
 
-use orberus::config::{self, Config, Loaded, Rule};
-use orberus::disk;
-use orberus::launch::{self, Target};
-use orberus::paths::Env;
-use orberus::purge;
-use orberus::resolve::{self, REPO_FILE};
-use orberus::retention::{self, Retention};
-use orberus::rules;
-use orberus::sessions::{self, Session};
-use orberus::tool::{self, Tool};
-use orberus::uninstall::{self, Binary};
-use orberus::usage::{self, Verdict};
-use orberus::view::{account, location, short_path, when};
+use orberus_core::config::{self, Config, Loaded, Rule};
+use orberus_core::disk;
+use orberus_core::launch::{self, Target};
+use orberus_core::paths::Env;
+use orberus_core::purge;
+use orberus_core::resolve::{self, REPO_FILE};
+use orberus_core::retention::{self, Retention};
+use orberus_core::rules;
+use orberus_core::sessions::{self, Session};
+use orberus_core::tool::{self, Tool};
+use orberus_core::uninstall::{self, Binary};
+use orberus_core::usage::{self, Verdict};
+use orberus_core::view::{account, location, short_path, when};
 
 use ui::{Cell, Style, Ui};
 

@@ -20,7 +20,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Rect, WebviewWindow, WindowEvent};
 
-use orberus::paths::Env;
+use orberus_core::paths::Env;
 use tauri_plugin_dialog::DialogExt;
 
 const WINDOW: &str = "main";
@@ -202,7 +202,7 @@ fn remove_rule(
     profile: String,
     locked: bool,
 ) -> Result<(), String> {
-    let shown = orberus::config::Rule {
+    let shown = orberus_core::config::Rule {
         path,
         git_remote,
         profile,

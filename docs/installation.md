@@ -107,7 +107,7 @@ You need [Rust](https://rustup.rs). For the app, also Node.js.
 ```sh
 git clone https://github.com/Tz-dev0/orberus.git
 cd orberus
-cargo install --path .      # installs orberus in ~/.cargo/bin
+cargo install --path cli    # installs orberus in ~/.cargo/bin
 orberus setup
 ```
 
