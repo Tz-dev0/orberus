@@ -1,4 +1,4 @@
-//! Core of claude-profiles: configuration, rules, profile resolution and
+//! Core of orberus: configuration, rules, profile resolution and
 //! launching the real `claude` binary. The CLI and the shim are thin layers
 //! on top of this library, and a future menu bar app will reuse it as is.
 

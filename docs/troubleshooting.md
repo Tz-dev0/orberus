@@ -3,8 +3,8 @@
 Start with:
 
 ```sh
-cprofile doctor
-cprofile status
+orberus doctor
+orberus status
 ```
 
 `doctor` checks the installation and tells you how to fix each problem.
@@ -14,31 +14,31 @@ cprofile status
 
 ### `claude` does not use the profile I expect
 
-Run `cprofile status` in that folder and read the "Why" line.
+Run `orberus status` in that folder and read the "Why" line.
 
-- **"default profile"**: no rule matched. Check `cprofile rule list`. For a
+- **"default profile"**: no rule matched. Check `orberus rule list`. For a
   git remote rule, the pattern is compared with `host/organisation/repository`
   in lower case; see [rules.md](rules.md#by-git-remote).
-- **"file …/.claude-profile"**: the folder, or a parent, was pinned with
-  `cprofile use`. Delete that file to undo.
+- **"file …/.orberus-profile"**: the folder, or a parent, was pinned with
+  `orberus use`. Delete that file to undo.
 - **"locked rule …"**: a locked rule covers the folder, and nothing overrides
   it. If it comes from `team.toml`, it was set by your company.
 
 ### The shim is installed, but `claude` is not the shim
 
-`cprofile doctor` reports "`claude` in your PATH is the shim" as failed when
+`orberus doctor` reports "`claude` in your PATH is the shim" as failed when
 another `claude` comes first in your `PATH`. Make sure this line is in your
 shell config, after the lines that add other folders, then open a new
 terminal:
 
 ```sh
-export PATH="$HOME/.claude-profiles/bin:$PATH"
+export PATH="$HOME/.orberus/bin:$PATH"
 ```
 
 ### "real Claude Code is found" fails
 
 The shim found no other `claude` in your `PATH`. Install Claude Code, or tell
-`cprofile` where it is, in `~/.claude-profiles/config.toml`:
+`orberus` where it is, in `~/.orberus/config.toml`:
 
 ```toml
 claude_bin = "/full/path/to/claude"
@@ -49,7 +49,7 @@ claude_bin = "/full/path/to/claude"
 A new profile starts empty. Log in once:
 
 ```sh
-cprofile run --profile work
+orberus run --profile work
 ```
 
 then type `/login` in Claude Code.
@@ -57,7 +57,7 @@ then type `/login` in Claude Code.
 ### `claude` stops with "refused: this folder is locked…"
 
 A locked rule covers the folder and you asked for another profile, with
-`--profile` or `CLAUDE_PROFILE`. This is the guard rail working. Drop the
+`--profile` or `ORBERUS_PROFILE`. This is the guard rail working. Drop the
 explicit choice, or change the rule if it is yours.
 
 ### `doctor` says `CLAUDE_CONFIG_DIR` is set by something else
@@ -75,7 +75,7 @@ Settings, under Privacy & Security.
 ### Old conversations disappeared
 
 Claude Code deletes conversations after 30 days by default. Keep them longer
-with `cprofile retention <name> <days>`; `cprofile doctor` reminds you of the
+with `orberus retention <name> <days>`; `orberus doctor` reminds you of the
 profiles that are still on the default.
 
 ### I cannot find the menu bar icon
@@ -106,10 +106,10 @@ app again from the Finder or Spotlight: its window appears.
 
 ## Still stuck
 
-[Open an issue](https://github.com/Tz-dev0/claude-profiles/issues) with:
+[Open an issue](https://github.com/Tz-dev0/orberus/issues) with:
 
-- the output of `cprofile doctor` and `cprofile status`;
-- `cprofile --version` and `claude --version`;
+- the output of `orberus doctor` and `orberus status`;
+- `orberus --version` and `claude --version`;
 - your macOS version.
 
 Remove account addresses and private paths before you post.

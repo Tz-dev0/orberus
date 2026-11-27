@@ -443,30 +443,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0921b3876b3a1df8a1c9f912e7f94342458022c2e84288015893d83c4d62a79"
 
 [[package]]
-name = "claude-profiles"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "clap",
- "serde",
- "serde_json",
- "toml 0.8.23",
-]
-
-[[package]]
-name = "claude-profiles-app"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "claude-profiles",
- "serde",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tempfile",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2407,6 +2383,30 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "orberus"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "orberus-app"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "orberus",
+ "serde",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tempfile",
+]
 
 [[package]]
 name = "pango"

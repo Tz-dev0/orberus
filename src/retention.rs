@@ -115,7 +115,7 @@ pub fn set(env: &Env, config: &Config, name: &str, days: u64) -> Result<()> {
     }
     // Written next to the file, then moved over it: a crash in the middle
     // leaves the old settings whole instead of half a file.
-    let draft = file.with_extension("json.cprofile-tmp");
+    let draft = file.with_extension("json.orberus-tmp");
     fs::write(&draft, text).with_context(|| format!("cannot write {}", draft.display()))?;
     fs::rename(&draft, &file).with_context(|| format!("cannot write {}", file.display()))?;
     Ok(())
@@ -130,7 +130,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let home = temp.path().to_path_buf();
         let env = Env {
-            root: home.join(".claude-profiles"),
+            root: home.join(".orberus"),
             home,
         };
         let mut config = Config::default();

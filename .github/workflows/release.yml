@@ -44,4 +44,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --verify-tag --generate-notes --title "Claude Profiles ${GITHUB_REF_NAME#v}"
+            --verify-tag --generate-notes --title "Orberus ${GITHUB_REF_NAME#v}"

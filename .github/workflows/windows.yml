@@ -1,5 +1,5 @@
 # Windows is not supported yet. This workflow shows how far the CLI gets
-# there: it runs the unit tests, builds cprofile.exe and tries the everyday
+# there: it runs the unit tests, builds orberus.exe and tries the everyday
 # commands in an empty home. The .exe is kept as an artifact for 14 days.
 name: Windows
 
@@ -27,12 +27,12 @@ jobs:
       - name: Try the commands
         # Git Bash ships with the Windows runner.
         shell: bash
-        run: scripts/smoke.sh target/release/cprofile.exe
+        run: scripts/smoke.sh target/release/orberus.exe
 
-      - name: Keep cprofile.exe
+      - name: Keep orberus.exe
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: cprofile-windows
-          path: target/release/cprofile.exe
+          name: orberus-windows
+          path: target/release/orberus.exe
           retention-days: 14

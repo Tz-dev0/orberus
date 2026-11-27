@@ -223,7 +223,7 @@ pub fn move_to_trash(session: &Session, trash: &Path, now: SystemTime) -> Result
     }
     fs::create_dir_all(&holder).with_context(|| format!("cannot create {}", holder.display()))?;
     let note = format!(
-        "Moved here by Claude Profiles (cprofile clean).\n\
+        "Moved here by Orberus (orberus clean).\n\
          To restore this conversation, move the other items of this folder back into:\n\
          {}\n",
         session.project_dir.display()

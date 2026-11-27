@@ -478,7 +478,7 @@ pub fn profile_usage(env: &Env, loaded: &Loaded, name: &str, days: u64) -> Resul
 /// What today's rules say about a folder that was used with a profile.
 #[derive(Debug, PartialEq)]
 pub enum Verdict {
-    /// A rule or a `.claude-profile` file sends this folder to the profile.
+    /// A rule or a `.orberus-profile` file sends this folder to the profile.
     Covered(Reason),
     /// Nothing names this folder: it uses the profile only because it is
     /// the default. Where work done with the wrong account usually hides.

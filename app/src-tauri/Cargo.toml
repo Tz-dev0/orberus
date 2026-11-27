@@ -1,8 +1,8 @@
 [package]
-name = "claude-profiles-app"
+name = "orberus-app"
 version = "0.1.2"
 edition = "2021"
-description = "Menu bar app for Claude Profiles"
+description = "Menu bar app for Orberus"
 license = "MIT"
 publish = false
 
@@ -16,7 +16,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # The core shared with the CLI: config, rules, resolution, display helpers.
-claude-profiles = { path = "../.." }
+orberus = { path = "../.." }
 # `tray-icon` for the menu bar icon, `image-png` to load that icon from a PNG.
 # `macos-private-api` allows a transparent window, needed for the frosted
 # panel with rounded corners. It rules out the Mac App Store, which is not a

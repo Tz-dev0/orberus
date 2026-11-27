@@ -13,9 +13,9 @@ use crate::paths::Env;
 /// Set on every process we start. A `claude` started from inside a running
 /// session inherits it and keeps the session's account instead of resolving
 /// again from its own folder.
-pub const SESSION_ENV: &str = "CLAUDE_PROFILES_SESSION";
-/// Explicit choice for one command: `CLAUDE_PROFILE=work claude`.
-pub const EXPLICIT_ENV: &str = "CLAUDE_PROFILE";
+pub const SESSION_ENV: &str = "ORBERUS_SESSION";
+/// Explicit choice for one command: `ORBERUS_PROFILE=work claude`.
+pub const EXPLICIT_ENV: &str = "ORBERUS_PROFILE";
 pub const CONFIG_DIR_ENV: &str = "CLAUDE_CONFIG_DIR";
 
 pub enum Target<'a> {

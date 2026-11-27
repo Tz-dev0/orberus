@@ -1,4 +1,4 @@
-//! Undoing what `cprofile setup` and the install commands put on the
+//! Undoing what `orberus setup` and the install commands put on the
 //! machine: the shim, the `PATH` line in the shell config, the binary, the
 //! menu bar app and, on request only, the profiles themselves.
 //!
@@ -14,15 +14,15 @@ use crate::paths::Env;
 
 /// The comment `setup` writes above its `PATH` line. `uninstall` looks for
 /// the same text, which is why it lives in one place.
-pub const PATH_COMMENT: &str = "# cprofile: the claude shim must come before the real claude";
+pub const PATH_COMMENT: &str = "# orberus: the claude shim must come before the real claude";
 
 /// Where the menu bar app is looked for, instead of the usual Applications
 /// folders. Used by tests, so that they never see the real ones.
-pub const APPS_ENV: &str = "CLAUDE_PROFILES_APPS";
+pub const APPS_ENV: &str = "ORBERUS_APPS";
 
 /// The identifier of the menu bar app, as written in its Info.plist.
-const APP_IDENTIFIER: &str = "com.github.tzdev0.claudeprofiles";
-const APP_NAME: &str = "Claude Profiles.app";
+const APP_IDENTIFIER: &str = "com.github.tzdev0.orberus";
+const APP_NAME: &str = "Orberus.app";
 
 #[cfg(unix)]
 const SHIM_NAME: &str = "claude";
@@ -110,7 +110,7 @@ pub fn clean_shell_files(env: &Env) -> Result<ShellFiles> {
             }
             None => text,
         };
-        if text.contains(".claude-profiles/bin") {
+        if text.contains(".orberus/bin") {
             result.still_mention.push(file);
         }
     }
@@ -142,7 +142,7 @@ pub fn remove_shim(env: &Env) -> Result<bool> {
     Ok(true)
 }
 
-/// Where the running `cprofile` is, and whether `uninstall` may remove it.
+/// Where the running `orberus` is, and whether `uninstall` may remove it.
 #[derive(Debug)]
 pub enum Binary {
     /// In our own `bin` folder, put there by the install command.
@@ -227,7 +227,7 @@ pub fn trash_app(env: &Env, app: &Path) -> Result<PathBuf> {
     // The Trash may already hold an older copy: pick a free name.
     let mut number = 2;
     while target.symlink_metadata().is_ok() {
-        target = trash.join(format!("Claude Profiles {number}.app"));
+        target = trash.join(format!("Orberus {number}.app"));
         number += 1;
     }
     fs::rename(app, &target)
@@ -238,7 +238,7 @@ pub fn trash_app(env: &Env, app: &Path) -> Result<PathBuf> {
 /// The folder that holds the config and the profiles, or why it must not be
 /// deleted as a whole.
 ///
-/// `CLAUDE_PROFILES_HOME` can point anywhere, so this is checked before
+/// `ORBERUS_HOME` can point anywhere, so this is checked before
 /// `delete_data` removes the folder: never the home folder or one above it,
 /// never `~/.claude` or a folder that holds it.
 pub fn data_folder(env: &Env) -> Result<PathBuf> {
@@ -247,7 +247,7 @@ pub fn data_folder(env: &Env) -> Result<PathBuf> {
     // `starts_with` compares whole path components: `/a/b` starts with `/a`.
     if env.home.starts_with(&root) || claude.starts_with(&root) {
         bail!(
-            "refusing to delete {}: it holds more than Claude Profiles",
+            "refusing to delete {}: it holds more than Orberus",
             root.display()
         );
     }
@@ -272,14 +272,14 @@ mod tests {
     fn env(home: &str) -> Env {
         Env {
             home: PathBuf::from(home),
-            root: PathBuf::from(home).join(".claude-profiles"),
+            root: PathBuf::from(home).join(".orberus"),
         }
     }
 
     #[test]
     fn removes_the_lines_setup_wrote_and_nothing_else() {
         let env = env("/home/me");
-        let before = "export EDITOR=vim\n\n# cprofile: the claude shim must come before the real claude\nexport PATH=\"$HOME/.claude-profiles/bin:$PATH\"\nalias ll='ls -l'\n";
+        let before = "export EDITOR=vim\n\n# orberus: the claude shim must come before the real claude\nexport PATH=\"$HOME/.orberus/bin:$PATH\"\nalias ll='ls -l'\n";
         let after = strip_path_lines(before, &path_lines(&env)).unwrap();
         assert_eq!(after, "export EDITOR=vim\nalias ll='ls -l'\n");
     }
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn removes_the_absolute_spelling_too() {
         let env = env("/home/me");
-        let before = "export PATH=\"/home/me/.claude-profiles/bin:$PATH\"\n";
+        let before = "export PATH=\"/home/me/.orberus/bin:$PATH\"\n";
         assert_eq!(strip_path_lines(before, &path_lines(&env)).unwrap(), "");
     }
 
@@ -295,17 +295,14 @@ mod tests {
     fn leaves_a_file_without_our_lines_alone() {
         let env = env("/home/me");
         // Written by hand, in another way: not ours to remove.
-        let text = "PATH=$HOME/.claude-profiles/bin:$PATH\nexport PATH\n";
+        let text = "PATH=$HOME/.orberus/bin:$PATH\nexport PATH\n";
         assert!(strip_path_lines(text, &path_lines(&env)).is_none());
     }
 
     #[test]
     fn refuses_a_data_folder_that_holds_the_home_or_claude_folder() {
         let mut env = env("/home/me");
-        assert_eq!(
-            data_folder(&env).unwrap(),
-            Path::new("/home/me/.claude-profiles")
-        );
+        assert_eq!(data_folder(&env).unwrap(), Path::new("/home/me/.orberus"));
         env.root = PathBuf::from("/home/me");
         assert!(data_folder(&env).is_err());
         env.root = PathBuf::from("/home");

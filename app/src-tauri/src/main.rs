@@ -1,8 +1,8 @@
-//! Claude Profiles in the menu bar: an icon, and a small window under it
+//! Orberus in the menu bar: an icon, and a small window under it
 //! that lists the profiles and starts Claude Code in one of them.
 //!
 //! This file only wires things to Tauri. What is shown and done lives in
-//! `data.rs`, on top of the core shared with the `cprofile` CLI.
+//! `data.rs`, on top of the core shared with the `orberus` CLI.
 
 // A release build on Windows would otherwise open a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -20,7 +20,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, Rect, WebviewWindow, WindowEvent};
 
-use claude_profiles::paths::Env;
+use orberus::paths::Env;
 use tauri_plugin_dialog::DialogExt;
 
 const WINDOW: &str = "main";
@@ -188,7 +188,7 @@ fn remove_rule(
     profile: String,
     locked: bool,
 ) -> Result<(), String> {
-    let shown = claude_profiles::config::Rule {
+    let shown = orberus::config::Rule {
         path,
         git_remote,
         profile,
@@ -248,7 +248,7 @@ fn open_config() -> Result<(), String> {
     run(|env| {
         let file = env.config_file();
         if !file.exists() {
-            bail!("no config yet: create a profile with `cprofile add` in a terminal");
+            bail!("no config yet: create a profile with `orberus add` in a terminal");
         }
         open(&["-t".as_ref(), file.as_os_str()])
     })
@@ -397,7 +397,7 @@ fn main() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // Right click on the icon: a one-line menu to quit.
-            let quit = MenuItem::with_id(app, "quit", "Quit Claude Profiles", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Orberus", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
             // `include_bytes!` puts the PNG inside the binary at build time.
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
@@ -407,7 +407,7 @@ fn main() {
                 // A template icon is drawn by macOS in the menu bar color,
                 // so it stays readable in light and dark mode.
                 .icon_as_template(true)
-                .tooltip("Claude Profiles")
+                .tooltip("Orberus")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
@@ -469,7 +469,7 @@ fn main() {
         })
         // `build` + `run` instead of `run` alone, to receive app events.
         .build(tauri::generate_context!())
-        .expect("cannot start Claude Profiles")
+        .expect("cannot start Orberus")
         .run(|app, event| {
             // Sent by macOS when the app is opened while already running.
             #[cfg(target_os = "macos")]

@@ -239,7 +239,7 @@ function preview(): Api {
       {
         name: "work",
         account: "me@acme.example",
-        location: "~/.claude-profiles/profiles/work",
+        location: "~/.orberus/profiles/work",
         isDefault: false,
         rules: 2,
         teamRules: 1,
@@ -250,7 +250,7 @@ function preview(): Api {
       {
         name: "client",
         account: null,
-        location: "~/.claude-profiles/profiles/client",
+        location: "~/.orberus/profiles/client",
         isDefault: false,
         rules: 0,
         teamRules: 0,
@@ -284,7 +284,7 @@ function preview(): Api {
           share: "28%",
           projects: [
             { folder: "~/code/blog", share: "79%", state: "default", note: "no rule", why: "No rule names this project: it uses perso only as the default", flagged: true },
-            { folder: "~/code/dotfiles", share: "21%", state: "covered", note: "", why: "Sent to perso by pinned with .claude-profile", flagged: false },
+            { folder: "~/code/dotfiles", share: "21%", state: "covered", note: "", why: "Sent to perso by pinned with .orberus-profile", flagged: false },
           ],
           moreProjects: 0,
           talks: [
@@ -332,7 +332,7 @@ function preview(): Api {
       state.profiles.push({
         name,
         account: reuseLogin ? "me@example.com" : null,
-        location: reuseLogin ? "~/.claude" : `~/.claude-profiles/profiles/${name}`,
+        location: reuseLogin ? "~/.claude" : `~/.orberus/profiles/${name}`,
         isDefault: state.profiles.length === 0,
         rules: 0,
         teamRules: 0,

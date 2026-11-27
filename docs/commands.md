@@ -1,7 +1,7 @@
 # Commands
 
-`cprofile` alone shows the profile used in the current folder, then the list
-of commands. `cprofile <command> --help` describes one command.
+`orberus` alone shows the profile used in the current folder, then the list
+of commands. `orberus <command> --help` describes one command.
 
 Most commands ask for what you leave out when you run them in a terminal: a
 numbered list to pick a profile, a yes/no question before removing something.
@@ -19,17 +19,17 @@ The outputs below are shortened examples.
 ## setup
 
 ```sh
-cprofile setup
+orberus setup
 ```
 
-Installs the `claude` shim in `~/.claude-profiles/bin` and offers to add that
+Installs the `claude` shim in `~/.orberus/bin` and offers to add that
 folder to your `PATH` (zsh and bash). Safe to run again, for instance after
 an update.
 
 ## doctor
 
 ```sh
-cprofile doctor
+orberus doctor
 ```
 
 Checks the installation and says how to fix what is wrong. It changes nothing.
@@ -45,7 +45,7 @@ Checks the installation and says how to fix what is wrong. It changes nothing.
 ✓ every rule points to an existing profile
 ✓ CLAUDE_CONFIG_DIR is not set by something else
 ! 'work' keeps its conversations 30 days (Claude Code default)
-  older ones are deleted by Claude Code; to keep them: cprofile retention work 365
+  older ones are deleted by Claude Code; to keep them: orberus retention work 365
 
 ✓ Everything is in place
 ```
@@ -55,21 +55,21 @@ Lines that start with `!` are advice, not problems.
 ## uninstall
 
 ```sh
-cprofile uninstall [--purge] [--yes]
+orberus uninstall [--purge] [--yes]
 ```
 
-Removes Claude Profiles from this Mac. It lists what it is about to do, then
+Removes Orberus from this Mac. It lists what it is about to do, then
 asks.
 
 ```text
-$ cprofile uninstall
+$ orberus uninstall
 This removes
   the claude shim: `claude` is the real Claude Code again
   the PATH line that setup added to your shell config
-  cprofile itself: ~/.claude-profiles/bin/cprofile
-  the menu bar app, moved to the Trash: /Applications/Claude Profiles.app
-  kept: your profiles and rules, in ~/.claude-profiles (to delete them too: --purge)
-Uninstall Claude Profiles? [y/N]
+  orberus itself: ~/.orberus/bin/orberus
+  the menu bar app, moved to the Trash: /Applications/Orberus.app
+  kept: your profiles and rules, in ~/.orberus (to delete them too: --purge)
+Uninstall Orberus? [y/N]
 ```
 
 What it removes:
@@ -78,25 +78,25 @@ What it removes:
 - the `PATH` line that `setup` wrote in `~/.zshrc`, `~/.bash_profile` or
   `~/.bashrc`. A line you wrote yourself in another way is left alone, and
   you are told about it;
-- `cprofile` itself, when it sits in `~/.claude-profiles/bin`. Installed
+- `orberus` itself, when it sits in `~/.orberus/bin`. Installed
   another way (`cargo install`), it tells you how to remove it;
 - the menu bar app, moved to the Trash.
 
 Your profiles stay: the config, the rules and each profile's Claude Code
 folder, with its login and history. Install again later and they are back.
 
-`--purge` deletes those too: `~/.claude-profiles` as a whole, the folder of
+`--purge` deletes those too: `~/.orberus` as a whole, the folder of
 every profile, and their logins in the macOS keychain. This cannot be undone.
 `~/.claude`, the folder of the native profile, is never touched, and neither
 is a profile folder that holds more than the profile.
 
-A `.claude-profile` file left in a project folder does nothing once the tool
+A `.orberus-profile` file left in a project folder does nothing once the tool
 is gone.
 
 ## add
 
 ```sh
-cprofile add [name] [--native] [--dir <folder>] [--keep-days <days>]
+orberus add [name] [--native] [--dir <folder>] [--keep-days <days>]
 ```
 
 Creates a profile. One profile is one Claude account.
@@ -104,16 +104,16 @@ Creates a profile. One profile is one Claude account.
 | Option | Effect |
 |---|---|
 | `--native` | The profile is your existing `~/.claude`: same login, settings and history, left where they are. Only one profile can be native |
-| `--dir <folder>` | Store the profile in a folder of your choice instead of `~/.claude-profiles/profiles/<name>` |
+| `--dir <folder>` | Store the profile in a folder of your choice instead of `~/.orberus/profiles/<name>` |
 | `--keep-days <days>` | Keep its conversations this many days. See [`retention`](#retention) |
 
 The first profile becomes the default. A new profile that is not native
-starts empty: log in once with `cprofile run --profile <name>`, then `/login`.
+starts empty: log in once with `orberus run --profile <name>`, then `/login`.
 
 ## list
 
 ```sh
-cprofile list        # or: cprofile ls
+orberus list        # or: orberus ls
 ```
 
 ```text
@@ -121,7 +121,7 @@ cprofile list        # or: cprofile ls
 │ Profile │ Account         │ Config folder                    │ Rules │ Default │ Here │
 ├─────────┼─────────────────┼──────────────────────────────────┼───────┼─────────┼──────┤
 │ perso   │ me@example.com  │ ~/.claude (Claude Code default)  │       │ ●       │ ✓    │
-│ work    │ me@acme.example │ ~/.claude-profiles/profiles/work │ 1     │         │      │
+│ work    │ me@acme.example │ ~/.orberus/profiles/work │ 1     │         │      │
 └─────────┴─────────────────┴──────────────────────────────────┴───────┴─────────┴──────┘
 ```
 
@@ -131,7 +131,7 @@ cprofile list        # or: cprofile ls
 ## default
 
 ```sh
-cprofile default [name]        # or: cprofile global
+orberus default [name]        # or: orberus global
 ```
 
 Sets the profile used when no rule applies.
@@ -139,7 +139,7 @@ Sets the profile used when no rule applies.
 ## remove
 
 ```sh
-cprofile remove [name] [--purge] [--yes]        # or: cprofile rm
+orberus remove [name] [--purge] [--yes]        # or: orberus rm
 ```
 
 Removes a profile and your rules that point to it. Its Claude Code folder is
@@ -155,7 +155,7 @@ Team rules are never removed.
 ## status
 
 ```sh
-cprofile status
+orberus status
 ```
 
 Which profile applies in the current folder, and why.
@@ -164,41 +164,41 @@ Which profile applies in the current folder, and why.
   Profile  work
   Account  me@acme.example
   Why      locked rule git_remote = "github.com/acme/*" in config.toml
-  Config   ~/.claude-profiles/profiles/work
+  Config   ~/.orberus/profiles/work
   Claude   /opt/homebrew/bin/claude
 ```
 
 ## use
 
 ```sh
-cprofile use [name]
+orberus use [name]
 ```
 
 Pins the current folder, and everything below it, to a profile. It writes a
-`.claude-profile` file; delete the file to undo.
+`.orberus-profile` file; delete the file to undo.
 
 ## run
 
 ```sh
-cprofile run [--profile <name>] [-- <arguments for claude>]
+orberus run [--profile <name>] [-- <arguments for claude>]
 ```
 
 Starts Claude Code. With `--profile`, it forces that profile, unless a locked
-rule covers the folder. Typing `claude` does the same as `cprofile run`.
+rule covers the folder. Typing `claude` does the same as `orberus run`.
 
 ```sh
-cprofile run --profile work              # typically to /login the first time
-cprofile run --profile work -- --resume  # what follows -- goes to claude
+orberus run --profile work              # typically to /login the first time
+orberus run --profile work -- --resume  # what follows -- goes to claude
 ```
 
-`CLAUDE_PROFILE=work claude` is the same explicit choice, for scripts.
+`ORBERUS_PROFILE=work claude` is the same explicit choice, for scripts.
 
 ## rule
 
 ```sh
-cprofile rule add [--path <folder>] [--git-remote <pattern>] [--profile <name>] [--locked]
-cprofile rule list             # or: cprofile rule ls
-cprofile rule remove [number] [--yes]        # or: cprofile rule rm
+orberus rule add [--path <folder>] [--git-remote <pattern>] [--profile <name>] [--locked]
+orberus rule list             # or: orberus rule ls
+orberus rule remove [number] [--yes]        # or: orberus rule rm
 ```
 
 `rule add` with no option builds a rule from the current folder and asks for
@@ -206,7 +206,7 @@ the profile. `rule remove` takes the number shown by `rule list` and only
 removes your own rules, never team rules.
 
 ```text
-$ cprofile rule list
+$ orberus rule list
 ┌───┬──────────────────────────────┬─────────┬────────┬─────────────┐
 │ # │ When                         │ Profile │ Lock   │ From        │
 ├───┼──────────────────────────────┼─────────┼────────┼─────────────┤
@@ -223,7 +223,7 @@ Rule types and the order of checks are described in [rules.md](rules.md).
 ## usage
 
 ```sh
-cprofile usage [profile] [--days N] [--conversations] [--all]
+orberus usage [profile] [--days N] [--conversations] [--all]
 ```
 
 Which projects used each account over the last 7 days, and what your rules
@@ -236,10 +236,10 @@ perso  me@example.com, last 7 days
 │ Share │ Project         │ Answers │ Today's rules                 │
 ├───────┼─────────────────┼─────────┼───────────────────────────────┤
 │ 79%   │ ~/code/blog     │ 220     │ no rule, default profile      │
-│ 21%   │ ~/code/dotfiles │ 64      │ ✓ pinned with .claude-profile │
+│ 21%   │ ~/code/dotfiles │ 64      │ ✓ pinned with .orberus-profile │
 └───────┴─────────────────┴─────────┴───────────────────────────────┘
 ! 79% came from 1 project(s) no rule names: 'perso' is used there only as the default.
-  If one belongs to another account, add a rule: cd ~/code/blog && cprofile rule add
+  If one belongs to another account, add a rule: cd ~/code/blog && orberus rule add
 
 work  me@acme.example, last 7 days
 ┌───────┬─────────────────┬─────────┬─────────────────────────────────────────────────────┐
@@ -248,22 +248,22 @@ work  me@acme.example, last 7 days
 │ 63%   │ ~/code/acme-api │ 942     │ ✓ locked rule git_remote = "github.com/acme/*"      │
 │ 26%   │ ~/code/blog     │ 402     │ would use perso today (default profile)             │
 │ 9%    │ ~/code/acme-web │ 148     │ ✓ locked rule git_remote = "github.com/acme/*"      │
-│ 2%    │ ~/code/dotfiles │ 31      │ would use perso today (pinned with .claude-profile) │
+│ 2%    │ ~/code/dotfiles │ 31      │ would use perso today (pinned with .orberus-profile) │
 └───────┴─────────────────┴─────────┴─────────────────────────────────────────────────────┘
 ! 28% came from 2 project(s) where `claude` would use another profile today.
   They ran with 'work' by an explicit choice, or the rules changed since.
-  To keep one on 'work': cd ~/code/blog && cprofile use work
+  To keep one on 'work': cd ~/code/blog && orberus use work
 ```
 
 The last column reads:
 
-- **✓ rule…** or **✓ pinned**: a rule or a `.claude-profile` file sends this
+- **✓ rule…** or **✓ pinned**: a rule or a `.orberus-profile` file sends this
   project to this profile.
 - **no rule, default profile**: nothing names this project. It uses this
   profile only because it is the default.
 - **would use X today**: started there now, `claude` would pick another
   profile. The project ran with this one by an explicit choice
-  (`cprofile run --profile`, `CLAUDE_PROFILE`), or the rules changed since.
+  (`orberus run --profile`, `ORBERUS_PROFILE`), or the rules changed since.
 - **folder gone, not checked**: the folder was deleted, so a rule on its git
   remote can no longer be checked.
 
@@ -283,7 +283,7 @@ conversation therefore costs more per answer than a short one, whatever you
 ask. `--conversations` shows which ones carry the most:
 
 ```text
-$ cprofile usage work --conversations
+$ orberus usage work --conversations
 work  me@acme.example, last 7 days
 ┌───────┬─────────┬─────────┬─────────────────┬────────────────────────────┬──────────┐
 │ Share │ Context │ Answers │ Project         │ Title                      │ Id       │
@@ -317,7 +317,7 @@ read are skipped.
 ## disk
 
 ```sh
-cprofile disk
+orberus disk
 ```
 
 How much disk space each profile takes, and what takes it. It deletes nothing.
@@ -338,8 +338,8 @@ Sizes are the space really used on disk, in the same units as the Finder.
 ## retention
 
 ```sh
-cprofile retention                    # list every profile
-cprofile retention <name> <days>      # set one
+orberus retention                    # list every profile
+orberus retention <name> <days>      # set one
 ```
 
 Claude Code deletes conversations after 30 days by default, without a
@@ -347,7 +347,7 @@ message. This command shows and sets that delay for each profile; the
 shortest that Claude Code accepts is 1 day.
 
 ```text
-$ cprofile retention work 365
+$ orberus retention work 365
 ✓ Profile 'work' keeps its conversations 1 year
 ```
 
@@ -358,14 +358,14 @@ project, or one managed by your company, can still override it.
 ## clean
 
 ```sh
-cprofile clean [name] [--session <id>]... [--all] [--yes]
+orberus clean [name] [--session <id>]... [--all] [--yes]
 ```
 
 Lists a profile's conversations, biggest first, and moves the ones you pick to
 the macOS Trash. Without a pick, nothing changes.
 
 ```text
-$ cprofile clean work
+$ orberus clean work
 ┌───┬────────┬─────────────┬─────────────────┬────────────────────────────┬──────────┐
 │ # │ Size   │ Last used   │ Folder          │ Title                      │ Id       │
 ├───┼────────┼─────────────┼─────────────────┼────────────────────────────┼──────────┤
@@ -374,14 +374,14 @@ $ cprofile clean work
 └───┴────────┴─────────────┴─────────────────┴────────────────────────────┴──────────┘
   2 conversation(s), 231 MB in all
   Nothing was changed.
-  To move one to the Trash: cprofile clean work --session <id> --yes
+  To move one to the Trash: orberus clean work --session <id> --yes
 ```
 
 In a terminal you pick by number. In a script, name each conversation by the
 start of its id:
 
 ```text
-$ cprofile clean work --session 3f2a --yes
+$ orberus clean work --session 3f2a --yes
 ✓ 3f2a9c1e  168 MB moved to the Trash
   The space is freed when you empty the Trash. Each one holds a note to put it back.
 ```

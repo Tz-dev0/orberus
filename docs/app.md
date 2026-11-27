@@ -1,7 +1,7 @@
 # Menu bar app
 
-Claude Profiles.app is an optional companion to the CLI. It lives in the menu
-bar, has no Dock icon, and reads and writes the same config as `cprofile`.
+Orberus.app is an optional companion to the CLI. It lives in the menu
+bar, has no Dock icon, and reads and writes the same config as `orberus`.
 
 Install it as described in [installation.md](installation.md#install-the-menu-bar-app).
 The CLI must be installed too: the app starts Claude Code through its shim.
@@ -25,7 +25,7 @@ Opening the app again from the Finder or Spotlight shows the window.
   to see its heaviest projects, each checked against today's rules, and the
   conversations that send the most tokens with each answer. Folded, the line
   says how many projects deserve a look. It is the same estimate as
-  [`cprofile usage`](commands.md#usage), and it changes nothing.
+  [`orberus usage`](commands.md#usage), and it changes nothing.
 - **Conversations kept** (folded): how long each profile keeps its
   conversations.
 - **Storage** (folded): the disk space of each profile.
@@ -50,14 +50,14 @@ Opening the app again from the Finder or Spotlight shows the window.
 Opening Claude Code from the app goes through the shim, so a locked rule on
 the folder you pick still has the last word.
 
-Removing a profile works as `cprofile remove` does: the profile's Claude Code
+Removing a profile works as `orberus remove` does: the profile's Claude Code
 folder is kept unless you tick "Also delete its folder and sign out", which is
-`cprofile remove --purge`.
+`orberus remove --purge`.
 
 ## What it does not do yet
 
 - A rule that needs both a folder and a git remote, or a pattern typed by
-  hand, is created with `cprofile rule add` or in `config.toml`.
+  hand, is created with `orberus rule add` or in `config.toml`.
 - The terminal list holds the installed apps that declare they run script
   files (Terminal, and others such as Ghostty, WezTerm or kitty). Opening
   Claude Code was tested with Terminal only. An app that does not accept a

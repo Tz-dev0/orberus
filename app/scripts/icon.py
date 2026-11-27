@@ -1,4 +1,4 @@
-"""Draws the Claude Profiles app icon: a filled seal in front of a hollow
+"""Draws the Orberus app icon: a filled seal in front of a hollow
 one (an account signed in, and a profile waiting for one), on a dark tile.
 Drawn large with Pillow, then scaled down for smooth edges."""
 import sys

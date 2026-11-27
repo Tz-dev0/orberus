@@ -1,5 +1,5 @@
-//! `cprofile`: the command line tool. When this same binary is started under
-//! the name `claude` (through the link created by `cprofile setup`), it acts
+//! `orberus`: the command line tool. When this same binary is started under
+//! the name `claude` (through the link created by `orberus setup`), it acts
 //! as the shim: it picks the account for the current folder, then hands over
 //! to the real Claude Code.
 
@@ -14,33 +14,33 @@ use std::process::ExitCode;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Parser, Subcommand};
 
-use claude_profiles::config::{self, Config, Loaded, Rule};
-use claude_profiles::disk;
-use claude_profiles::launch::{self, Target};
-use claude_profiles::paths::Env;
-use claude_profiles::purge;
-use claude_profiles::resolve::{self, REPO_FILE};
-use claude_profiles::retention::{self, Retention};
-use claude_profiles::rules;
-use claude_profiles::sessions::{self, Session};
-use claude_profiles::uninstall::{self, Binary};
-use claude_profiles::usage::{self, Verdict};
-use claude_profiles::view::{account, location, short_path, when};
+use orberus::config::{self, Config, Loaded, Rule};
+use orberus::disk;
+use orberus::launch::{self, Target};
+use orberus::paths::Env;
+use orberus::purge;
+use orberus::resolve::{self, REPO_FILE};
+use orberus::retention::{self, Retention};
+use orberus::rules;
+use orberus::sessions::{self, Session};
+use orberus::uninstall::{self, Binary};
+use orberus::usage::{self, Verdict};
+use orberus::view::{account, location, short_path, when};
 
 use ui::{Cell, Style, Ui};
 
 const EXAMPLES: &str = "\
 Examples:
-  cprofile add                 create a profile, step by step
-  cprofile use                 pick the profile for this folder
-  cprofile rule add            send a repository or a folder to a profile
-  cprofile status              which profile applies here, and why
+  orberus add                 create a profile, step by step
+  orberus use                 pick the profile for this folder
+  orberus rule add            send a repository or a folder to a profile
+  orberus status              which profile applies here, and why
 
 Most commands ask for what is missing when you leave an argument out.";
 
 #[derive(Parser)]
 #[command(
-    name = "cprofile",
+    name = "orberus",
     version,
     about = "The right Claude account for each folder",
     after_help = EXAMPLES
@@ -131,7 +131,7 @@ enum Command {
         /// Name of the profile. Asked when left out
         name: Option<String>,
     },
-    /// Pin the current folder to a profile (writes a .claude-profile file)
+    /// Pin the current folder to a profile (writes a .orberus-profile file)
     Use {
         /// Name of the profile. Asked when left out
         name: Option<String>,
@@ -157,7 +157,7 @@ enum Command {
     },
     /// Check that everything is wired correctly
     Doctor,
-    /// Remove Claude Profiles from this Mac. Profiles are kept unless you ask
+    /// Remove Orberus from this Mac. Profiles are kept unless you ask
     Uninstall {
         /// Also delete every profile: config, rules, Claude Code folders
         /// (history, settings) and logins. Never ~/.claude. Cannot be undone
@@ -213,7 +213,7 @@ fn main() -> ExitCode {
         Err(error) => {
             // The shim names itself, since the user typed `claude` and would
             // not know where the message comes from otherwise.
-            let prefix = if as_shim { "cprofile:" } else { "error:" };
+            let prefix = if as_shim { "orberus:" } else { "error:" };
             eprintln!("{} {error:#}", ui::paint_stderr(prefix, Style::Red));
             ExitCode::from(2)
         }
@@ -254,7 +254,7 @@ fn run_claude(
     };
     let dir = config::profile_dir(env, &loaded.config, &found.profile)?;
     if !loaded.config.quiet && std::io::stderr().is_terminal() {
-        let notice = format!("cprofile: {} ({})", found.profile, found.reason.describe());
+        let notice = format!("orberus: {} ({})", found.profile, found.reason.describe());
         eprintln!("{}", ui::paint_stderr(&notice, Style::Dim));
     }
     let target = Target::Profile {
@@ -333,7 +333,7 @@ fn account_cell(env: &Env, config: &Config, name: &str) -> Cell {
 fn unknown_profile(config: &Config, name: &str) -> anyhow::Error {
     if config.profiles.is_empty() {
         return anyhow!(
-            "unknown profile '{name}': no profile exists yet, create one with: cprofile add {name}"
+            "unknown profile '{name}': no profile exists yet, create one with: orberus add {name}"
         );
     }
     let names: Vec<&str> = config.profiles.keys().map(String::as_str).collect();
@@ -351,7 +351,7 @@ fn pick_profile(ui: &Ui, config: &Config, given: Option<String>, question: &str)
         return Ok(name);
     }
     if config.profiles.is_empty() {
-        bail!("no profile yet, create one with: cprofile add");
+        bail!("no profile yet, create one with: orberus add");
     }
     let names: Vec<String> = config.profiles.keys().cloned().collect();
     if !ui.interactive() {
@@ -390,7 +390,7 @@ fn confirmed(ui: &Ui, question: &str, yes: bool) -> Result<bool> {
 // Commands
 // ---------------------------------------------------------------------------
 
-/// `cprofile` with no argument: where you stand, then every command.
+/// `orberus` with no argument: where you stand, then every command.
 fn overview(ui: &Ui, env: &Env) -> Result<i32> {
     let loaded = config::load(env)?;
     if loaded.config.profiles.is_empty() {
@@ -399,18 +399,18 @@ fn overview(ui: &Ui, env: &Env) -> Result<i32> {
             .first()
             .is_some_and(|(_, is_shim)| *is_shim);
         let next = if shim_ready {
-            "cprofile add"
+            "orberus add"
         } else {
-            "cprofile setup"
+            "orberus setup"
         };
         println!("No profile yet. Start with: {}", ui.command(next));
     } else {
         // Only where you stand. The table of profiles is one command
-        // away (`cprofile list`) and would push the commands off screen.
+        // away (`orberus list`) and would push the commands off screen.
         status_block(ui, env, &loaded, None)?;
     }
     println!();
-    // The same text as `cprofile --help`, built by clap from the `Cli` type.
+    // The same text as `orberus --help`, built by clap from the `Cli` type.
     // `CommandFactory` is the trait that gives access to it.
     <Cli as clap::CommandFactory>::command()
         .print_help()
@@ -465,12 +465,12 @@ fn setup(ui: &Ui, env: &Env) -> Result<i32> {
     println!();
     ui.title("Next steps");
     ui.commands(&[
-        ("cprofile add", "create a profile, step by step"),
+        ("orberus add", "create a profile, step by step"),
         (
-            "cprofile rule add",
+            "orberus rule add",
             "send a repository or a folder to a profile",
         ),
-        ("cprofile doctor", "check the installation"),
+        ("orberus doctor", "check the installation"),
     ]);
     Ok(0)
 }
@@ -554,17 +554,17 @@ fn add(
     let native_owner = config::native_profile(&config).map(str::to_string);
 
     // No name given: guided mode. The questions only cover what the flags
-    // did not say, so `cprofile add work --native` never asks anything.
+    // did not say, so `orberus add work --native` never asks anything.
     let guided = name.is_none();
     let name = match name {
         Some(name) => name,
         None if ui.interactive() => ui.input("Profile name (for example: work, perso):")?,
-        None => bail!("missing profile name, for example: cprofile add work"),
+        None => bail!("missing profile name, for example: orberus add work"),
     };
     config::validate_name(&name)?;
     if config.profiles.contains_key(&name) {
         bail!(
-            "profile '{name}' already exists; start Claude Code in it with: cprofile run -p {name}"
+            "profile '{name}' already exists; start Claude Code in it with: orberus run -p {name}"
         );
     }
 
@@ -609,7 +609,7 @@ fn add(
         None => {
             let current = retention::read(env, &config, &name)?;
             ui.detail(&format!(
-                "keeps its conversations {}; change it with: cprofile retention {name}",
+                "keeps its conversations {}; change it with: orberus retention {name}",
                 current.describe()
             ));
         }
@@ -618,7 +618,7 @@ fn add(
         return Ok(0);
     }
 
-    let login = format!("cprofile run --profile {name}");
+    let login = format!("orberus run --profile {name}");
     if ui.interactive() && ui.confirm("Start Claude Code in this profile now, to log in?", true)? {
         ui.detail("type /login in Claude Code if it does not ask by itself");
         // On macOS and Linux this call does not return: the process becomes
@@ -682,7 +682,7 @@ fn list(ui: &Ui, env: &Env) -> Result<i32> {
     if loaded.config.profiles.is_empty() {
         println!(
             "No profile yet. Create one with: {}",
-            ui.command("cprofile add")
+            ui.command("orberus add")
         );
         return Ok(0);
     }
@@ -691,7 +691,7 @@ fn list(ui: &Ui, env: &Env) -> Result<i32> {
     Ok(0)
 }
 
-/// `cprofile clean`: the biggest conversations of a profile, and a way to
+/// `orberus clean`: the biggest conversations of a profile, and a way to
 /// move some to the Trash. Without a choice it only lists.
 fn clean(
     ui: &Ui,
@@ -794,7 +794,7 @@ fn clean(
         ui.detail("Nothing was changed.");
         if !ui.interactive() {
             ui.detail(&format!(
-                "To move one to the Trash: cprofile clean {name} --session <id> --yes"
+                "To move one to the Trash: orberus clean {name} --session <id> --yes"
             ));
         }
         return Ok(0);
@@ -869,7 +869,7 @@ fn ask_retention(ui: &Ui, env: &Env, config: &Config, name: &str) -> Result<Opti
     })
 }
 
-/// `cprofile retention`: how long each profile keeps its conversations.
+/// `orberus retention`: how long each profile keeps its conversations.
 fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>) -> Result<i32> {
     let loaded = config::load(env)?;
     let config = &loaded.config;
@@ -877,7 +877,7 @@ fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>
         if config.profiles.is_empty() {
             println!(
                 "No profile yet. Create one with: {}",
-                ui.command("cprofile add")
+                ui.command("orberus add")
             );
             return Ok(0);
         }
@@ -894,7 +894,7 @@ fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>
         ui.detail("Older conversations are deleted by Claude Code, without a message.");
         ui.detail(&format!(
             "Change it with: {}   (a project or company settings file can still override it)",
-            ui.command("cprofile retention <profile> <days>")
+            ui.command("orberus retention <profile> <days>")
         ));
         return Ok(0);
     };
@@ -910,7 +910,7 @@ fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>
                 return Ok(0);
             }
         },
-        None => bail!("missing number of days, for example: cprofile retention {name} 365"),
+        None => bail!("missing number of days, for example: orberus retention {name} 365"),
     };
     retention::set(env, config, &name, days)?;
     ui.success(&format!(
@@ -920,7 +920,7 @@ fn retention_command(ui: &Ui, env: &Env, name: Option<String>, days: Option<u64>
     Ok(0)
 }
 
-/// `cprofile usage`: which folders used each account, checked against the
+/// `orberus usage`: which folders used each account, checked against the
 /// rules as they are today.
 fn usage_command(
     ui: &Ui,
@@ -936,7 +936,7 @@ fn usage_command(
     if config.profiles.is_empty() {
         println!(
             "No profile yet. Create one with: {}",
-            ui.command("cprofile add")
+            ui.command("orberus add")
         );
         return Ok(0);
     }
@@ -1042,7 +1042,7 @@ fn usage_command(
         if uncovered.1 > 0 && no_rule_yet {
             ui.detail(&format!(
                 "You have no rule yet, so every folder uses the default profile. Add one with: {}",
-                ui.command("cprofile rule add")
+                ui.command("orberus rule add")
             ));
         } else if uncovered.1 > 0 {
             ui.warning(&format!(
@@ -1054,7 +1054,7 @@ fn usage_command(
                 ui.detail(&format!(
                     "If one belongs to another account, add a rule: {}",
                     ui.command(&format!(
-                        "cd {} && cprofile rule add",
+                        "cd {} && orberus rule add",
                         short_path(env, folder)
                     ))
                 ));
@@ -1073,7 +1073,7 @@ fn usage_command(
                 ui.detail(&format!(
                     "To keep one on '{name}': {}",
                     ui.command(&format!(
-                        "cd {} && cprofile use {name}",
+                        "cd {} && orberus use {name}",
                         short_path(env, folder)
                     ))
                 ));
@@ -1169,13 +1169,13 @@ fn conversations_table(ui: &Ui, env: &Env, used: &usage::ProfileUsage, shown: us
     }
 }
 
-/// `cprofile disk`: the space each profile takes, and what takes it.
+/// `orberus disk`: the space each profile takes, and what takes it.
 fn disk_usage(ui: &Ui, env: &Env) -> Result<i32> {
     let loaded = config::load(env)?;
     if loaded.config.profiles.is_empty() {
         println!(
             "No profile yet. Create one with: {}",
-            ui.command("cprofile add")
+            ui.command("orberus add")
         );
         return Ok(0);
     }
@@ -1279,12 +1279,12 @@ fn remove(ui: &Ui, env: &Env, name: Option<String>, purge: bool, yes: bool) -> R
         // The folder holds the history and settings of that account.
         // Deleting it cannot be undone, so it only happens on request.
         ui.detail(&format!("its Claude Code folder is kept: {kept}"));
-        ui.detail("to delete it too next time: cprofile remove --purge");
+        ui.detail("to delete it too next time: orberus remove --purge");
     }
     if was_default {
         ui.warning(&format!(
             "It was the default profile. Choose another with: {}",
-            ui.command("cprofile default")
+            ui.command("orberus default")
         ));
     }
     Ok(0)
@@ -1346,7 +1346,7 @@ fn status_block(ui: &Ui, env: &Env, loaded: &Loaded, explicit: Option<&str>) -> 
         None => ui.fields(&[
             (
                 "Profile",
-                "none (claude runs as if cprofile was not installed)".to_string(),
+                "none (claude runs as if orberus was not installed)".to_string(),
             ),
             ("Claude", claude),
         ]),
@@ -1402,13 +1402,13 @@ fn rule_add(
         (path, git_remote)
     } else if ui.interactive() {
         if config.profiles.is_empty() {
-            bail!("no profile yet, create one with: cprofile add");
+            bail!("no profile yet, create one with: orberus add");
         }
         ask_condition(ui, env)?
     } else {
         bail!(
             "a rule needs --path, --git-remote, or both, for example: \
-             cprofile rule add --git-remote \"github.com/acme/*\" --profile work"
+             orberus rule add --git-remote \"github.com/acme/*\" --profile work"
         );
     };
 
@@ -1466,7 +1466,7 @@ fn rule_list(ui: &Ui, env: &Env) -> Result<i32> {
     if rows.is_empty() {
         println!(
             "No rule yet. Create one from this folder with: {}",
-            ui.command("cprofile rule add")
+            ui.command("orberus rule add")
         );
         return Ok(0);
     }
@@ -1481,12 +1481,12 @@ fn rule_remove(ui: &Ui, env: &Env, number: Option<usize>, yes: bool) -> Result<i
     let team = loaded.team_rules.len();
     let mut config = loaded.config;
     if config.rules.is_empty() {
-        bail!("you have no rule of your own to remove (see: cprofile rule list)");
+        bail!("you have no rule of your own to remove (see: orberus rule list)");
     }
 
     let index = match number {
         Some(number) if number == 0 || number > team + config.rules.len() => {
-            bail!("there is no rule {number} (see: cprofile rule list)")
+            bail!("there is no rule {number} (see: orberus rule list)")
         }
         Some(number) if number <= team => bail!(
             "rule {number} comes from team.toml, which your company provides: it cannot be removed here"
@@ -1500,7 +1500,7 @@ fn rule_remove(ui: &Ui, env: &Env, number: Option<usize>, yes: bool) -> Result<i
                 .collect();
             ui.select("Which rule do you want to remove?", &options, &[], None)?
         }
-        None => bail!("missing rule number (see: cprofile rule list)"),
+        None => bail!("missing rule number (see: orberus rule list)"),
     };
 
     let summary = format!(
@@ -1544,7 +1544,7 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
     let shim = env.bin_dir().join("claude");
     #[cfg(not(unix))]
     let shim = env.bin_dir().join("claude.exe");
-    check(shim.exists(), "shim is installed", "run: cprofile setup");
+    check(shim.exists(), "shim is installed", "run: orberus setup");
 
     let found = launch::claude_in_path();
     let first_is_shim = found.first().is_some_and(|(_, is_shim)| *is_shim);
@@ -1552,7 +1552,7 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         first_is_shim,
         "`claude` in your PATH is the shim",
         &format!(
-            "put {} first in your PATH (cprofile setup can do it), then open a new terminal",
+            "put {} first in your PATH (orberus setup can do it), then open a new terminal",
             short_path(env, &env.bin_dir())
         ),
     );
@@ -1570,24 +1570,20 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
     check(
         !loaded.config.profiles.is_empty(),
         "at least one profile exists",
-        "run: cprofile add",
+        "run: orberus add",
     );
     let default_ok = match &loaded.config.default {
         Some(name) => loaded.config.profiles.contains_key(name),
         None => true,
     };
-    check(
-        default_ok,
-        "default profile exists",
-        "run: cprofile default",
-    );
+    check(default_ok, "default profile exists", "run: orberus default");
     let rules_ok = loaded
         .rules()
         .all(|(rule, _)| loaded.config.profiles.contains_key(&rule.profile));
     check(
         rules_ok,
         "every rule points to an existing profile",
-        "see: cprofile rule list",
+        "see: orberus rule list",
     );
 
     let outside = std::env::var_os(launch::CONFIG_DIR_ENV).is_some()
@@ -1595,7 +1591,7 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
     check(
         !outside,
         "CLAUDE_CONFIG_DIR is not set by something else",
-        "remove it from your shell config: cprofile sets it for each launch",
+        "remove it from your shell config: orberus sets it for each launch",
     );
 
     // Not a failure: a warning about what Claude Code will delete by itself.
@@ -1608,7 +1604,7 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
                     kept.describe()
                 ));
                 ui.detail(&format!(
-                    "older ones are deleted by Claude Code; to keep them: cprofile retention {name} {}",
+                    "older ones are deleted by Claude Code; to keep them: orberus retention {name} {}",
                     retention::SUGGESTED_DAYS
                 ));
             }
@@ -1647,7 +1643,7 @@ fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> Result<i32> 
         ui.detail("the PATH line that setup added to your shell config");
     }
     if let Binary::Ours(path) = &binary {
-        ui.detail(&format!("cprofile itself: {}", short_path(env, path)));
+        ui.detail(&format!("orberus itself: {}", short_path(env, path)));
     }
     for app in &apps {
         ui.detail(&format!(
@@ -1687,9 +1683,9 @@ fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> Result<i32> 
     }
 
     let question = if purge {
-        "Uninstall Claude Profiles and delete every profile?"
+        "Uninstall Orberus and delete every profile?"
     } else {
-        "Uninstall Claude Profiles?"
+        "Uninstall Orberus?"
     };
     if !confirmed(ui, question, yes)? {
         println!("Nothing changed.");
@@ -1742,15 +1738,13 @@ fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> Result<i32> 
 
     // Last, because the program removes itself here.
     match uninstall::remove_binary(env)? {
-        Binary::Ours(_) => ui.success("cprofile removed"),
+        Binary::Ours(_) => ui.success("orberus removed"),
         Binary::Elsewhere(path) => {
             ui.warning(&format!(
-                "cprofile itself is still at {}",
+                "orberus itself is still at {}",
                 short_path(env, &path)
             ));
-            ui.detail(
-                "remove it the way it was installed, for example: cargo uninstall claude-profiles",
-            );
+            ui.detail("remove it the way it was installed, for example: cargo uninstall orberus");
         }
     }
     if purge && uninstall::delete_data(env)? {
@@ -1758,7 +1752,7 @@ fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> Result<i32> 
     }
 
     println!();
-    println!("Claude Profiles is uninstalled. Open a new terminal.");
+    println!("Orberus is uninstalled. Open a new terminal.");
     if !purge {
         println!("Your profiles are kept in {}.", short_path(env, &env.root));
     }

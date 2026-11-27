@@ -1,27 +1,27 @@
 <div align="center">
-  <h1>Claude Profiles</h1>
+  <h1>Orberus</h1>
   <p><b>The right Claude Code account for each folder. Automatically.</b></p>
   <p>
-    <a href="https://github.com/Tz-dev0/claude-profiles/releases"><img src="https://img.shields.io/github/v/release/Tz-dev0/claude-profiles?label=version&style=flat-square" alt="Version"></a>
+    <a href="https://github.com/Tz-dev0/orberus/releases"><img src="https://img.shields.io/github/v/release/Tz-dev0/orberus?label=version&style=flat-square" alt="Version"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/macOS-Apple_Silicon_and_Intel-lightgrey?style=flat-square" alt="macOS, Apple Silicon and Intel">
   </p>
 </div>
 
-`cprofile` keeps several Claude Code accounts on one Mac (work, personal,
+`orberus` keeps several Claude Code accounts on one Mac (work, personal,
 client) and picks the account from the folder you are in. A company repository
 always opens with the company account, a side project with yours, and a locked
 rule refuses the wrong one.
 
 ```text
 ~/code/acme-api $ claude
-cprofile: work (locked rule git_remote = "github.com/acme/*" in config.toml)
+orberus: work (locked rule git_remote = "github.com/acme/*" in config.toml)
 
 ~/code/blog $ claude
-cprofile: perso (default profile)
+orberus: perso (default profile)
 
-~/code/acme-api $ CLAUDE_PROFILE=perso claude
-cprofile: refused: this folder is locked to profile 'work' by rule
+~/code/acme-api $ ORBERUS_PROFILE=perso claude
+orberus: refused: this folder is locked to profile 'work' by rule
 git_remote = "github.com/acme/*" in config.toml, so profile 'perso' cannot be used here
 ```
 
@@ -50,60 +50,60 @@ git_remote = "github.com/acme/*" in config.toml, so profile 'perso' cannot be us
 
 ## Quick start
 
-Claude Profiles needs macOS (Apple Silicon or Intel) and
+Orberus needs macOS (Apple Silicon or Intel) and
 [Claude Code](https://claude.com/claude-code) already
 installed.
 
 **Install**
 
 ```sh
-mkdir -p ~/.claude-profiles/bin
-curl -fsSL https://github.com/Tz-dev0/claude-profiles/releases/latest/download/cprofile-macos-universal.tar.gz \
-  | tar -xz -C ~/.claude-profiles/bin --strip-components 1 cprofile-macos-universal/cprofile
-~/.claude-profiles/bin/cprofile setup
+mkdir -p ~/.orberus/bin
+curl -fsSL https://github.com/Tz-dev0/orberus/releases/latest/download/orberus-cli-macos-universal.tar.gz \
+  | tar -xz -C ~/.orberus/bin --strip-components 1 orberus-cli-macos-universal/orberus
+~/.orberus/bin/orberus setup
 ```
 
-`setup` installs the `claude` shim next to `cprofile` and offers to add that
+`setup` installs the `claude` shim next to `orberus` and offers to add that
 folder to your `PATH`. Open a new terminal afterwards. Other ways to install,
 and how to update or uninstall, are in [docs/installation.md](docs/installation.md).
 
 **Create your profiles**
 
 ```sh
-cprofile add perso --native   # your current login, ~/.claude, kept as it is
-cprofile add work             # a second, empty profile
-cprofile run --profile work   # start Claude Code in it once, then /login
+orberus add perso --native   # your current login, ~/.claude, kept as it is
+orberus add work             # a second, empty profile
+orberus run --profile work   # start Claude Code in it once, then /login
 ```
 
 **Send a repository to a profile**
 
 ```sh
-cprofile rule add --git-remote "github.com/acme/*" --profile work --locked
+orberus rule add --git-remote "github.com/acme/*" --profile work --locked
 ```
 
 From then on, just type `claude`.
 
-Most commands ask for what you leave out, so `cprofile add` and
-`cprofile rule add` alone also work: they guide you step by step.
+Most commands ask for what you leave out, so `orberus add` and
+`orberus rule add` alone also work: they guide you step by step.
 
 ## How a profile is chosen
 
 The first of these that applies wins:
 
 1. a **locked rule**. It also refuses an explicit choice of another profile
-2. an **explicit choice**: `cprofile run --profile x`, or `CLAUDE_PROFILE=x claude`
-3. a **`.claude-profile` file** in the folder or a parent (`cprofile use x`)
+2. an **explicit choice**: `orberus run --profile x`, or `ORBERUS_PROFILE=x claude`
+3. a **`.orberus-profile` file** in the folder or a parent (`orberus use x`)
 4. the **first matching rule**, team rules before your own
 5. the **default profile**
 
-`cprofile status` tells you which one applies where you are, and why:
+`orberus status` tells you which one applies where you are, and why:
 
 ```text
-$ cprofile status
+$ orberus status
   Profile  work
   Account  me@acme.example
   Why      locked rule git_remote = "github.com/acme/*" in config.toml
-  Config   ~/.claude-profiles/profiles/work
+  Config   ~/.orberus/profiles/work
   Claude   /opt/homebrew/bin/claude
 ```
 
@@ -115,22 +115,22 @@ Rules, the config files and team rules are described in
 
 | Command | What it does |
 |---|---|
-| `cprofile` | Profile used in this folder, then the list of commands |
-| `cprofile setup` | Install the `claude` shim and put it in your `PATH` |
-| `cprofile add [name]` | Create a profile (`--native` reuses `~/.claude`) |
-| `cprofile list` | Profiles, the account logged in to each, the default |
-| `cprofile status` | Which profile applies here, and why |
-| `cprofile use [name]` | Pin the current folder to a profile |
-| `cprofile default [name]` | Profile used when no rule applies |
-| `cprofile run [-p name] [-- args]` | Start Claude Code, optionally forcing a profile |
-| `cprofile rule add`, `list`, `remove` | Manage the rules |
-| `cprofile usage [name]` | Which projects used each account, checked against your rules; `-c` for the heaviest conversations |
-| `cprofile disk` | Disk space of each profile. Deletes nothing |
-| `cprofile retention [name] [days]` | How long each profile keeps its conversations |
-| `cprofile clean [name]` | Biggest conversations of a profile; move some to the Trash |
-| `cprofile remove [name]` | Remove a profile and your rules that point to it |
-| `cprofile doctor` | Check the installation |
-| `cprofile uninstall` | Remove Claude Profiles from this Mac. Profiles are kept unless you add `--purge` |
+| `orberus` | Profile used in this folder, then the list of commands |
+| `orberus setup` | Install the `claude` shim and put it in your `PATH` |
+| `orberus add [name]` | Create a profile (`--native` reuses `~/.claude`) |
+| `orberus list` | Profiles, the account logged in to each, the default |
+| `orberus status` | Which profile applies here, and why |
+| `orberus use [name]` | Pin the current folder to a profile |
+| `orberus default [name]` | Profile used when no rule applies |
+| `orberus run [-p name] [-- args]` | Start Claude Code, optionally forcing a profile |
+| `orberus rule add`, `list`, `remove` | Manage the rules |
+| `orberus usage [name]` | Which projects used each account, checked against your rules; `-c` for the heaviest conversations |
+| `orberus disk` | Disk space of each profile. Deletes nothing |
+| `orberus retention [name] [days]` | How long each profile keeps its conversations |
+| `orberus clean [name]` | Biggest conversations of a profile; move some to the Trash |
+| `orberus remove [name]` | Remove a profile and your rules that point to it |
+| `orberus doctor` | Check the installation |
+| `orberus uninstall` | Remove Orberus from this Mac. Profiles are kept unless you add `--purge` |
 
 Every command, with its options and an example of its output, is in
 [docs/commands.md](docs/commands.md).
@@ -142,12 +142,12 @@ The examples below are shortened.
 ### Profiles
 
 ```text
-$ cprofile list
+$ orberus list
 ┌─────────┬─────────────────┬──────────────────────────────────┬───────┬─────────┬──────┐
 │ Profile │ Account         │ Config folder                    │ Rules │ Default │ Here │
 ├─────────┼─────────────────┼──────────────────────────────────┼───────┼─────────┼──────┤
 │ perso   │ me@example.com  │ ~/.claude (Claude Code default)  │       │ ●       │ ✓    │
-│ work    │ me@acme.example │ ~/.claude-profiles/profiles/work │ 1     │         │      │
+│ work    │ me@acme.example │ ~/.orberus/profiles/work │ 1     │         │      │
 └─────────┴─────────────────┴──────────────────────────────────┴───────┴─────────┴──────┘
   Default: used when no rule applies.   Here: used in this folder.
 ```
@@ -157,12 +157,12 @@ history. The profile created with `--native` is your existing `~/.claude`.
 
 ### Usage by project
 
-`cprofile usage` shows where each account was used over the last 7 days, and
+`orberus usage` shows where each account was used over the last 7 days, and
 flags the projects your rules do not send there. Here a personal blog ran on
 the work account:
 
 ```text
-$ cprofile usage work
+$ orberus usage work
 work  me@acme.example, last 7 days
 ┌───────┬─────────────────┬─────────┬────────────────────────────────────────────────┐
 │ Share │ Project         │ Answers │ Today's rules                                  │
@@ -174,7 +174,7 @@ work  me@acme.example, last 7 days
 ! 26% came from 1 project(s) where `claude` would use another profile today.
 ```
 
-`cprofile usage --conversations` lists the conversations instead, with how
+`orberus usage --conversations` lists the conversations instead, with how
 many tokens each one sends again at every answer: the long ones are where a
 `/compact` or a fresh conversation saves the most.
 
@@ -184,7 +184,7 @@ what your plan counts against its limits.
 ### Disk space
 
 ```text
-$ cprofile disk
+$ orberus disk
 ┌─────────┬────────┬──────────┬──────────────┬─────────────────┬────────┐
 │ Profile │ Total  │ Sessions │ File history │ Plugins, skills │ Other  │
 ├─────────┼────────┼──────────┼──────────────┼─────────────────┼────────┤
@@ -197,12 +197,12 @@ $ cprofile disk
 
 ### Cleaning up conversations
 
-`cprofile clean` lists a profile's conversations, biggest first. Nothing moves
+`orberus clean` lists a profile's conversations, biggest first. Nothing moves
 until you pick some, and what you pick goes to the macOS Trash with a note
 that says where to put it back.
 
 ```text
-$ cprofile clean work
+$ orberus clean work
 ┌───┬────────┬─────────────┬─────────────────┬────────────────────────────┬──────────┐
 │ # │ Size   │ Last used   │ Folder          │ Title                      │ Id       │
 ├───┼────────┼─────────────┼─────────────────┼────────────────────────────┼──────────┤
@@ -217,10 +217,10 @@ $ cprofile clean work
 ### How long conversations are kept
 
 Claude Code deletes conversations after 30 days by default, without a
-message. `cprofile retention` shows the setting of each profile and changes it:
+message. `orberus retention` shows the setting of each profile and changes it:
 
 ```text
-$ cprofile retention work 365
+$ orberus retention work 365
 ✓ Profile 'work' keeps its conversations 1 year
 ```
 
@@ -263,12 +263,12 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Get help
 
-First run `cprofile doctor` and read what it says: it checks the shim, your
+First run `orberus doctor` and read what it says: it checks the shim, your
 `PATH`, the config files and the rules, and tells you how to fix what is wrong.
 
 Then read [Troubleshooting](docs/troubleshooting.md). If the problem is still
-there, [open an issue](https://github.com/Tz-dev0/claude-profiles/issues) with
-the output of `cprofile doctor` and `cprofile status`.
+there, [open an issue](https://github.com/Tz-dev0/orberus/issues) with
+the output of `orberus doctor` and `orberus status`.
 
 ## Contributing
 

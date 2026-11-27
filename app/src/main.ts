@@ -604,7 +604,7 @@ function mark(): SVGElement {
 
 function header(): HTMLElement {
   const top = el("header");
-  top.append(mark(), el("h1", "", "Claude Profiles"));
+  top.append(mark(), el("h1", "", "Orberus"));
   return top;
 }
 
@@ -694,7 +694,7 @@ function conversationList(name: string, overview: Overview): HTMLElement {
   }
   if (conversations.more > 0) {
     const others = conversations.more === 1 ? "1 smaller one" : `${conversations.more} smaller ones`;
-    list.append(el("li", "talks-note", `And ${others}: cprofile clean ${name}`));
+    list.append(el("li", "talks-note", `And ${others}: orberus clean ${name}`));
   }
   return list;
 }
@@ -915,7 +915,7 @@ function usageDetail(used: Usage): HTMLElement {
   }
   if (used.moreProjects > 0) {
     const others = used.moreProjects === 1 ? "1 lighter one" : `${used.moreProjects} lighter ones`;
-    list.append(el("li", "talks-note", `And ${others}: cprofile usage ${used.name}`));
+    list.append(el("li", "talks-note", `And ${others}: orberus usage ${used.name}`));
   }
 
   const heading = el("li", "talks-note", "Conversations, by tokens sent with each answer");
@@ -1067,7 +1067,7 @@ function menu(): HTMLElement {
   const footer = el("footer");
   footer.append(
     menuItem("Edit config file…", "⌘,", () => api.openConfig()),
-    menuItem("Quit Claude Profiles", "⌘Q", () => api.quit()),
+    menuItem("Quit Orberus", "⌘Q", () => api.quit()),
     el("p", "legal", "Not affiliated with Anthropic"),
   );
   return footer;
@@ -1140,7 +1140,7 @@ function render(overview: Overview | null, loadError = ""): void {
   if (overview) {
     assignHues(overview.profiles);
     if (!overview.shimInstalled) {
-      page.append(notice("The claude shim is not installed. Run “cprofile setup” in a terminal."));
+      page.append(notice("The claude shim is not installed. Run “orberus setup” in a terminal."));
     }
     const main = el("main");
     if (overview.profiles.length === 0 && !adding) {

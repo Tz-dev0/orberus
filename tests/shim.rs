@@ -1,5 +1,5 @@
 //! End-to-end test: a fake `claude` prints what it receives, and the real
-//! `cprofile` binary runs in front of it, both as a CLI and as the shim.
+//! `orberus` binary runs in front of it, both as a CLI and as the shim.
 #![cfg(unix)]
 
 use std::fs;
@@ -7,7 +7,7 @@ use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const CPROFILE: &str = env!("CARGO_BIN_EXE_cprofile");
+const ORBERUS: &str = env!("CARGO_BIN_EXE_orberus");
 
 struct World {
     _temp: tempfile::TempDir,
@@ -20,13 +20,13 @@ impl World {
     fn new() -> Self {
         let temp = tempfile::tempdir().unwrap();
         let home = temp.path().canonicalize().unwrap();
-        let root = home.join(".claude-profiles");
+        let root = home.join(".orberus");
         let real_bin = home.join("real-bin");
         fs::create_dir_all(&real_bin).unwrap();
         let fake = real_bin.join("claude");
         fs::write(
             &fake,
-            "#!/bin/sh\necho \"dir=${CLAUDE_CONFIG_DIR:-unset}\"\necho \"session=${CLAUDE_PROFILES_SESSION:-unset}\"\necho \"args=$*\"\n",
+            "#!/bin/sh\necho \"dir=${CLAUDE_CONFIG_DIR:-unset}\"\necho \"session=${ORBERUS_SESSION:-unset}\"\necho \"args=$*\"\n",
         )
         .unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
@@ -50,23 +50,23 @@ impl World {
             .env_clear()
             .env("HOME", &self.home)
             // Never the real /Applications: `uninstall` looks for the app there.
-            .env("CLAUDE_PROFILES_APPS", self.home.join("Applications"))
+            .env("ORBERUS_APPS", self.home.join("Applications"))
             .env("PATH", &self.path);
         command
     }
 
-    fn cprofile(&self, cwd: &Path, args: &[&str]) -> Output {
-        self.command(Path::new(CPROFILE), cwd)
+    fn orberus(&self, cwd: &Path, args: &[&str]) -> Output {
+        self.command(Path::new(ORBERUS), cwd)
             .args(args)
             .output()
             .unwrap()
     }
 
     fn ok(&self, cwd: &Path, args: &[&str]) -> String {
-        let output = self.cprofile(cwd, args);
+        let output = self.orberus(cwd, args);
         assert!(
             output.status.success(),
-            "cprofile {args:?} failed: {}",
+            "orberus {args:?} failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -102,7 +102,7 @@ fn without_config_the_shim_changes_nothing() {
     let world = World::new();
     // Install the link by hand: no config file is created.
     fs::create_dir_all(world.root.join("bin")).unwrap();
-    symlink(CPROFILE, world.root.join("bin/claude")).unwrap();
+    symlink(ORBERUS, world.root.join("bin/claude")).unwrap();
     let output = world.shim(&world.home, &["--version"], &[]);
     assert!(output.status.success());
     assert_eq!(text(&output), "dir=unset\nsession=unset\nargs=--version\n");
@@ -149,13 +149,13 @@ fn full_flow_picks_the_account_from_the_folder() {
     assert_eq!(text(&output), "dir=unset\nsession=perso\nargs=\n");
 
     // Guard: forcing the personal account in the company repository fails.
-    let output = world.shim(&work_repo, &[], &[("CLAUDE_PROFILE", "perso")]);
+    let output = world.shim(&work_repo, &[], &[("ORBERUS_PROFILE", "perso")]);
     assert_eq!(output.status.code(), Some(2));
     assert!(text(&output).is_empty(), "claude must not start");
     assert!(String::from_utf8_lossy(&output.stderr).contains("locked to profile 'work'"));
 
     // Explicit choice elsewhere is allowed.
-    let output = world.shim(&own_repo, &[], &[("CLAUDE_PROFILE", "work")]);
+    let output = world.shim(&own_repo, &[], &[("ORBERUS_PROFILE", "work")]);
     assert_eq!(
         text(&output),
         format!("dir={}\nsession=work\nargs=\n", work_dir.display())
@@ -165,15 +165,12 @@ fn full_flow_picks_the_account_from_the_folder() {
     let output = world.shim(
         &work_repo,
         &[],
-        &[
-            ("CLAUDE_PROFILES_SESSION", "perso"),
-            ("CLAUDE_CONFIG_DIR", "/kept"),
-        ],
+        &[("ORBERUS_SESSION", "perso"), ("CLAUDE_CONFIG_DIR", "/kept")],
     );
     assert_eq!(text(&output), "dir=/kept\nsession=perso\nargs=\n");
 
-    // `cprofile run` follows the same rules, and `use` pins a folder.
-    let output = world.cprofile(&work_repo, &["run", "--", "--resume"]);
+    // `orberus run` follows the same rules, and `use` pins a folder.
+    let output = world.orberus(&work_repo, &["run", "--", "--resume"]);
     assert_eq!(
         text(&output),
         format!("dir={}\nsession=work\nargs=--resume\n", work_dir.display())
@@ -188,14 +185,14 @@ fn full_flow_picks_the_account_from_the_folder() {
     let status = world.ok(&work_repo, &["status"]);
     assert!(status.contains("Profile  work"), "{status}");
     assert!(status.contains("locked rule"), "{status}");
-    let doctor = world.cprofile(&home, &["doctor"]);
+    let doctor = world.orberus(&home, &["doctor"]);
     assert!(doctor.status.success(), "{}", text(&doctor));
 }
 
-/// Runs `cprofile` and returns its error message, checking that it failed.
+/// Runs `orberus` and returns its error message, checking that it failed.
 fn refused(world: &World, cwd: &Path, args: &[&str]) -> String {
-    let output = world.cprofile(cwd, args);
-    assert_eq!(output.status.code(), Some(2), "cprofile {args:?} must fail");
+    let output = world.orberus(cwd, args);
+    assert_eq!(output.status.code(), Some(2), "orberus {args:?} must fail");
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
@@ -206,7 +203,7 @@ fn profiles_and_rules_can_be_listed_and_removed() {
 
     // First contact: no argument gives a short guide, not an error.
     let guide = world.ok(&home, &[]);
-    assert!(guide.contains("cprofile add"), "{guide}");
+    assert!(guide.contains("orberus add"), "{guide}");
 
     world.ok(&home, &["add", "perso", "--native"]);
     world.ok(&home, &["add", "work"]);
@@ -408,7 +405,7 @@ fn clean_lists_conversations_and_moves_the_chosen_one_to_the_trash() {
     assert!(project.join(format!("{fresh}.jsonl")).is_file());
 
     // One used in the last hour is refused: it may still be open.
-    let output = world.cprofile(&home, &["clean", "work", "--session", "9999", "--yes"]);
+    let output = world.orberus(&home, &["clean", "work", "--session", "9999", "--yes"]);
     assert_eq!(output.status.code(), Some(1));
     // Each conversation reports on its own line, on standard output.
     assert!(String::from_utf8_lossy(&output.stdout).contains("last hour"));
@@ -453,7 +450,7 @@ fn uninstall_removes_the_shim_and_the_path_line_but_keeps_the_profiles() {
     let zshrc = home.join(".zshrc");
     fs::write(
         &zshrc,
-        "export EDITOR=vim\n\n# cprofile: the claude shim must come before the real claude\nexport PATH=\"$HOME/.claude-profiles/bin:$PATH\"\nalias ll='ls -l'\n",
+        "export EDITOR=vim\n\n# orberus: the claude shim must come before the real claude\nexport PATH=\"$HOME/.orberus/bin:$PATH\"\nalias ll='ls -l'\n",
     )
     .unwrap();
     let native_dir = home.join(".claude");
@@ -471,7 +468,7 @@ fn uninstall_removes_the_shim_and_the_path_line_but_keeps_the_profiles() {
         "export EDITOR=vim\nalias ll='ls -l'\n"
     );
     // The test binary lives in cargo's folder, not in ours: it is not removed.
-    assert!(done.contains("cprofile itself is still at"), "{done}");
+    assert!(done.contains("orberus itself is still at"), "{done}");
 
     // Profiles, their folders and ~/.claude are all still there.
     assert!(world.root.join("config.toml").is_file());
@@ -512,7 +509,7 @@ fn uninstall_moves_the_app_to_the_trash_only_when_it_is_ours() {
     let world = World::new();
     let home = world.home.clone();
     world.ok(&home, &["setup"]);
-    let app = home.join("Applications/Claude Profiles.app");
+    let app = home.join("Applications/Orberus.app");
     fs::create_dir_all(app.join("Contents")).unwrap();
 
     // Same name, another identifier: not our app.
@@ -526,13 +523,13 @@ fn uninstall_moves_the_app_to_the_trash_only_when_it_is_ours() {
 
     fs::write(
         app.join("Contents/Info.plist"),
-        "<string>com.github.tzdev0.claudeprofiles</string>",
+        "<string>com.github.tzdev0.orberus</string>",
     )
     .unwrap();
     let done = world.ok(&home, &["uninstall", "--yes"]);
     assert!(done.contains("moved to the Trash"), "{done}");
     assert!(!app.exists());
-    assert!(home.join(".Trash/Claude Profiles.app").is_dir());
+    assert!(home.join(".Trash/Orberus.app").is_dir());
 }
 
 #[test]
@@ -610,7 +607,7 @@ fn usage_shows_each_folder_against_the_rules() {
         "{out}"
     );
     assert!(
-        row("~/code/notes").contains("would use perso today (pinned with .claude-profile)"),
+        row("~/code/notes").contains("would use perso today (pinned with .orberus-profile)"),
         "{out}"
     );
     assert!(row("~/code/deleted").contains("folder gone"), "{out}");
@@ -618,7 +615,7 @@ fn usage_shows_each_folder_against_the_rules() {
         out.contains("36% came from 2 project(s) where `claude` would use another profile today"),
         "{out}"
     );
-    assert!(out.contains("cd ~/code/blog && cprofile use work"), "{out}");
+    assert!(out.contains("cd ~/code/blog && orberus use work"), "{out}");
 
     // Nothing was used with the other profile yet.
     let all = world.ok(&home, &["usage", "--days", "36500"]);
@@ -635,14 +632,14 @@ fn usage_shows_each_folder_against_the_rules() {
     .unwrap();
     let out = world.ok(&home, &["usage", "perso", "--days", "36500"]);
     assert!(out.contains("no rule, default profile"), "{out}");
-    assert!(out.contains("✓ pinned with .claude-profile"), "{out}");
+    assert!(out.contains("✓ pinned with .orberus-profile"), "{out}");
     assert!(
         out.contains("50% came from 1 project(s) no rule names"),
         "{out}"
     );
-    assert!(out.contains("cd ~/code/blog && cprofile rule add"), "{out}");
+    assert!(out.contains("cd ~/code/blog && orberus rule add"), "{out}");
 
-    assert!(world.cprofile(&home, &["usage", "nope"]).status.code() != Some(0));
+    assert!(world.orberus(&home, &["usage", "nope"]).status.code() != Some(0));
 }
 
 #[test]

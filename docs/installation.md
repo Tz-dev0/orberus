@@ -1,9 +1,9 @@
 # Installation
 
-Claude Profiles has two parts:
+Orberus has two parts:
 
-- **`cprofile`**, the command-line tool. It is all you need.
-- **Claude Profiles.app**, an optional menu bar app that shows the same
+- **`orberus`**, the command-line tool. It is all you need.
+- **Orberus.app**, an optional menu bar app that shows the same
   profiles and rules.
 
 Both need macOS, on Apple Silicon or Intel, and
@@ -12,28 +12,28 @@ Both need macOS, on Apple Silicon or Intel, and
 ## Install the CLI
 
 ```sh
-mkdir -p ~/.claude-profiles/bin
-curl -fsSL https://github.com/Tz-dev0/claude-profiles/releases/latest/download/cprofile-macos-universal.tar.gz \
-  | tar -xz -C ~/.claude-profiles/bin --strip-components 1 cprofile-macos-universal/cprofile
-~/.claude-profiles/bin/cprofile setup
+mkdir -p ~/.orberus/bin
+curl -fsSL https://github.com/Tz-dev0/orberus/releases/latest/download/orberus-cli-macos-universal.tar.gz \
+  | tar -xz -C ~/.orberus/bin --strip-components 1 orberus-cli-macos-universal/orberus
+~/.orberus/bin/orberus setup
 ```
 
 What this does:
 
-1. downloads the latest release and puts `cprofile` in `~/.claude-profiles/bin`;
-2. `setup` creates `~/.claude-profiles/bin/claude`, a link to `cprofile`. This
+1. downloads the latest release and puts `orberus` in `~/.orberus/bin`;
+2. `setup` creates `~/.orberus/bin/claude`, a link to `orberus`. This
    is the shim that picks the account when you type `claude`;
 3. `setup` offers to add that folder to your `PATH`, in `~/.zshrc` or in your
    bash profile. With another shell, add this line to its config yourself:
 
    ```sh
-   export PATH="$HOME/.claude-profiles/bin:$PATH"
+   export PATH="$HOME/.orberus/bin:$PATH"
    ```
 
 Open a new terminal, then check the result:
 
 ```sh
-cprofile doctor
+orberus doctor
 ```
 
 Until you create a profile, `claude` behaves exactly as before.
@@ -51,9 +51,9 @@ Privacy & Security.
 Each release also has a `.sha256` file next to the archive:
 
 ```sh
-curl -fsSLO https://github.com/Tz-dev0/claude-profiles/releases/latest/download/cprofile-macos-universal.tar.gz
-curl -fsSLO https://github.com/Tz-dev0/claude-profiles/releases/latest/download/cprofile-macos-universal.tar.gz.sha256
-shasum -a 256 -c cprofile-macos-universal.tar.gz.sha256
+curl -fsSLO https://github.com/Tz-dev0/orberus/releases/latest/download/orberus-cli-macos-universal.tar.gz
+curl -fsSLO https://github.com/Tz-dev0/orberus/releases/latest/download/orberus-cli-macos-universal.tar.gz.sha256
+shasum -a 256 -c orberus-cli-macos-universal.tar.gz.sha256
 ```
 
 ## Install the menu bar app
@@ -61,9 +61,9 @@ shasum -a 256 -c cprofile-macos-universal.tar.gz.sha256
 Install the CLI first: the app starts Claude Code through its shim.
 
 ```sh
-curl -fsSL https://github.com/Tz-dev0/claude-profiles/releases/latest/download/Claude-Profiles-macos-universal.tar.gz \
+curl -fsSL https://github.com/Tz-dev0/orberus/releases/latest/download/orberus-app-macos-universal.tar.gz \
   | tar -xz -C /Applications
-open "/Applications/Claude Profiles.app"
+open "/Applications/Orberus.app"
 ```
 
 The app is not signed either, so the same remark about `curl` applies.
@@ -73,42 +73,42 @@ The app is not signed either, so the same remark about `curl` applies.
 Run the install commands again. For the app, quit it first (right-click its
 menu bar icon, then Quit).
 
-`cprofile --version` prints the version you have.
+`orberus --version` prints the version you have.
 
 ## Uninstall
 
 ```sh
-cprofile uninstall
+orberus uninstall
 ```
 
 It removes the shim, the `PATH` line that `setup` added to your shell config,
-`cprofile` itself and the menu bar app (moved to the Trash), after showing you
+`orberus` itself and the menu bar app (moved to the Trash), after showing you
 the list and asking. Open a new terminal afterwards: `claude` is the real
 Claude Code again.
 
-Your profiles are kept in `~/.claude-profiles`: the config, the rules and the
+Your profiles are kept in `~/.orberus`: the config, the rules and the
 Claude Code folder of each profile, with its login and history. To delete
 them as well, with their logins in the macOS keychain:
 
 ```sh
-cprofile uninstall --purge
+orberus uninstall --purge
 ```
 
 Your own `~/.claude` is never touched by either command. See
 [commands.md](commands.md#uninstall) for the details.
 
-If you installed `cprofile` with `cargo install`, finish with
-`cargo uninstall claude-profiles`.
+If you installed `orberus` with `cargo install`, finish with
+`cargo uninstall orberus`.
 
 ## Build from source
 
 You need [Rust](https://rustup.rs). For the app, also Node.js.
 
 ```sh
-git clone https://github.com/Tz-dev0/claude-profiles.git
-cd claude-profiles
-cargo install --path .      # installs cprofile in ~/.cargo/bin
-cprofile setup
+git clone https://github.com/Tz-dev0/orberus.git
+cd orberus
+cargo install --path .      # installs orberus in ~/.cargo/bin
+orberus setup
 ```
 
 The app:
@@ -116,7 +116,7 @@ The app:
 ```sh
 cd app
 npm install
-npm run tauri build         # builds "Claude Profiles.app"
+npm run tauri build         # builds "Orberus.app"
 ```
 
 The built app is in `app/src-tauri/target/release/bundle/macos/`.

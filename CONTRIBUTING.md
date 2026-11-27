@@ -4,9 +4,9 @@ Bug reports, ideas and pull requests are welcome.
 
 ## Reporting a problem
 
-Run `cprofile doctor` first, then [open an issue](https://github.com/Tz-dev0/claude-profiles/issues)
-with its output, the output of `cprofile status`, and the versions of
-`cprofile`, Claude Code and macOS. Remove account addresses and private paths.
+Run `orberus doctor` first, then [open an issue](https://github.com/Tz-dev0/orberus/issues)
+with its output, the output of `orberus status`, and the versions of
+`orberus`, Claude Code and macOS. Remove account addresses and private paths.
 
 For a security problem, see [SECURITY.md](SECURITY.md) instead.
 
@@ -28,10 +28,10 @@ To try your build without touching your own setup, point it at a throwaway
 folder:
 
 ```sh
-CLAUDE_PROFILES_HOME=/tmp/cp-test cargo run -- add work
+ORBERUS_HOME=/tmp/cp-test cargo run -- add work
 ```
 
-`scripts/smoke.sh <path to cprofile>` runs the everyday commands in an empty
+`scripts/smoke.sh <path to orberus>` runs the everyday commands in an empty
 folder and prints how each one ends.
 
 ## Layout

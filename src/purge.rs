@@ -2,7 +2,7 @@
 //! and, on macOS, its login in the keychain.
 //!
 //! This is the one place that destroys data, and only on request
-//! (`cprofile remove --purge`, or the checkbox in the menu bar app). It is
+//! (`orberus remove --purge`, or the checkbox in the menu bar app). It is
 //! never on the shim's path, so running other programs here is fine.
 
 use std::fs;

@@ -175,7 +175,7 @@ pub fn native_profile(config: &Config) -> Option<&str> {
 
 /// Adds a profile to `config`, creates its folder and saves the file.
 /// Returns true when it became the default, which happens for the first
-/// profile. Shared by `cprofile add` and the menu bar app, so both apply the
+/// profile. Shared by `orberus add` and the menu bar app, so both apply the
 /// same checks.
 ///
 /// `config` is `&mut`: the caller keeps its copy and sees the new profile in
@@ -213,7 +213,7 @@ pub fn add_profile(
 }
 
 /// Removes a profile from the config, with the user's rules that point to
-/// it, and returns how many rules went. Shared by `cprofile remove` and the
+/// it, and returns how many rules went. Shared by `orberus remove` and the
 /// menu bar app.
 ///
 /// The profile's folder is never touched: it holds the history and settings
@@ -238,7 +238,7 @@ pub fn remove_profile(env: &Env, config: &mut Config, name: &str) -> Result<usiz
 /// `None` means the profile is native: the variable must stay unset.
 pub fn profile_dir(env: &Env, config: &Config, name: &str) -> Result<Option<PathBuf>> {
     let Some(profile) = config.profiles.get(name) else {
-        bail!("unknown profile '{name}' (create it with: cprofile add {name})");
+        bail!("unknown profile '{name}' (create it with: orberus add {name})");
     };
     if profile.native {
         return Ok(None);

@@ -1,4 +1,4 @@
-//! Creating and removing the user's rules. Shared by `cprofile rule` and the
+//! Creating and removing the user's rules. Shared by `orberus rule` and the
 //! menu bar app, so both apply the same checks.
 //!
 //! Team rules live in `team.toml`, which the company provides: nothing here
@@ -118,7 +118,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let home = temp.path().canonicalize().unwrap();
         let env = Env {
-            root: home.join(".claude-profiles"),
+            root: home.join(".orberus"),
             home,
         };
         let mut config = Config::default();

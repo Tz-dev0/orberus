@@ -2,8 +2,8 @@
 //!
 //! Priority, highest first:
 //! 1. a locked rule (it also refuses an explicit choice of another profile)
-//! 2. an explicit choice (`--profile` or the CLAUDE_PROFILE variable)
-//! 3. a `.claude-profile` file in the folder or one of its parents
+//! 2. an explicit choice (`--profile` or the ORBERUS_PROFILE variable)
+//! 3. a `.orberus-profile` file in the folder or one of its parents
 //! 4. the first matching rule, team rules before user rules
 //! 5. the default profile
 
@@ -16,7 +16,7 @@ use crate::config::{Loaded, Rule, RuleSource};
 use crate::git;
 use crate::paths::Env;
 
-pub const REPO_FILE: &str = ".claude-profile";
+pub const REPO_FILE: &str = ".orberus-profile";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reason {
@@ -115,7 +115,7 @@ pub fn resolve(
     if let Some(found) = &resolution {
         if !loaded.config.profiles.contains_key(&found.profile) {
             bail!(
-                "profile '{}' ({}) does not exist; create it with: cprofile add {}",
+                "profile '{}' ({}) does not exist; create it with: orberus add {}",
                 found.profile,
                 found.reason.describe(),
                 found.profile
@@ -194,7 +194,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let home = temp.path().canonicalize().unwrap();
         let env = Env {
-            root: home.join(".claude-profiles"),
+            root: home.join(".orberus"),
             home,
         };
         let mut config = Config {

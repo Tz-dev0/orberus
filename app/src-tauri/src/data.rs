@@ -1,7 +1,7 @@
 //! What the popover shows and what its buttons do, without any Tauri type.
 //!
 //! Everything takes an `Env`, like the core, so it can be tested against a
-//! temporary folder instead of the real `~/.claude-profiles`.
+//! temporary folder instead of the real `~/.orberus`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,15 +11,15 @@ use std::time::SystemTime;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 
-use claude_profiles::config::{self, RuleSource};
-use claude_profiles::disk;
-use claude_profiles::paths::Env;
-use claude_profiles::purge;
-use claude_profiles::retention::{self, Retention};
-use claude_profiles::rules;
-use claude_profiles::sessions;
-use claude_profiles::usage::{self, Verdict};
-use claude_profiles::view;
+use orberus::config::{self, RuleSource};
+use orberus::disk;
+use orberus::paths::Env;
+use orberus::purge;
+use orberus::retention::{self, Retention};
+use orberus::rules;
+use orberus::sessions;
+use orberus::usage::{self, Verdict};
+use orberus::view;
 
 // `Serialize` lets Tauri turn these structs into JSON for the TypeScript
 // side. `camelCase` gives the field names JavaScript expects (`isDefault`).
@@ -158,7 +158,7 @@ pub struct Conversations {
 /// How many conversations the window lists for a profile.
 const LISTED: usize = 8;
 
-/// The biggest conversations of a profile, like `cprofile clean`.
+/// The biggest conversations of a profile, like `orberus clean`.
 pub fn conversations(env: &Env, name: &str) -> Result<Conversations> {
     let config = config::load(env)?.config;
     let found = sessions::profile_sessions(env, &config, name)?;
@@ -267,14 +267,14 @@ pub struct UsageOverview {
     pub flagged: usize,
 }
 
-/// The period the window looks at, like `cprofile usage` by default.
+/// The period the window looks at, like `orberus usage` by default.
 const USAGE_DAYS: u64 = 7;
 /// How many projects and conversations the window lists for a profile.
 const USAGE_PROJECTS: usize = 5;
 const USAGE_TALKS: usize = 3;
 
 /// Which projects and conversations used each profile, like
-/// `cprofile usage`. This reads the conversation files of the period, so
+/// `orberus usage`. This reads the conversation files of the period, so
 /// the page asks for it apart from the profile list.
 pub fn usage(env: &Env) -> Result<UsageOverview> {
     let loaded = config::load(env)?;
@@ -475,7 +475,7 @@ pub struct RuleDraft {
 }
 
 /// The rules that make sense for a folder, like the guided
-/// `cprofile rule add`.
+/// `orberus rule add`.
 pub fn rule_draft(env: &Env, folder: &Path) -> RuleDraft {
     RuleDraft {
         folder: view::short_path(env, folder),
@@ -490,7 +490,7 @@ pub fn rule_draft(env: &Env, folder: &Path) -> RuleDraft {
     }
 }
 
-/// Adds a rule, with the same checks as `cprofile rule add`.
+/// Adds a rule, with the same checks as `orberus rule add`.
 pub fn add_rule(
     env: &Env,
     path: Option<String>,
@@ -523,7 +523,7 @@ pub fn remove_rule(env: &Env, index: usize, shown: &config::Rule) -> Result<()> 
     Ok(())
 }
 
-/// Creates a profile, with the same checks as `cprofile add`. With
+/// Creates a profile, with the same checks as `orberus add`. With
 /// `reuse_login` it takes over the existing `~/.claude` login.
 pub fn add_profile(env: &Env, name: &str, reuse_login: bool) -> Result<()> {
     let mut config = config::load(env)?.config;
@@ -533,8 +533,8 @@ pub fn add_profile(env: &Env, name: &str, reuse_login: bool) -> Result<()> {
 }
 
 /// Removes a profile and the user's rules that point to it, like
-/// `cprofile remove`. Its Claude Code folder, and so its login, are kept,
-/// unless `purge` asks to delete them too (`cprofile remove --purge`).
+/// `orberus remove`. Its Claude Code folder, and so its login, are kept,
+/// unless `purge` asks to delete them too (`orberus remove --purge`).
 pub fn remove_profile(env: &Env, name: &str, purge: bool) -> Result<()> {
     let mut config = config::load(env)?.config;
     if purge {
@@ -551,7 +551,7 @@ pub fn remove_profile(env: &Env, name: &str, purge: bool) -> Result<()> {
 }
 
 /// Sets how long a profile keeps its conversations, like
-/// `cprofile retention <profile> <days>`.
+/// `orberus retention <profile> <days>`.
 pub fn set_retention(env: &Env, name: &str, days: u64) -> Result<()> {
     let config = config::load(env)?.config;
     if !config.profiles.contains_key(name) {
@@ -724,7 +724,7 @@ pub fn last_folder(env: &Env, name: &str) -> Option<PathBuf> {
 /// The script goes through the shim with an explicit choice, so a locked rule
 /// still has the last word, exactly as when the user types the command.
 pub fn write_launcher(env: &Env, name: &str, folder: &Path) -> Result<PathBuf> {
-    // The name ends up in a script: only accept what `cprofile add` accepts.
+    // The name ends up in a script: only accept what `orberus add` accepts.
     config::validate_name(name)?;
     let config = config::load(env)?.config;
     if !config.profiles.contains_key(name) {
@@ -732,7 +732,7 @@ pub fn write_launcher(env: &Env, name: &str, folder: &Path) -> Result<PathBuf> {
     }
     let shim = shim_path(env);
     if !shim.exists() {
-        bail!("the claude shim is not installed yet: run `cprofile setup` in a terminal");
+        bail!("the claude shim is not installed yet: run `orberus setup` in a terminal");
     }
 
     if !folder.is_dir() {
@@ -747,9 +747,9 @@ pub fn write_launcher(env: &Env, name: &str, folder: &Path) -> Result<PathBuf> {
     let file = dir.join(format!("{name}.command"));
     let script = format!(
         "#!/bin/sh\n\
-         # Written by Claude Profiles. Starts Claude Code with the '{name}' profile.\n\
+         # Written by Orberus. Starts Claude Code with the '{name}' profile.\n\
          cd {folder} || exit 1\n\
-         CLAUDE_PROFILE={name} exec {shim}\n",
+         ORBERUS_PROFILE={name} exec {shim}\n",
         folder = shell_quote(&folder.display().to_string()),
         shim = shell_quote(&shim.display().to_string())
     );
@@ -767,14 +767,14 @@ pub fn write_launcher(env: &Env, name: &str, folder: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use claude_profiles::config::{Config, Profile, Rule};
+    use orberus::config::{Config, Profile, Rule};
 
     /// A throwaway home with two profiles and one locked rule.
     fn world() -> (tempfile::TempDir, Env) {
         let temp = tempfile::tempdir().unwrap();
         let home = temp.path().to_path_buf();
         let env = Env {
-            root: home.join(".claude-profiles"),
+            root: home.join(".orberus"),
             home,
         };
         let mut config = Config {
@@ -824,7 +824,7 @@ mod tests {
 
         let work = &overview.profiles[1];
         assert_eq!(work.account.as_deref(), Some("me@acme.test"));
-        assert_eq!(work.location, "~/.claude-profiles/profiles/work");
+        assert_eq!(work.location, "~/.orberus/profiles/work");
         assert_eq!(work.rules, 1);
         assert_eq!(work.team_rules, 0);
 
@@ -1143,7 +1143,7 @@ mod tests {
         let error = write_launcher(&env, "work", &project)
             .unwrap_err()
             .to_string();
-        assert!(error.contains("cprofile setup"), "{error}");
+        assert!(error.contains("orberus setup"), "{error}");
         assert_eq!(last_folder(&env, "work"), None);
 
         fs::create_dir_all(env.bin_dir()).unwrap();
@@ -1152,8 +1152,8 @@ mod tests {
         let script = fs::read_to_string(&file).unwrap();
         assert!(script.starts_with("#!/bin/sh\n"), "{script}");
         assert!(script.contains("/it'\\''s my app' || exit 1\n"), "{script}");
-        assert!(script.contains("CLAUDE_PROFILE=work exec '"), "{script}");
-        assert!(script.contains("/.claude-profiles/bin/claude'"), "{script}");
+        assert!(script.contains("ORBERUS_PROFILE=work exec '"), "{script}");
+        assert!(script.contains("/.orberus/bin/claude'"), "{script}");
 
         // The folder is remembered for this profile only, while it exists.
         assert_eq!(last_folder(&env, "work"), Some(project.clone()));

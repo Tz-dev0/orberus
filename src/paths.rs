@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 
-/// Overrides the data folder (default `~/.claude-profiles`). Used by tests.
-pub const ROOT_ENV: &str = "CLAUDE_PROFILES_HOME";
+/// Overrides the data folder (default `~/.orberus`). Used by tests.
+pub const ROOT_ENV: &str = "ORBERUS_HOME";
 
 /// Where things live on this machine. Passed around explicitly so the core
 /// never reads global state, which keeps it easy to test.
@@ -54,10 +54,10 @@ impl Env {
     }
 }
 
-/// The data folder: the override when it names a folder, `~/.claude-profiles`
+/// The data folder: the override when it names a folder, `~/.orberus`
 /// otherwise.
 ///
-/// A variable that is set but empty (`CLAUDE_PROFILES_HOME= cprofile ...`)
+/// A variable that is set but empty (`ORBERUS_HOME= orberus ...`)
 /// counts as not set. An empty path would otherwise mean "the current
 /// folder", and the config would be written wherever the command was run.
 ///
@@ -66,7 +66,7 @@ impl Env {
 fn root_folder(home: &Path, overridden: Option<OsString>) -> PathBuf {
     match overridden {
         Some(path) if !path.is_empty() => PathBuf::from(path),
-        _ => home.join(".claude-profiles"),
+        _ => home.join(".orberus"),
     }
 }
 
@@ -77,10 +77,7 @@ mod tests {
     #[test]
     fn root_is_under_home_by_default() {
         let home = Path::new("/home/me");
-        assert_eq!(
-            root_folder(home, None),
-            Path::new("/home/me/.claude-profiles")
-        );
+        assert_eq!(root_folder(home, None), Path::new("/home/me/.orberus"));
     }
 
     #[test]
@@ -97,7 +94,7 @@ mod tests {
         let home = Path::new("/home/me");
         assert_eq!(
             root_folder(home, Some(OsString::new())),
-            Path::new("/home/me/.claude-profiles")
+            Path::new("/home/me/.orberus")
         );
     }
 }
