@@ -45,6 +45,9 @@ $ orberus ide
 └─────────┴───────────────────────┴─────────────────────────────────────────────────────────┘
 ```
 
+The menu bar app does the same from its "Editors" section, one editor at a
+time.
+
 `orberus ide off` removes the setting again, and `orberus uninstall` does it
 for you: an editor is never left pointing to a program that is gone.
 

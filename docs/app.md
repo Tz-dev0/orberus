@@ -39,6 +39,9 @@ Opening the app again from the Finder or Spotlight shows the window.
 - **Storage** (folded): the disk space of each profile. Each bar is that
   profile's folder, cut by what fills it: conversations, file history, plugins
   and skills, other.
+- **Editors** (folded, shown when VS Code, Cursor or another editor built on
+  VS Code is found): whether the Claude Code extension of each one goes
+  through Orberus. Folded, it says how many still skip it.
 - **Terminal** (folded): the app that "Open…" starts Claude Code in.
 
 ## What you can do
@@ -53,6 +56,7 @@ Opening the app again from the Finder or Spotlight shows the window.
 | Remove a profile | Hover the profile, then the bin icon. The row says what goes and what stays before you confirm |
 | Change how long conversations are kept | Unfold "Conversations kept": 30 days, 90 days, 1 year, or a number of days |
 | Move big conversations to the Trash | Unfold "Storage", click a profile, then the bin icon of a conversation and "Move to Trash" |
+| Pick the account by folder in an editor | Unfold "Editors" and click "Turn on" next to it: the same as [`orberus ide on`](editors.md) for that editor. "Turn off" undoes it. Reload the editor's window afterwards |
 | Choose the terminal app | Unfold "Terminal" and click one. "System default" is the app macOS opens `.command` files with, usually Terminal |
 | Open the config file | ⌘, |
 | Quit | ⌘Q |

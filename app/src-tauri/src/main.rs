@@ -265,6 +265,17 @@ async fn set_terminal(path: Option<String>) -> Result<(), String> {
     run(|env| data::set_terminal(env, path.as_deref()))
 }
 
+/// `async`: finding the editors reads the Applications folders.
+#[tauri::command]
+async fn editors() -> Result<Vec<data::EditorView>, String> {
+    run(|env| Ok(data::editors(env)))
+}
+
+#[tauri::command]
+async fn set_editor(settings: String, on: bool) -> Result<(), String> {
+    run(|env| data::set_editor(env, &settings, on))
+}
+
 /// Opens `config.toml` in the default text editor.
 #[tauri::command]
 fn open_config() -> Result<(), String> {
@@ -410,6 +421,8 @@ fn main() {
             remove_rule,
             terminals,
             set_terminal,
+            editors,
+            set_editor,
             open_claude,
             open_config,
             set_quit_label,

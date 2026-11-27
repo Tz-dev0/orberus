@@ -18,6 +18,7 @@ use serde::Serialize;
 
 use orberus_core::config::{self, RuleSource};
 use orberus_core::disk;
+use orberus_core::ide::{self, State};
 use orberus_core::limits::{self, Capture, Source};
 use orberus_core::paths::Env;
 use orberus_core::purge;
@@ -25,6 +26,7 @@ use orberus_core::resolve::Reason;
 use orberus_core::retention::{self, Retention};
 use orberus_core::rules;
 use orberus_core::sessions;
+use orberus_core::tool;
 use orberus_core::usage::{self, Verdict};
 use orberus_core::view;
 
@@ -699,6 +701,74 @@ fn folder_note(env: &Env, name: &str) -> PathBuf {
     run_dir(env).join(format!("{name}.folder"))
 }
 
+/// One editor of the VS Code family, for the "Editors" section.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorView {
+    pub name: String,
+    /// Its settings file: what `set_editor` takes, and what the page shows.
+    pub settings: String,
+    /// The same file, shortened to read.
+    pub settings_short: String,
+    /// `on`: the extension starts our wrapper. `off`: it starts Claude Code
+    /// itself. `absent`: the extension is not installed there. `other`: it
+    /// starts another program. `unreadable`: the settings file is not
+    /// understood.
+    pub state: &'static str,
+    /// The other program, or why the file is not understood.
+    pub detail: Option<String>,
+}
+
+/// The editors found on this Mac and how their Claude Code extension is
+/// started.
+pub fn editors(env: &Env) -> Vec<EditorView> {
+    let tool = &tool::CLAUDE;
+    ide::editors(env)
+        .into_iter()
+        .map(|editor| {
+            let (state, detail) = match ide::state(env, tool, &editor) {
+                State::On => ("on", None),
+                // Nothing skips Orberus where the extension is not there.
+                State::Off if ide::has_extension(tool, &editor) == Some(false) => ("absent", None),
+                State::Off => ("off", None),
+                State::Other(program) => ("other", Some(program)),
+                State::Unreadable(why) => ("unreadable", Some(why)),
+            };
+            EditorView {
+                settings_short: view::short_path(env, &editor.settings),
+                settings: editor.settings.display().to_string(),
+                name: editor.name,
+                state,
+                detail,
+            }
+        })
+        .collect()
+}
+
+/// Sends an editor's Claude Code extension through Orberus, or back to
+/// starting Claude Code itself. The editor is named by its settings file,
+/// which must be one of those [`editors`] lists: the page never gets to
+/// choose which file is written.
+pub fn set_editor(env: &Env, settings: &str, on: bool) -> Result<()> {
+    let tool = &tool::CLAUDE;
+    let Some(editor) = ide::editors(env)
+        .into_iter()
+        .find(|editor| editor.settings == Path::new(settings))
+    else {
+        bail!("{settings} is not the settings file of an editor found here");
+    };
+    if on {
+        // The file the setting names must be there before an editor reads
+        // it: a link to the `orberus` the shim leads to.
+        let program = limits::program(env)?;
+        ide::ensure_wrapper(env, tool, &program)?;
+        ide::turn_on(env, tool, &editor)?;
+    } else {
+        ide::turn_off(env, tool, &editor)?;
+    }
+    Ok(())
+}
+
 /// Where the chosen terminal app is remembered. The name starts with a dot,
 /// which no profile name can, so it never clashes with a profile's files.
 fn terminal_note(env: &Env) -> PathBuf {
@@ -1349,6 +1419,74 @@ mod tests {
         assert!(write_launcher(&env, "work", &project).is_err());
         assert!(write_launcher(&env, "nobody", &env.home).is_err());
         assert!(write_launcher(&env, "work; rm -rf ~", &env.home).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_editor_is_sent_through_the_wrapper_and_back() {
+        let (_temp, env) = world();
+        let base = if cfg!(target_os = "macos") {
+            "Library/Application Support"
+        } else {
+            ".config"
+        };
+        let user = env.home.join(base).join("Code/User");
+        fs::create_dir_all(user.join("globalStorage")).unwrap();
+        let file = user.join("settings.json");
+        let before = "{\n  // mine\n  \"editor.fontSize\": 13\n}\n";
+        fs::write(&file, before).unwrap();
+        // The extension is installed, wherever the editor's app is.
+        fs::create_dir_all(
+            env.home
+                .join(".vscode/extensions/anthropic.claude-code-1.0"),
+        )
+        .unwrap();
+        let settings = file.display().to_string();
+
+        let found = editors(&env);
+        assert_eq!(found.len(), 1);
+        assert_eq!((found[0].name.as_str(), found[0].state), ("VS Code", "off"));
+        assert_eq!(found[0].settings, settings);
+
+        // Without the shim there is no `orberus` to link the wrapper to.
+        assert!(set_editor(&env, &settings, true).is_err());
+        assert_eq!(fs::read_to_string(&file).unwrap(), before);
+
+        let program = env.home.join("orberus");
+        fs::write(&program, "").unwrap();
+        let shim = tool::CLAUDE.shim_path(&env);
+        fs::create_dir_all(shim.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&program, &shim).unwrap();
+
+        set_editor(&env, &settings, true).unwrap();
+        assert_eq!(editors(&env)[0].state, "on");
+        let wrapper = tool::CLAUDE.wrapper_path(&env);
+        assert_eq!(
+            fs::canonicalize(&wrapper).unwrap(),
+            fs::canonicalize(&program).unwrap()
+        );
+        assert!(fs::read_to_string(&file).unwrap().contains("// mine"));
+
+        set_editor(&env, &settings, false).unwrap();
+        assert_eq!(editors(&env)[0].state, "off");
+        assert_eq!(fs::read_to_string(&file).unwrap(), before);
+
+        // Only a file that belongs to an editor found here is ever written.
+        let stray = env.home.join("settings.json");
+        fs::write(&stray, "{}").unwrap();
+        assert!(set_editor(&env, &stray.display().to_string(), true).is_err());
+        assert_eq!(fs::read_to_string(&stray).unwrap(), "{}");
+
+        // Another program in the setting is shown, and left alone.
+        fs::write(
+            &file,
+            "{\"claudeCode.claudeProcessWrapper\": \"/opt/acme/wrap\"}",
+        )
+        .unwrap();
+        let found = editors(&env);
+        assert_eq!(found[0].state, "other");
+        assert_eq!(found[0].detail.as_deref(), Some("/opt/acme/wrap"));
+        assert!(set_editor(&env, &settings, true).is_err());
     }
 
     // `plutil` and the `.app` layout only exist on macOS.

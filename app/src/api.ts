@@ -205,6 +205,21 @@ export interface Terminal {
   selected: boolean;
 }
 
+/** An editor of the VS Code family found on this Mac. */
+export interface Editor {
+  name: string;
+  /** Its settings file: what `setEditor` takes. */
+  settings: string;
+  settingsShort: string;
+  /** on: its Claude Code extension goes through Orberus. off: it starts
+   *  Claude Code itself. absent: the extension is not installed there.
+   *  other: it goes through another program. unreadable: the settings file
+   *  is not understood. */
+  state: "on" | "off" | "absent" | "other" | "unreadable";
+  /** The other program, or why the file is not understood. */
+  detail: string | null;
+}
+
 export interface Api {
   overview(): Promise<Overview>;
   /** Measures every profile's folder. Slower than `overview`. */
@@ -243,6 +258,10 @@ export interface Api {
   terminals(): Promise<Terminal[]>;
   /** Chooses the terminal app by its path; null goes back to macOS's own. */
   setTerminal(path: string | null): Promise<void>;
+  /** The editors whose Claude Code extension can go through Orberus. */
+  editors(): Promise<Editor[]>;
+  /** Sends an editor's extension through Orberus, or back. */
+  setEditor(settings: string, on: boolean): Promise<void>;
   openConfig(): Promise<void>;
   /** Resizes the window to the height of its content. */
   fit(height: number): Promise<void>;
@@ -277,6 +296,8 @@ const tauri: Api = {
   setQuitLabel: (label) => invoke("set_quit_label", { label }),
   terminals: () => invoke<Terminal[]>("terminals"),
   setTerminal: (path) => invoke("set_terminal", { path }),
+  editors: () => invoke<Editor[]>("editors"),
+  setEditor: (settings, on) => invoke("set_editor", { settings, on }),
   openConfig: () => invoke("open_config"),
   fit: (height) => invoke("fit", { height }),
   hide: () => invoke("hide"),
@@ -296,6 +317,18 @@ function preview(): Api {
     ],
     work: [{ id: "b1", title: "Payment retries", folder: "~/clients/acme", idleSecs: 4 * day, size: 600e6, inUse: false }],
   };
+  const editor = (name: string, state: Editor["state"], detail: string | null = null): Editor => ({
+    name,
+    state,
+    detail,
+    settings: `/Users/you/Library/Application Support/${name}/User/settings.json`,
+    settingsShort: `~/Library/Application Support/${name}/User/settings.json`,
+  });
+  const editorSample: Editor[] = [
+    editor("Cursor", "absent"),
+    editor("VS Code", "off"),
+    editor("Windsurf", "other", "/opt/acme/claude-wrap"),
+  ];
   const state: Overview = {
     shimInstalled: true,
     canReuseLogin: false,
@@ -516,6 +549,11 @@ function preview(): Api {
       })),
     setTerminal: async (path) => {
       state.terminal = path ? path.replace(/^.*\/|\.app$/g, "") : null;
+    },
+    editors: async () => editorSample.map((editor) => ({ ...editor })),
+    setEditor: async (settings, on) => {
+      const editor = editorSample.find((found) => found.settings === settings);
+      if (editor) editor.state = on ? "on" : "off";
     },
     setQuitLabel: async () => {},
     openConfig: async () => {},
