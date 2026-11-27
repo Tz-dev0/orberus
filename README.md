@@ -150,7 +150,7 @@ Rules, the config files and team rules are described in
 |---|---|
 | `orberus` | Profile used in this folder, then the list of commands |
 | `orberus setup` | Install the `claude` shim and put it in your `PATH` |
-| `orberus ide [on\|off]` | Send the Claude Code extension of VS Code, Cursor and the like through Orberus |
+| `orberus ide [on\|off] [editor]` | Send the Claude Code extension of VS Code, Cursor and the like through Orberus |
 | `orberus add [name]` | Create a profile (`--native` reuses `~/.claude`) |
 | `orberus list` | Profiles, the account logged in to each, the default |
 | `orberus status` | Which profile applies here, and why |

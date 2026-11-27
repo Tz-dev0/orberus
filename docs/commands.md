@@ -33,7 +33,7 @@ It also installs the wrapper that editor extensions can start,
 ## ide
 
 ```sh
-orberus ide [on|off]
+orberus ide [on|off] [editor]
 ```
 
 For VS Code, Cursor and the other editors built on VS Code, whose Claude Code
@@ -57,7 +57,9 @@ To pick the account by folder there too: orberus ide on
 setting in each editor's user settings, so the extension starts Orberus'
 wrapper, which picks the profile for the folder the editor has open and then
 starts the extension's own copy of Claude Code. `orberus ide off` removes the
-setting. Reload the editor's window after either.
+setting. Both act on every editor found, or on the one you name, as the list
+shows it: `orberus ide on "VS Code"`. Reload the editor's window after
+either.
 
 ```text
 $ orberus ide on

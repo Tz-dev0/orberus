@@ -1,7 +1,7 @@
 //! `orberus ide`: the editors found here, and whether their Claude Code
 //! extension goes through Orberus.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use orberus_core::ide::{self, Editor, State};
 use orberus_core::paths::Env;
 use orberus_core::tool::{self, Tool};
@@ -11,18 +11,47 @@ use crate::commands::setup::install_link;
 use crate::commands::Switch;
 use crate::ui::{Cell, Style, Ui};
 
-pub(crate) fn ide_command(ui: &Ui, env: &Env, switch: Option<Switch>) -> Result<i32> {
+pub(crate) fn ide_command(
+    ui: &Ui,
+    env: &Env,
+    switch: Option<Switch>,
+    editor: Option<String>,
+) -> Result<i32> {
     let tool = &tool::CLAUDE;
     let editors = ide::editors(env);
-    match switch {
-        None => list(ui, env, tool, &editors),
-        Some(_) if editors.is_empty() => {
-            println!("{NO_EDITOR}");
-            Ok(0)
-        }
-        Some(Switch::On) => on(ui, env, tool, &editors),
-        Some(Switch::Off) => off(ui, env, tool, &editors),
+    let Some(switch) = switch else {
+        return list(ui, env, tool, &editors);
+    };
+    let editors = chosen(editors, editor.as_deref())?;
+    if editors.is_empty() {
+        println!("{NO_EDITOR}");
+        return Ok(0);
     }
+    match switch {
+        Switch::On => on(ui, env, tool, &editors),
+        Switch::Off => off(ui, env, tool, &editors),
+    }
+}
+
+/// The editors to act on: the one that was named, or all of them. The name
+/// is the one `orberus ide` lists, in any case: `cursor`, `"VS Code"`.
+fn chosen(editors: Vec<Editor>, name: Option<&str>) -> Result<Vec<Editor>> {
+    let Some(name) = name else {
+        return Ok(editors);
+    };
+    // `partition` sorts the list in two: the editors of that name, and the
+    // others, kept to name them in the error.
+    let (named, others): (Vec<Editor>, Vec<Editor>) = editors
+        .into_iter()
+        .partition(|editor| editor.name.eq_ignore_ascii_case(name));
+    if named.is_empty() {
+        if others.is_empty() {
+            bail!("no editor named '{name}': none was found on this machine");
+        }
+        let names: Vec<&str> = others.iter().map(|editor| editor.name.as_str()).collect();
+        bail!("no editor named '{name}' (found: {})", names.join(", "));
+    }
+    Ok(named)
 }
 
 const NO_EDITOR: &str = "No editor of the VS Code family found (VS Code, Cursor and the like).";

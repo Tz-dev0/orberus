@@ -892,6 +892,30 @@ fn ide_sends_the_editors_through_the_wrapper_and_back() {
 }
 
 #[test]
+fn ide_can_be_turned_on_for_one_editor_only() {
+    let world = World::new();
+    let home = world.home.clone();
+    let code = world.editor("Code", "{}");
+    let cursor = world.editor("Cursor", "{}");
+    let key = "claudeCode.claudeProcessWrapper";
+
+    // By the name the list shows, in any case.
+    world.ok(&home, &["ide", "on", "vs code"]);
+    assert!(fs::read_to_string(&code).unwrap().contains(key));
+    assert_eq!(fs::read_to_string(&cursor).unwrap(), "{}");
+
+    // A name that is not there changes nothing and says what is.
+    let error = refused(&world, &home, &["ide", "on", "zed"]);
+    assert!(error.contains("found: Cursor, VS Code"), "{error}");
+    assert_eq!(fs::read_to_string(&cursor).unwrap(), "{}");
+
+    world.ok(&home, &["ide", "off", "Cursor"]);
+    assert!(fs::read_to_string(&code).unwrap().contains(key));
+    world.ok(&home, &["ide", "off", "VS Code"]);
+    assert!(!fs::read_to_string(&code).unwrap().contains(key));
+}
+
+#[test]
 fn ide_leaves_another_wrapper_alone() {
     let world = World::new();
     let home = world.home.clone();

@@ -22,7 +22,7 @@ orberus ide on
 ```
 
 This writes one setting in the user settings of every such editor found on
-your Mac:
+your Mac (or of one only: `orberus ide on "VS Code"`):
 
 ```json
 "claudeCode.claudeProcessWrapper": "/Users/you/.orberus/ide/claude-wrapper"

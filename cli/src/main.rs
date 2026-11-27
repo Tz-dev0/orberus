@@ -173,9 +173,12 @@ enum Command {
     },
     /// Show your editors, or send their Claude Code extension through Orberus
     Ide {
-        /// `on` or `off` for every editor found. Without it, they are listed
+        /// `on` or `off`. Without it, the editors are listed
         #[arg(value_enum)]
         switch: Option<Switch>,
+        /// One editor, by the name it is listed under. Without it, every
+        /// editor found
+        editor: Option<String>,
     },
     /// Check that everything is wired correctly
     Doctor,
@@ -302,7 +305,7 @@ fn cli() -> Result<i32> {
             RuleCommand::List => rule_list(&ui, &env),
             RuleCommand::Remove { number, yes } => rule_remove(&ui, &env, number, yes),
         },
-        Command::Ide { switch } => ide_command(&ui, &env, switch),
+        Command::Ide { switch, editor } => ide_command(&ui, &env, switch, editor),
         Command::Doctor => doctor(&ui, &env),
         Command::Uninstall { purge, yes } => uninstall_command(&ui, &env, purge, yes),
     }
