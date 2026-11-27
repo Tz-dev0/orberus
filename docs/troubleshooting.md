@@ -112,8 +112,8 @@ app again from the Finder or Spotlight: its window appears.
   Code starts. Quit and start again in the right folder to change it.
 - **Editors**: the VS Code family needs `orberus ide on`, and JetBrains IDEs
   go through the shim. Zed's own Claude agent is not handled. The wrapper was
-  tried in front of the VS Code extension's own copy of Claude Code, not in
-  each editor built on VS Code. See [editors.md](editors.md).
+  tried in VS Code, not in each editor built on it. See
+  [editors.md](editors.md).
 - **Claude Desktop** accounts are not handled: it keeps the one account you
   logged it in to. Orberus only reads the plan usage it notes, for
   `orberus limits`.

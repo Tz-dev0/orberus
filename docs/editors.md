@@ -78,10 +78,15 @@ Good to know:
   extension's `claudeCode.environmentVariables` setting. A locked rule still
   wins.
 
-What was tried: the wrapper in front of the extension's own copy of Claude
-Code (extension 2.1.325), started the way the extension starts it. Cursor and
-the other editors built on VS Code install the same extension; they were not
-tried one by one.
+What was tried, with version 2.1.325 of the extension:
+
+- in VS Code, a conversation in the Claude Code panel gets the profile of
+  its folder. This was seen with the profile that reuses `~/.claude`;
+- a profile with a folder of its own was tried with the extension's copy of
+  Claude Code started by hand, the way the extension starts it, and not yet
+  in the panel;
+- Cursor and the other editors built on VS Code install the same extension;
+  they were not tried one by one.
 
 ## JetBrains IDEs
 
