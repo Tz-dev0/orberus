@@ -105,6 +105,10 @@ const en = {
   partFileHistory: "file history",
   partExtensions: "plugins and skills",
   partOther: "other",
+  legendConversations: "Conversations",
+  legendFileHistory: "File history",
+  legendExtensions: "Plugins and skills",
+  legendOther: "Other",
 
   // Usage
   usage: "Usage",
@@ -116,6 +120,9 @@ const en = {
   projectsToCheckMany: "{n} projects to check",
   usageClick: "Click to see its projects and conversations",
   idle: "Idle",
+  shareHint: "Its part of the usage of all profiles over the last {n} days",
+  projectsOne: "1 project",
+  projectsMany: "{n} projects",
   noActivity: "No conversation in this period.",
   projectsHeading: "Projects, against today's rules",
   covered: "Covered by a rule",
@@ -264,6 +271,10 @@ const fr: Record<Key, string> = {
   partFileHistory: "d'historique de fichiers",
   partExtensions: "de plugins et skills",
   partOther: "d'autres fichiers",
+  legendConversations: "Conversations",
+  legendFileHistory: "Historique de fichiers",
+  legendExtensions: "Plugins et skills",
+  legendOther: "Autres",
 
   usage: "Usage",
   usageHint:
@@ -274,6 +285,9 @@ const fr: Record<Key, string> = {
   projectsToCheckMany: "{n} projets à vérifier",
   usageClick: "Cliquer pour voir ses projets et conversations",
   idle: "Inactif",
+  shareHint: "Sa part de l'usage de tous les profils sur les {n} derniers jours",
+  projectsOne: "1 projet",
+  projectsMany: "{n} projets",
   noActivity: "Aucune conversation sur cette période.",
   projectsHeading: "Projets, selon les règles d'aujourd'hui",
   covered: "Couvert par une règle",
