@@ -19,7 +19,8 @@ the account from the folder you are in. You keep typing `claude`: a company
 repository always opens with the company account, a side project with yours,
 and a locked rule refuses the wrong one.
 
-> Not affiliated with Anthropic or OpenAI. Claude is a trademark of Anthropic.
+> Not affiliated with Anthropic, OpenAI, Apple or Microsoft. Claude is a
+> trademark of Anthropic.
 >
 > Early version, developed and tested on macOS. It is meant for people who
 > hold several legitimate, paid accounts. It does not switch accounts to get
@@ -34,7 +35,8 @@ and a locked rule refuses the wrong one.
   </picture>
 </p>
 
-A filled seal works today; an outlined one is planned, with no date yet.
+A solid tile works today; a dashed one is planned, with no date yet. The
+logos belong to their owners and only say what Orberus works with.
 
 - **Claude Code on macOS** is what Orberus handles now.
 - **Codex** is the next tool: the same profiles and the same rules would pick
