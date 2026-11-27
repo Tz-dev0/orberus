@@ -78,6 +78,18 @@ not something Anthropic documents, so a future version could change it.
 the profile's `.claude.json`; when that file is missing or unexpected, the
 profile is shown as `not logged in`.
 
+## One tool today
+
+Orberus manages Claude Code only. Inside, what names a tool is kept in one
+table (`src/tool.rs`): the command people type (`claude`), the variable that
+points it to a config folder (`CLAUDE_CONFIG_DIR`) and the folder it uses by
+default (`~/.claude`). The shim looks at the name it was started under and
+finds its tool in that table.
+
+This is room for other tools later, not support for them: reading who is
+logged in, the conversations, their size and the keychain entry all read
+Claude Code's own files.
+
 ## What Orberus writes
 
 | Where | What |

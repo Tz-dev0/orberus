@@ -393,7 +393,7 @@ pub fn usage(env: &Env) -> Result<UsageOverview> {
 }
 
 fn shim_path(env: &Env) -> PathBuf {
-    env.bin_dir().join("claude")
+    orberus::tool::CLAUDE.shim_path(env)
 }
 
 pub fn overview(env: &Env) -> Result<Overview> {

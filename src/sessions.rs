@@ -187,7 +187,7 @@ pub fn list(config_dir: &Path) -> Vec<Session> {
 pub fn profile_sessions(env: &Env, config: &Config, name: &str) -> Result<Vec<Session>> {
     let dir = match config::profile_dir(env, config, name)? {
         Some(dir) => dir,
-        None => env.home.join(".claude"),
+        None => crate::tool::CLAUDE.native_dir(env),
     };
     Ok(list(&dir))
 }

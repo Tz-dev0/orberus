@@ -59,7 +59,7 @@ pub fn days_text(days: u64) -> String {
 fn settings_file(env: &Env, config: &Config, name: &str) -> Result<PathBuf> {
     let dir = match config::profile_dir(env, config, name)? {
         Some(dir) => dir,
-        None => env.home.join(".claude"),
+        None => crate::tool::CLAUDE.native_dir(env),
     };
     Ok(dir.join("settings.json"))
 }

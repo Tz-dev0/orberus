@@ -467,7 +467,7 @@ impl ProfileUsage {
 pub fn profile_usage(env: &Env, loaded: &Loaded, name: &str, days: u64) -> Result<ProfileUsage> {
     let dir = match config::profile_dir(env, &loaded.config, name)? {
         Some(dir) => dir,
-        None => env.home.join(".claude"),
+        None => crate::tool::CLAUDE.native_dir(env),
     };
     let since = SystemTime::now()
         .checked_sub(Duration::from_secs(days * 86_400))

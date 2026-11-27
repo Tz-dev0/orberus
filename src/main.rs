@@ -23,6 +23,7 @@ use orberus::resolve::{self, REPO_FILE};
 use orberus::retention::{self, Retention};
 use orberus::rules;
 use orberus::sessions::{self, Session};
+use orberus::tool::{self, Tool};
 use orberus::uninstall::{self, Binary};
 use orberus::usage::{self, Verdict};
 use orberus::view::{account, location, short_path, when};
@@ -203,11 +204,15 @@ enum RuleCommand {
 fn main() -> ExitCode {
     let mut args = std::env::args_os();
     let invoked = args.next().unwrap_or_default();
-    let as_shim = Path::new(&invoked)
-        .file_stem()
-        .is_some_and(|stem| stem == "claude");
+    // Started under a tool's name (the `claude` link made by `setup`), this
+    // program is that tool's shim; under its own name, the command line.
+    let as_tool = tool::for_command(&invoked);
+    let as_shim = as_tool.is_some();
 
-    let result = if as_shim { shim(args.collect()) } else { cli() };
+    let result = match as_tool {
+        Some(tool) => shim(tool, args.collect()),
+        None => cli(),
+    };
     match result {
         Ok(code) => ExitCode::from(code.clamp(0, 255) as u8),
         Err(error) => {
@@ -220,37 +225,38 @@ fn main() -> ExitCode {
     }
 }
 
-/// Shim mode: every argument belongs to claude, nothing is parsed here.
-fn shim(args: Vec<OsString>) -> Result<i32> {
+/// Shim mode: every argument belongs to the tool, nothing is parsed here.
+fn shim(tool: &Tool, args: Vec<OsString>) -> Result<i32> {
     let env = Env::from_process()?;
     // Inside a session we already started: keep that session's account.
     if std::env::var_os(launch::SESSION_ENV).is_some() {
         let config = config::load(&env)
             .map(|loaded| loaded.config)
             .unwrap_or_default();
-        let real = launch::find_real_claude(&env, &config)?;
-        return launch::launch(&real, Target::Passthrough, args);
+        let real = launch::find_real(&env, &config, tool)?;
+        return launch::launch(tool, &real, Target::Passthrough, args);
     }
     let loaded = config::load(&env)?;
     let explicit = std::env::var(launch::EXPLICIT_ENV)
         .ok()
         .filter(|name| !name.is_empty());
-    run_claude(&env, &loaded, explicit, args)
+    run_tool(tool, &env, &loaded, explicit, args)
 }
 
-fn run_claude(
+fn run_tool(
+    tool: &Tool,
     env: &Env,
     loaded: &Loaded,
     explicit: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    let real = launch::find_real_claude(env, &loaded.config)?;
+    let real = launch::find_real(env, &loaded.config, tool)?;
     if loaded.is_empty() && explicit.is_none() {
-        return launch::launch(&real, Target::Passthrough, args);
+        return launch::launch(tool, &real, Target::Passthrough, args);
     }
     let cwd = std::env::current_dir().context("cannot read the current folder")?;
     let Some(found) = resolve::resolve(env, loaded, &cwd, explicit.as_deref())? else {
-        return launch::launch(&real, Target::Passthrough, args);
+        return launch::launch(tool, &real, Target::Passthrough, args);
     };
     let dir = config::profile_dir(env, &loaded.config, &found.profile)?;
     if !loaded.config.quiet && std::io::stderr().is_terminal() {
@@ -261,7 +267,7 @@ fn run_claude(
         name: &found.profile,
         dir: dir.as_deref(),
     };
-    launch::launch(&real, target, args)
+    launch::launch(tool, &real, target, args)
 }
 
 fn cli() -> Result<i32> {
@@ -301,7 +307,7 @@ fn cli() -> Result<i32> {
         Command::Status { profile } => status(&ui, &env, profile),
         Command::Run { profile, args } => {
             let loaded = config::load(&env)?;
-            run_claude(&env, &loaded, profile, args)
+            run_tool(&tool::CLAUDE, &env, &loaded, profile, args)
         }
         Command::Rule { command } => match command {
             RuleCommand::Add {
@@ -395,7 +401,7 @@ fn overview(ui: &Ui, env: &Env) -> Result<i32> {
     let loaded = config::load(env)?;
     if loaded.config.profiles.is_empty() {
         // Do not send the user back to a step that is already done.
-        let shim_ready = launch::claude_in_path()
+        let shim_ready = launch::in_path(&tool::CLAUDE)
             .first()
             .is_some_and(|(_, is_shim)| *is_shim);
         let next = if shim_ready {
@@ -438,9 +444,12 @@ fn setup(ui: &Ui, env: &Env) -> Result<i32> {
     fs::create_dir_all(env.profiles_dir())?;
     let me = std::env::current_exe()?.canonicalize()?;
 
+    // One shim today. With a second tool, this block runs once per entry
+    // of `tool::ALL`.
+    let tool = &tool::CLAUDE;
     #[cfg(unix)]
     let link = {
-        let link = bin.join("claude");
+        let link = tool.shim_path(env);
         match fs::remove_file(&link) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -454,7 +463,7 @@ fn setup(ui: &Ui, env: &Env) -> Result<i32> {
     };
     #[cfg(not(unix))]
     let link = {
-        let link = bin.join("claude.exe");
+        let link = tool.shim_path(env);
         fs::copy(&me, &link).with_context(|| format!("cannot create {}", link.display()))?;
         link
     };
@@ -624,7 +633,7 @@ fn add(
         // On macOS and Linux this call does not return: the process becomes
         // Claude Code. The config is read again to include the new profile.
         let loaded = config::load(env)?;
-        return run_claude(env, &loaded, Some(name), Vec::new());
+        return run_tool(&tool::CLAUDE, env, &loaded, Some(name), Vec::new());
     }
     println!(
         "Log in to its account with: {}   then /login",
@@ -1325,7 +1334,7 @@ fn pin(ui: &Ui, env: &Env, name: Option<String>) -> Result<i32> {
 
 fn status_block(ui: &Ui, env: &Env, loaded: &Loaded, explicit: Option<&str>) -> Result<()> {
     let cwd = std::env::current_dir().context("cannot read the current folder")?;
-    let claude = match launch::find_real_claude(env, &loaded.config) {
+    let claude = match launch::find_real(env, &loaded.config, &tool::CLAUDE) {
         Ok(real) => short_path(env, &real),
         Err(error) => ui.paint(&format!("not found ({error})"), Style::Red),
     };
@@ -1540,13 +1549,11 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
     }
     let loaded = loaded.unwrap_or_default();
 
-    #[cfg(unix)]
-    let shim = env.bin_dir().join("claude");
-    #[cfg(not(unix))]
-    let shim = env.bin_dir().join("claude.exe");
+    let tool = &tool::CLAUDE;
+    let shim = tool.shim_path(env);
     check(shim.exists(), "shim is installed", "run: orberus setup");
 
-    let found = launch::claude_in_path();
+    let found = launch::in_path(tool);
     let first_is_shim = found.first().is_some_and(|(_, is_shim)| *is_shim);
     check(
         first_is_shim,
@@ -1557,7 +1564,7 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         ),
     );
 
-    let real = launch::find_real_claude(env, &loaded.config);
+    let real = launch::find_real(env, &loaded.config, tool);
     check(
         real.is_ok(),
         "real Claude Code is found",
@@ -1586,11 +1593,11 @@ fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         "see: orberus rule list",
     );
 
-    let outside = std::env::var_os(launch::CONFIG_DIR_ENV).is_some()
+    let outside = std::env::var_os(tool.config_env).is_some()
         && std::env::var_os(launch::SESSION_ENV).is_none();
     check(
         !outside,
-        "CLAUDE_CONFIG_DIR is not set by something else",
+        &format!("{} is not set by something else", tool.config_env),
         "remove it from your shell config: orberus sets it for each launch",
     );
 
