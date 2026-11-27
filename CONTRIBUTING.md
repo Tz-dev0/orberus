@@ -39,7 +39,7 @@ folder and prints how each one ends.
 | Path | Content |
 |---|---|
 | `core/` | The core, a library with no interface: everything Orberus knows and does. `config.rs` reads and writes the config, `resolve.rs` picks the profile, `launch.rs` finds and starts the real Claude Code, `tool.rs` describes the tools it manages |
-| `cli/` | The `orberus` command, and the shim when it is started as `claude`. `main.rs` holds the commands, `ui.rs` how they are printed |
+| `cli/` | The `orberus` command, and the shim when it is started as `claude`. `main.rs` declares the commands and hands each one over, `commands/` has one file per command or family of commands, `shim.rs` is the shim, `ui.rs` how things are printed |
 | `cli/tests/shim.rs` | End-to-end tests, against a fake `claude` |
 | `app/src/` | The app's interface, in TypeScript without a framework |
 | `app/src-tauri/` | The app's Rust side (Tauri 2). It is kept out of the workspace, so the command does not pull Tauri's dependencies |
