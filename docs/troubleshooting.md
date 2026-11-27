@@ -102,7 +102,9 @@ app again from the Finder or Spotlight: its window appears.
 - **IDE extensions** that start their own copy of Claude Code, instead of the
   `claude` in your `PATH`, do not go through the shim. Terminals inside an IDE
   do.
-- **Claude Desktop** is not handled.
+- **Claude Desktop** accounts are not handled: it keeps the one account you
+  logged it in to. Orberus only reads the plan usage it notes, for
+  `orberus limits`.
 - **macOS only** for now. `clean` and `remove --purge` rely on the macOS Trash
   and keychain.
 - **`setup` writes the `PATH` line for zsh and bash only.** With another

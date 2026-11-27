@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::Result;
 use orberus_core::config::{self, Config};
 use orberus_core::launch;
-use orberus_core::limits::{self, Capture, Window};
+use orberus_core::limits::{self, Capture, Reading};
 use orberus_core::paths::Env;
 use orberus_core::tool;
 
@@ -60,8 +60,9 @@ pub(crate) fn statusline() -> Result<i32> {
                 return Ok(0);
             }
         }
-        let noted = limits::read(&env, profile);
-        println!("{}", limits::line(profile, noted.as_ref(), now));
+        // Whichever of Claude Code and Claude Desktop spoke last.
+        let found = limits::snapshot(&env, &config, profile, now);
+        println!("{}", limits::line(profile, found.as_ref()));
     }
     Ok(0)
 }
@@ -85,22 +86,24 @@ fn run_previous(command: &str, input: &str) -> bool {
     child.wait().is_ok()
 }
 
-fn window_cells(window: Option<&Window>, now: u64) -> [Cell; 2] {
-    let Some(window) = window else {
+fn window_cells(reading: Option<&Reading>) -> [Cell; 2] {
+    let Some(reading) = reading else {
         return [Cell::new(""), Cell::new("")];
     };
-    let reading = window.reading(now);
     let style = match reading.used {
         used if used >= 90.0 => Style::Red,
         used if used >= 70.0 => Style::Yellow,
         _ => Style::Plain,
     };
+    let resets = match reading.resets_in {
+        Some(seconds) => format!("in {}", limits::delay_text(seconds)),
+        None if reading.started_over => "started over".to_string(),
+        // Claude Desktop gives the number without its reset time.
+        None => String::new(),
+    };
     [
         Cell::styled(limits::percent(reading.used), style),
-        Cell::new(match reading.resets_in {
-            Some(seconds) => format!("in {}", limits::delay_text(seconds)),
-            None => "started over".to_string(),
-        }),
+        Cell::new(resets),
     ]
 }
 
@@ -110,31 +113,18 @@ fn table(ui: &Ui, env: &Env, config: &Config) -> Result<()> {
     let mut any_off = false;
     for name in config.profiles.keys() {
         let capture = limits::capture(env, config, name)?;
-        let noted = limits::read(env, name);
-        let [five, five_reset] =
-            window_cells(noted.as_ref().and_then(|l| l.five_hour.as_ref()), now);
-        let [week, week_reset] =
-            window_cells(noted.as_ref().and_then(|l| l.seven_day.as_ref()), now);
-        let updated = match (&capture, &noted) {
-            (Capture::Unknown(why), _) => Cell::styled(why.clone(), Style::Yellow),
-            (Capture::Off, None) => {
-                any_off = true;
-                Cell::styled("off", Style::Dim)
-            }
-            (Capture::Off, Some(noted)) => {
-                any_off = true;
-                Cell::styled(
-                    format!(
-                        "{} ago, now off",
-                        limits::delay_text(now.saturating_sub(noted.seen_at))
-                    ),
-                    Style::Dim,
-                )
-            }
+        let found = limits::snapshot(env, config, name, now);
+        let [five, five_reset] = window_cells(found.as_ref().and_then(|s| s.five_hour.as_ref()));
+        let [week, week_reset] = window_cells(found.as_ref().and_then(|s| s.seven_day.as_ref()));
+        any_off |= capture == Capture::Off;
+        let updated = match (&capture, &found) {
+            (Capture::Unknown(why), None) => Cell::styled(why.clone(), Style::Yellow),
+            (Capture::Off, None) => Cell::styled("off", Style::Dim),
             (Capture::On, None) => Cell::styled("waiting for Claude Code", Style::Dim),
-            (Capture::On, Some(noted)) => Cell::new(format!(
-                "{} ago",
-                limits::delay_text(now.saturating_sub(noted.seen_at))
+            (_, Some(found)) => Cell::new(format!(
+                "{} ago, {}",
+                limits::delay_text(now.saturating_sub(found.seen_at)),
+                found.source.name()
             )),
         };
         rows.push(vec![
@@ -150,11 +140,11 @@ fn table(ui: &Ui, env: &Env, config: &Config) -> Result<()> {
         &["Profile", "5-hour", "Resets", "Weekly", "Resets", "Updated"],
         &rows,
     );
-    ui.detail("The last numbers Claude Code showed for each account, not a live reading.");
+    ui.detail("The last numbers Claude Code or Claude Desktop noted for each account, not a live reading.");
     ui.detail("Rounded to a whole percent: approximate to about 1% when fresh.");
     if any_off {
         ui.detail(&format!(
-            "Turn it on for a profile with: {}",
+            "Have Claude Code report them too, with their reset times: {}",
             ui.command("orberus limits on <profile>")
         ));
     }

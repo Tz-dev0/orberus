@@ -325,33 +325,50 @@ orberus limits off work
 ```
 
 ```text
-┌─────────┬────────┬────────┬────────┬────────┬──────────────┐
-│ Profile │ 5-hour │ Resets │ Weekly │ Resets │ Updated      │
-├─────────┼────────┼────────┼────────┼────────┼──────────────┤
-│ perso   │        │        │        │        │ off          │
-│ work    │ 3%     │ in 4h  │ 11%    │ in 4d  │ under 1m ago │
-└─────────┴────────┴────────┴────────┴────────┴──────────────┘
-  The last numbers Claude Code showed for each account, not a live reading.
+┌─────────┬────────┬────────┬────────┬────────┬─────────────────────────┐
+│ Profile │ 5-hour │ Resets │ Weekly │ Resets │ Updated                 │
+├─────────┼────────┼────────┼────────┼────────┼─────────────────────────┤
+│ perso   │ 16%    │ in 3h  │ 13%    │ in 4d  │ 4m ago, Claude Desktop  │
+│ work    │ 3%     │ in 4h  │ 11%    │ in 4d  │ 2h ago, Claude Code     │
+└─────────┴────────┴────────┴────────┴────────┴─────────────────────────┘
+  The last numbers Claude Code or Claude Desktop noted for each account, not a live reading.
   Rounded to a whole percent: approximate to about 1% when fresh.
 ```
 
-The numbers come from Claude Code itself. It hands them to its
-[status line](https://code.claude.com/docs/en/statusline), for accounts with a
-subscription, after the first answer of a session. `orberus limits on` makes
-`orberus statusline` the status line of the profile, in its `settings.json`:
-each time Claude Code runs it, the limits are noted in
-`~/.orberus/limits/<profile>.json`, and a line like `work · 5h 3% · week 11%`
-shows under the prompt.
+A limit belongs to an account: work done in Claude Desktop, on claude.ai and
+in Claude Code all counts in it. Orberus never asks Anthropic for these
+numbers and never reads your login. It reads what two programs already note
+on this Mac, and shows whichever spoke last:
 
-- **These are not live numbers.** They are the last ones Claude Code
-  reported, with their age. A profile you have not used for a while shows old
-  numbers; a limit whose reset time has passed reads 0%.
+- **Claude Desktop**, while it runs, notes the usage of the account it is
+  logged in to every few minutes, in
+  `~/Library/Application Support/Claude/plan-usage-history.json`. Nothing to
+  turn on: a profile logged in to that same account gets these numbers. They
+  come without a reset time, and only for that one account.
+- **Claude Code** hands the limits to its
+  [status line](https://code.claude.com/docs/en/statusline), for accounts with
+  a subscription, after each answer in a terminal. `orberus limits on` makes
+  `orberus statusline` the status line of the profile, in its
+  `settings.json`: the limits are then noted in
+  `~/.orberus/limits/<profile>.json` with their reset times, and a line like
+  `work · 5h 3% · week 11%` shows under the prompt. This is the source for
+  the accounts Claude Desktop is not logged in to.
+
+Good to know:
+
+- **These are not live numbers.** They are the last ones noted, with their
+  age and who noted them. With Claude Desktop closed and no answer in a
+  terminal, nothing updates.
 - **They are approximate, to about one percent.** Each number is rounded to a
   whole percent, so it can differ by a point from what Claude shows, and by
   more when it is old: check the "Updated" column.
+- A number from Claude Desktop keeps the reset time Claude Code announced for
+  as long as that time is still ahead; otherwise "Resets" is empty. A limit
+  whose window has ended since the last number reads 0%, "started over".
+- Claude Desktop's file is its own, not a documented interface: if it
+  changes, this source goes quiet and the status line remains.
 - A status line of your own is kept: it stays the one shown, and
   `orberus limits off` puts your settings back as they were.
-- Orberus never asks Anthropic for these numbers and never reads your login.
 - `orberus uninstall` and `orberus remove` take the status line out again.
 
 ## disk

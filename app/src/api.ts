@@ -177,12 +177,14 @@ export interface Overview {
 export interface LimitWindow {
   /** From 0 to 100. */
   used: number;
-  /** Seconds until it starts over; null when it already has. */
+  /** Seconds until it starts over, when that is known. */
   resetsIn: number | null;
+  /** True when it started over since the numbers were noted (used is 0). */
+  startedOver: boolean;
 }
 
 /** The 5-hour and weekly limits of one profile's account: the last numbers
- *  Claude Code reported, not a live reading. */
+ *  Claude Code or Claude Desktop noted, not a live reading. */
 export interface Limits {
   name: string;
   /** Whether Claude Code reports them to Orberus for this profile. */
@@ -191,6 +193,9 @@ export interface Limits {
   sevenDay: LimitWindow | null;
   /** How old the numbers are, in seconds; null when there are none. */
   ageSecs: number | null;
+  /** Who noted them: Claude Code (its status line) or Claude Desktop (the
+   *  file it keeps); null when there are none. */
+  source: "code" | "desktop" | null;
 }
 
 /** A terminal app installed on this Mac that can run a script file. */
@@ -329,9 +334,24 @@ function preview(): Api {
       { path: "~/clients/acme", gitRemote: null, profile: "work", locked: false, source: "config.toml", index: 0 },
     ],
   };
+  const noLimits = { fiveHour: null, sevenDay: null, ageSecs: null, source: null };
+  // perso: Claude Desktop is logged in to that account and spoke last, with
+  // the reset times Claude Code gave earlier. work: Claude Code only.
   const limitSample: Record<string, Omit<Limits, "name">> = {
-    perso: { state: "on", fiveHour: { used: 3, resetsIn: 4 * 3600 + 300 }, sevenDay: { used: 11, resetsIn: 4 * 86_400 + 300 }, ageSecs: 190 },
-    work: { state: "on", fiveHour: { used: 78, resetsIn: 40 * 60 }, sevenDay: { used: 93, resetsIn: 86_400 + 7200 }, ageSecs: 3 * 3600 },
+    perso: {
+      state: "off",
+      fiveHour: { used: 16, resetsIn: 3 * 3600 + 300, startedOver: false },
+      sevenDay: { used: 13, resetsIn: null, startedOver: false },
+      ageSecs: 190,
+      source: "desktop",
+    },
+    work: {
+      state: "on",
+      fiveHour: { used: 78, resetsIn: 40 * 60, startedOver: false },
+      sevenDay: { used: 93, resetsIn: 86_400 + 7200, startedOver: false },
+      ageSecs: 3 * 3600,
+      source: "code",
+    },
   };
   return {
     overview: async () => structuredClone(state),
@@ -401,11 +421,10 @@ function preview(): Api {
       return { profiles, days: 7, flagged: profiles.reduce((sum, profile) => sum + profile.flagged, 0) };
     },
     limits: async () =>
-      state.profiles.map(({ name }) => ({ name, ...(limitSample[name] ?? { state: "off" as const, fiveHour: null, sevenDay: null, ageSecs: null }) })),
+      state.profiles.map(({ name }) => ({ name, ...(limitSample[name] ?? { state: "off" as const, ...noLimits }) })),
     setLimits: async (name, on) => {
-      limitSample[name] = on
-        ? { state: "on", fiveHour: null, sevenDay: null, ageSecs: null }
-        : { state: "off", fiveHour: null, sevenDay: null, ageSecs: null };
+      // Like the real thing: the numbers already noted stay.
+      limitSample[name] = { ...noLimits, ...limitSample[name], state: on ? "on" : "off" };
     },
     setDefault: async (name) => {
       for (const profile of state.profiles) profile.isDefault = profile.name === name;

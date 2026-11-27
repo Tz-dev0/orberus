@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use orberus_core::config::{self, RuleSource};
 use orberus_core::disk;
-use orberus_core::limits::{self, Capture};
+use orberus_core::limits::{self, Capture, Source};
 use orberus_core::paths::Env;
 use orberus_core::purge;
 use orberus_core::resolve::Reason;
@@ -583,9 +583,11 @@ pub fn remove_profile(env: &Env, name: &str, purge: bool) -> Result<()> {
 pub struct WindowView {
     /// From 0 to 100.
     pub used: f64,
-    /// Seconds until it starts over; `None` when it already has since the
-    /// numbers were reported (`used` is then 0).
+    /// Seconds until it starts over, when that is known.
     pub resets_in: Option<u64>,
+    /// True when it started over since the numbers were reported (`used`
+    /// is then 0).
+    pub started_over: bool,
 }
 
 /// The 5-hour and weekly limits of one profile's account.
@@ -593,13 +595,16 @@ pub struct WindowView {
 #[serde(rename_all = "camelCase")]
 pub struct LimitsView {
     pub name: String,
-    /// "on" when Claude Code reports them to us, "off" when it does not,
-    /// "unknown" when the profile's settings cannot be read.
+    /// Whether Claude Code reports them to us: "on", "off", or "unknown"
+    /// when the profile's settings cannot be read.
     pub state: &'static str,
     pub five_hour: Option<WindowView>,
     pub seven_day: Option<WindowView>,
     /// How old the numbers are, in seconds. `None` when there are none.
     pub age_secs: Option<u64>,
+    /// Who reported them: "code" (Claude Code) or "desktop" (Claude
+    /// Desktop). `None` when there are none.
+    pub source: Option<&'static str>,
 }
 
 fn unix_now() -> u64 {
@@ -609,7 +614,7 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
-/// The last limits Claude Code reported for each profile.
+/// The last limits noted for each profile's account.
 pub fn limits(env: &Env) -> Result<Vec<LimitsView>> {
     limits_at(env, unix_now())
 }
@@ -624,22 +629,24 @@ fn limits_at(env: &Env, now: u64) -> Result<Vec<LimitsView>> {
             Capture::Off => "off",
             Capture::Unknown(_) => "unknown",
         };
-        let noted = limits::read(env, name);
-        let view = |window: Option<&limits::Window>| {
-            window.map(|window| {
-                let reading = window.reading(now);
-                WindowView {
-                    used: reading.used,
-                    resets_in: reading.resets_in,
-                }
+        let found = limits::snapshot(env, &config, name, now);
+        let view = |reading: Option<&limits::Reading>| {
+            reading.map(|reading| WindowView {
+                used: reading.used,
+                resets_in: reading.resets_in,
+                started_over: reading.started_over,
             })
         };
         views.push(LimitsView {
             name: name.clone(),
             state,
-            five_hour: view(noted.as_ref().and_then(|l| l.five_hour.as_ref())),
-            seven_day: view(noted.as_ref().and_then(|l| l.seven_day.as_ref())),
-            age_secs: noted.as_ref().map(|l| now.saturating_sub(l.seen_at)),
+            five_hour: view(found.as_ref().and_then(|s| s.five_hour.as_ref())),
+            seven_day: view(found.as_ref().and_then(|s| s.seven_day.as_ref())),
+            age_secs: found.as_ref().map(|s| now.saturating_sub(s.seen_at)),
+            source: found.as_ref().map(|s| match s.source {
+                Source::ClaudeCode => "code",
+                Source::ClaudeDesktop => "desktop",
+            }),
         });
     }
     Ok(views)
@@ -928,10 +935,36 @@ mod tests {
         let work = &views[1];
         assert_eq!(work.state, "on");
         assert_eq!(work.age_secs, Some(1500));
+        assert_eq!(work.source, Some("code"));
         let five = work.five_hour.as_ref().unwrap();
-        assert_eq!((five.used, five.resets_in), (0.0, None));
+        assert!(five.started_over && five.used == 0.0 && five.resets_in.is_none());
         let week = work.seven_day.as_ref().unwrap();
         assert_eq!((week.used, week.resets_in), (11.4, Some(87_500)));
+
+        // Claude Desktop, logged in to the same account, noted more since:
+        // its numbers win, the weekly reset time stays the announced one.
+        fs::write(
+            env.profiles_dir().join("work").join(".claude.json"),
+            r#"{"oauthAccount": {"emailAddress": "me@acme.test", "organizationUuid": "acme"}}"#,
+        )
+        .unwrap();
+        let history = orberus_core::desktop::history_file(&env);
+        fs::create_dir_all(history.parent().unwrap()).unwrap();
+        fs::write(
+            &history,
+            r#"{"version":2,"samples":[{"t":2400000,"org":"acme","u":{"fh":6,"sd":14}}]}"#,
+        )
+        .unwrap();
+        let views = limits_at(&env, 2500).unwrap();
+        let work = &views[1];
+        assert_eq!((work.source, work.age_secs), (Some("desktop"), Some(100)));
+        let five = work.five_hour.as_ref().unwrap();
+        assert_eq!(
+            (five.used, five.resets_in, five.started_over),
+            (6.0, None, false)
+        );
+        let week = work.seven_day.as_ref().unwrap();
+        assert_eq!((week.used, week.resets_in), (14.0, Some(87_500)));
 
         set_limits(&env, "work", false).unwrap();
         assert_eq!(limits_at(&env, 2500).unwrap()[1].state, "off");

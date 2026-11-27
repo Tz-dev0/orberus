@@ -61,6 +61,13 @@ pub fn plan(env: &Env, config: &Config, name: &str) -> Option<String> {
     plan_name(kind, tier)
 }
 
+/// The id of the organization the profile's account belongs to. It is how
+/// the usage Claude Desktop notes is matched to a profile.
+pub fn organization(env: &Env, config: &Config, name: &str) -> Option<String> {
+    let login = login(env, config, name)?;
+    Some(login.get("organizationUuid")?.as_str()?.to_string())
+}
+
 /// What Claude Code wrote about the login of a profile: the `oauthAccount`
 /// object of its state file.
 fn login(env: &Env, config: &Config, name: &str) -> Option<serde_json::Value> {

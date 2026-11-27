@@ -13,9 +13,11 @@
 //!   [`resolve`], [`git`], [`tool`], [`launch`].
 //! - Reading Claude Code's own files: [`view`] (who is logged in),
 //!   [`sessions`], [`usage`], [`disk`], [`retention`], [`limits`].
+//! - Reading Claude Desktop's own files: [`desktop`] (plan usage).
 //! - Removing things: [`purge`], [`uninstall`].
 
 pub mod config;
+pub mod desktop;
 pub mod disk;
 pub mod git;
 pub mod launch;

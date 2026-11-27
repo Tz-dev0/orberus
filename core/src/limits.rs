@@ -15,6 +15,13 @@
 //! reading: a profile that was not used for a while has old numbers.
 //!
 //! A status line the user already had is kept aside and still shown.
+//!
+//! A second source fills the gaps: Claude Desktop notes the same two
+//! numbers every few minutes while it runs (see [`crate::desktop`]). Work
+//! done in Claude Desktop or on claude.ai moves the limits without Claude
+//! Code saying anything, so whichever source spoke last is the one shown.
+//! Claude Desktop gives no reset time: the one Claude Code reported is kept
+//! for as long as it is still ahead.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::config::{self, Config};
+use crate::desktop::{self, Sample};
 use crate::paths::Env;
 use crate::settings;
 use crate::tool;
@@ -54,25 +62,155 @@ pub struct Limits {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Reading {
     pub used: f64,
-    /// Seconds until it starts over. `None` when that moment has passed
-    /// since the numbers were reported: the window started over, so `used`
-    /// is 0 until Claude Code says more.
+    /// Seconds until it starts over, when that is known.
     pub resets_in: Option<u64>,
+    /// True when the window ended since the numbers were reported: it
+    /// started over, so `used` is 0 until someone says more.
+    pub started_over: bool,
+}
+
+impl Reading {
+    fn started_over() -> Reading {
+        Reading {
+            used: 0.0,
+            resets_in: None,
+            started_over: true,
+        }
+    }
 }
 
 impl Window {
     pub fn reading(&self, now: u64) -> Reading {
         if self.resets_at <= now {
-            return Reading {
-                used: 0.0,
-                resets_in: None,
-            };
+            return Reading::started_over();
         }
         Reading {
             used: self.used.clamp(0.0, 100.0),
             resets_in: Some(self.resets_at - now),
+            started_over: false,
         }
     }
+}
+
+/// Who reported the numbers shown.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Source {
+    /// Claude Code, through the status line.
+    ClaudeCode,
+    /// Claude Desktop, through the file it keeps.
+    ClaudeDesktop,
+}
+
+impl Source {
+    pub fn name(self) -> &'static str {
+        match self {
+            Source::ClaudeCode => "Claude Code",
+            Source::ClaudeDesktop => "Claude Desktop",
+        }
+    }
+}
+
+/// The limits of one profile's account as they stand now, from whichever
+/// source spoke last.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Snapshot {
+    pub five_hour: Option<Reading>,
+    pub seven_day: Option<Reading>,
+    /// When the numbers were reported, in Unix seconds.
+    pub seen_at: u64,
+    pub source: Source,
+}
+
+const FIVE_HOURS: u64 = 5 * 3_600;
+const SEVEN_DAYS: u64 = 7 * 86_400;
+
+/// A number from Claude Desktop as a reading. `known` is the same window as
+/// Claude Code last reported it, `length` how long such a window lasts.
+fn from_desktop(used: f64, at: u64, known: Option<&Window>, length: u64, now: u64) -> Reading {
+    if let Some(window) = known {
+        if window.resets_at > now {
+            // The end Claude Code announced is still ahead: this number is
+            // from that same window, and it ends when Claude Code said.
+            return Reading {
+                used: used.clamp(0.0, 100.0),
+                resets_in: Some(window.resets_at - now),
+                started_over: false,
+            };
+        }
+        if at < window.resets_at {
+            // Taken before an end that has passed since.
+            return Reading::started_over();
+        }
+    }
+    // No end is known. A window never lasts longer than `length`, so a
+    // number older than that is about a window that is over.
+    if now.saturating_sub(at) >= length {
+        return Reading::started_over();
+    }
+    Reading {
+        used: used.clamp(0.0, 100.0),
+        resets_in: None,
+        started_over: false,
+    }
+}
+
+/// Puts the two sources together: what the status line noted, and the last
+/// sample of Claude Desktop. The one that spoke last gives the numbers.
+pub fn merge(noted: Option<&Limits>, sample: Option<&Sample>, now: u64) -> Option<Snapshot> {
+    let desktop_spoke_last = match (noted, sample) {
+        (Some(noted), Some(sample)) => sample.at > noted.seen_at,
+        (None, Some(_)) => true,
+        _ => false,
+    };
+    if let (true, Some(sample)) = (desktop_spoke_last, sample) {
+        let known = |pick: fn(&Limits) -> Option<&Window>| noted.and_then(pick);
+        return Some(Snapshot {
+            five_hour: sample.five_hour.map(|used| {
+                let known = known(|limits| limits.five_hour.as_ref());
+                from_desktop(used, sample.at, known, FIVE_HOURS, now)
+            }),
+            seven_day: sample.seven_day.map(|used| {
+                let known = known(|limits| limits.seven_day.as_ref());
+                from_desktop(used, sample.at, known, SEVEN_DAYS, now)
+            }),
+            seen_at: sample.at,
+            source: Source::ClaudeDesktop,
+        });
+    }
+    let noted = noted?;
+    // A window Claude Code did not report is taken from Claude Desktop's
+    // older sample, rather than left out.
+    let fill = |used: Option<f64>, length: u64| {
+        let sample = sample?;
+        Some(from_desktop(used?, sample.at, None, length, now))
+    };
+    Some(Snapshot {
+        five_hour: noted
+            .five_hour
+            .as_ref()
+            .map(|window| window.reading(now))
+            .or_else(|| fill(sample.and_then(|s| s.five_hour), FIVE_HOURS)),
+        seven_day: noted
+            .seven_day
+            .as_ref()
+            .map(|window| window.reading(now))
+            .or_else(|| fill(sample.and_then(|s| s.seven_day), SEVEN_DAYS)),
+        seen_at: noted.seen_at,
+        source: Source::ClaudeCode,
+    })
+}
+
+/// The limits of a profile's account as they stand now, or `None` when
+/// neither Claude Code nor Claude Desktop reported any.
+///
+/// Claude Desktop's samples are matched by the organization of the account.
+/// Two people of one organization on the same Mac would be mixed up; one
+/// person with one seat, the case this tool is for, is not.
+pub fn snapshot(env: &Env, config: &Config, name: &str, now: u64) -> Option<Snapshot> {
+    let noted = read(env, name);
+    let sample = crate::view::organization(env, config, name)
+        .and_then(|organization| desktop::latest(env, &organization));
+    merge(noted.as_ref(), sample.as_ref(), now)
 }
 
 fn folder(env: &Env) -> PathBuf {
@@ -171,14 +309,14 @@ pub fn profile_of(
 }
 
 /// The line shown under the prompt: "work · 5h 3% · week 11%".
-pub fn line(profile: &str, limits: Option<&Limits>, now: u64) -> String {
+pub fn line(profile: &str, limits: Option<&Snapshot>) -> String {
     let mut parts = vec![profile.to_string()];
     if let Some(limits) = limits {
-        if let Some(window) = &limits.five_hour {
-            parts.push(format!("5h {}", percent(window.reading(now).used)));
+        if let Some(reading) = &limits.five_hour {
+            parts.push(format!("5h {}", percent(reading.used)));
         }
-        if let Some(window) = &limits.seven_day {
-            parts.push(format!("week {}", percent(window.reading(now).used)));
+        if let Some(reading) = &limits.seven_day {
+            parts.push(format!("week {}", percent(reading.used)));
         }
     }
     parts.join(" · ")
@@ -421,16 +559,130 @@ mod tests {
             window.reading(1400),
             Reading {
                 used: 80.0,
-                resets_in: Some(600)
+                resets_in: Some(600),
+                started_over: false
             }
         );
+        assert_eq!(window.reading(2000), Reading::started_over());
+    }
+
+    fn noted(seen_at: u64) -> Limits {
+        Limits {
+            five_hour: Some(Window {
+                used: 11.0,
+                resets_at: 10_000,
+            }),
+            seven_day: Some(Window {
+                used: 12.0,
+                resets_at: 500_000,
+            }),
+            seen_at,
+        }
+    }
+
+    fn sample(at: u64) -> Sample {
+        Sample {
+            at,
+            five_hour: Some(16.0),
+            seven_day: Some(13.0),
+        }
+    }
+
+    #[test]
+    fn the_source_that_spoke_last_gives_the_numbers() {
+        // Claude Desktop after Claude Code: its numbers, and the end of
+        // each window as Claude Code announced it, still ahead.
+        let merged = merge(Some(&noted(1000)), Some(&sample(4000)), 5000).unwrap();
+        assert_eq!(merged.source, Source::ClaudeDesktop);
+        assert_eq!(merged.seen_at, 4000);
         assert_eq!(
-            window.reading(2000),
-            Reading {
-                used: 0.0,
-                resets_in: None
-            }
+            merged.five_hour,
+            Some(Reading {
+                used: 16.0,
+                resets_in: Some(5000),
+                started_over: false
+            })
         );
+        assert_eq!(merged.seven_day.unwrap().used, 13.0);
+
+        // Claude Code after Claude Desktop: its own numbers.
+        let merged = merge(Some(&noted(4500)), Some(&sample(4000)), 5000).unwrap();
+        assert_eq!(merged.source, Source::ClaudeCode);
+        assert_eq!(merged.five_hour.unwrap().used, 11.0);
+    }
+
+    #[test]
+    fn claude_desktop_alone_gives_numbers_without_a_reset_time() {
+        let merged = merge(None, Some(&sample(4000)), 5000).unwrap();
+        assert_eq!(merged.source, Source::ClaudeDesktop);
+        assert_eq!(
+            merged.five_hour,
+            Some(Reading {
+                used: 16.0,
+                resets_in: None,
+                started_over: false
+            })
+        );
+        // Six hours later the 5-hour window it was about is over; the week
+        // is not.
+        let later = merge(None, Some(&sample(4000)), 4000 + 6 * 3600).unwrap();
+        assert_eq!(later.five_hour, Some(Reading::started_over()));
+        assert_eq!(later.seven_day.unwrap().used, 13.0);
+        assert_eq!(merge(None, None, 5000), None);
+    }
+
+    #[test]
+    fn a_sample_from_after_the_announced_end_is_a_new_window() {
+        // Claude Code said the 5-hour window ends at 10 000. A sample taken
+        // after that is about the next one: its number, no known end.
+        let merged = merge(Some(&noted(1000)), Some(&sample(12_000)), 13_000).unwrap();
+        assert_eq!(
+            merged.five_hour,
+            Some(Reading {
+                used: 16.0,
+                resets_in: None,
+                started_over: false
+            })
+        );
+        // A sample from before that end, read after it: started over.
+        let merged = merge(Some(&noted(1000)), Some(&sample(9000)), 13_000).unwrap();
+        assert_eq!(merged.five_hour, Some(Reading::started_over()));
+    }
+
+    #[test]
+    fn snapshot_matches_claude_desktop_by_the_account_s_organization() {
+        let (_temp, env, config) = world();
+        let dir = env.profiles_dir().join("work");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(".claude.json"),
+            r#"{"oauthAccount":{"emailAddress":"me@acme.test","organizationUuid":"acme"}}"#,
+        )
+        .unwrap();
+        let file = desktop::history_file(&env);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(
+            &file,
+            r#"{"version":2,"samples":[{"t":4000000,"org":"acme","u":{"fh":16,"sd":13}}]}"#,
+        )
+        .unwrap();
+
+        // No status line was ever set for this profile: Claude Desktop is
+        // enough. The other profile, on another account, has nothing.
+        let found = snapshot(&env, &config, "work", 5000).unwrap();
+        assert_eq!(found.source, Source::ClaudeDesktop);
+        assert_eq!(found.five_hour.unwrap().used, 16.0);
+        assert_eq!(snapshot(&env, &config, "perso", 5000), None);
+    }
+
+    #[test]
+    fn a_window_claude_code_left_out_comes_from_claude_desktop() {
+        let mut only_week = noted(4500);
+        only_week.five_hour = None;
+        let merged = merge(Some(&only_week), Some(&sample(4000)), 5000).unwrap();
+        assert_eq!(merged.source, Source::ClaudeCode);
+        assert_eq!(merged.five_hour.unwrap().used, 16.0);
+        assert_eq!(merged.seven_day.unwrap().used, 12.0);
     }
 
     #[test]
@@ -470,9 +722,10 @@ mod tests {
             }),
             seen_at: 1000,
         };
-        assert_eq!(line("work", Some(&limits), 1000), "work · 5h 3% · week 11%");
-        assert_eq!(line("work", Some(&limits), 6000), "work · 5h 0% · week 11%");
-        assert_eq!(line("work", None, 1000), "work");
+        let at = |now| merge(Some(&limits), None, now);
+        assert_eq!(line("work", at(1000).as_ref()), "work · 5h 3% · week 11%");
+        assert_eq!(line("work", at(6000).as_ref()), "work · 5h 0% · week 11%");
+        assert_eq!(line("work", None), "work");
     }
 
     #[test]
