@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="232" viewBox="0 0 840 232" role="img" aria-label="Works today: Claude Code, on macOS. Coming next: Codex, Claude Desktop profiles, Windows.">
+<rect x="0.5" y="0.5" width="839" height="231" rx="14" fill="#1f1f22" stroke="#3a3a3f"/>
+<g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<text x="130" y="38" font-size="13" font-weight="600" fill="#9a9aa0">Works today</text>
+<text x="400" y="38" font-size="13" font-weight="600" fill="#9a9aa0">Coming next</text>
+<line x1="372" y1="24" x2="372" y2="208" stroke="#3a3a3f" stroke-dasharray="2 5" stroke-linecap="round"/>
+<text x="32" y="89" font-size="14" font-weight="600" fill="#f2f2f3">Tools</text>
+<circle cx="143" cy="84" r="13" fill="#d99a3d"/><text x="168" y="82" font-size="16" font-weight="600" fill="#f2f2f3">Claude Code</text><text x="168" y="100" font-size="12.5" fill="#9a9aa0">accounts chosen by folder</text>
+<circle cx="413" cy="84" r="12" fill="none" stroke="#2fa39b" stroke-width="2"/><text x="438" y="82" font-size="16" font-weight="600" fill="#f2f2f3">Codex</text><text x="438" y="100" font-size="12.5" fill="#9a9aa0">same profiles and rules</text>
+<circle cx="623" cy="84" r="12" fill="none" stroke="#d6648b" stroke-width="2"/><text x="648" y="82" font-size="16" font-weight="600" fill="#f2f2f3">Claude Desktop</text><text x="648" y="100" font-size="12.5" fill="#9a9aa0">an account per profile</text>
+<text x="32" y="173" font-size="14" font-weight="600" fill="#f2f2f3">Systems</text>
+<circle cx="143" cy="168" r="13" fill="#6f83e6"/><text x="168" y="166" font-size="16" font-weight="600" fill="#f2f2f3">macOS</text><text x="168" y="184" font-size="12.5" fill="#9a9aa0">Apple Silicon and Intel</text>
+<circle cx="413" cy="168" r="12" fill="none" stroke="#9a78d8" stroke-width="2"/><text x="438" y="166" font-size="16" font-weight="600" fill="#f2f2f3">Windows</text><text x="438" y="184" font-size="12.5" fill="#9a9aa0">the command already builds there</text>
+<line x1="32" y1="126" x2="808" y2="126" stroke="#3a3a3f"/>
+</g></svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="312" viewBox="0 0 840 312" role="img" aria-label="Typing claude in a company repository starts the work account; in a personal folder, the personal one; asking for the wrong account in a locked folder is refused.">
+<rect width="840" height="312" rx="14" fill="#1b1b1d"/>
+<g font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" xml:space="preserve">
+<text x="32" y="44"><tspan fill="#8e8e93">~/code/acme-api $ </tspan><tspan fill="#ececee" font-weight="600">claude</tspan></text>
+<text x="32" y="68"><tspan fill="#8e8e93">orberus: </tspan><tspan fill="#7fc46c" font-weight="600">work</tspan><tspan fill="#8e8e93"> (locked rule git_remote = &quot;github.com/acme/*&quot; in config.toml)</tspan></text>
+<line x1="32" y1="96" x2="808" y2="96" stroke="#343438"/>
+<text x="32" y="126"><tspan fill="#8e8e93">~/code/blog $ </tspan><tspan fill="#ececee" font-weight="600">claude</tspan></text>
+<text x="32" y="150"><tspan fill="#8e8e93">orberus: </tspan><tspan fill="#8a9cf0" font-weight="600">perso</tspan><tspan fill="#8e8e93"> (default profile)</tspan></text>
+<line x1="32" y1="178" x2="808" y2="178" stroke="#343438"/>
+<text x="32" y="208"><tspan fill="#8e8e93">~/code/acme-api $ </tspan><tspan fill="#ececee" font-weight="600">ORBERUS_PROFILE=perso claude</tspan></text>
+<text x="32" y="232"><tspan fill="#8e8e93">orberus: </tspan><tspan fill="#ff9d94" font-weight="600">refused</tspan><tspan fill="#ececee">: this folder is locked to profile 'work' by rule</tspan></text>
+<text x="32" y="256"><tspan fill="#ececee">git_remote = &quot;github.com/acme/*&quot; in config.toml, so profile 'perso'</tspan></text>
+<text x="32" y="280"><tspan fill="#ececee">cannot be used here</tspan></text>
+</g></svg>
