@@ -69,7 +69,11 @@ cargo clippy --all-targets
 cargo test
 ```
 
-Run the same three in `app/src-tauri` when you touch the app.
+Run the same three in `app/src-tauri` when you touch the app, after
+`npm run build` in `app/`: the Rust side needs the interface it builds.
+
+GitHub runs these checks on every pull request, on macOS
+(`.github/workflows/ci.yml`). A clippy warning fails the run.
 
 A few rules the project holds to:
 

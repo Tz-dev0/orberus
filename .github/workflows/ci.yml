@@ -1,0 +1,78 @@
+# Runs on every pull request, and on main after a merge: formatting, lints
+# and tests of the core, the command and the app. These are the commands
+# CONTRIBUTING.md asks for before a pull request, so a green run here means
+# the same thing as a green run on your machine.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a branch makes the run of the previous one pointless.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # macOS is the only supported system, so that is where the tests run.
+  cli:
+    name: Core and command
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      # A warning fails the run: the project keeps clippy quiet.
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Try the commands
+        run: |
+          cargo build --locked
+          scripts/smoke.sh target/debug/orberus
+
+  # The app is a crate of its own, outside the workspace: its own job.
+  app:
+    name: App
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+
+      # `npm run build` also type-checks, which is where a text missing in
+      # one language is refused. Compiling the Rust side needs its result.
+      - name: Build the interface
+        working-directory: app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Format
+        working-directory: app/src-tauri
+        run: cargo fmt --check
+
+      - name: Lint
+        working-directory: app/src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        working-directory: app/src-tauri
+        run: cargo test --locked
