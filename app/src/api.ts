@@ -11,6 +11,8 @@ export interface Profile {
   name: string;
   /** null when nobody is signed in to this profile. */
   account: string | null;
+  /** The account's subscription, as a short name ("Max 5x"); null when unknown. */
+  plan: string | null;
   /** Its config folder: "~/.claude". */
   location: string;
   /** True when that folder is Claude Code's own default one. */
@@ -267,10 +269,11 @@ function preview(): Api {
     canReuseLogin: false,
     terminal: null,
     profiles: [
-      { name: "perso", account: "me@example.com", location: "~/.claude", native: true, isDefault: true, rules: 0, teamRules: 0, canPurge: false, keepsDays: 120, keepsError: null },
+      { name: "perso", account: "me@example.com", plan: "Max 5x", location: "~/.claude", native: true, isDefault: true, rules: 0, teamRules: 0, canPurge: false, keepsDays: 120, keepsError: null },
       {
         name: "work",
         account: "me@acme.example",
+        plan: "Team",
         location: "~/.orberus/profiles/work",
         native: false,
         isDefault: false,
@@ -283,6 +286,7 @@ function preview(): Api {
       {
         name: "client",
         account: null,
+        plan: null,
         location: "~/.orberus/profiles/client",
         native: false,
         isDefault: false,
@@ -380,6 +384,7 @@ function preview(): Api {
       state.profiles.push({
         name,
         account: reuseLogin ? "me@example.com" : null,
+        plan: reuseLogin ? "Max 5x" : null,
         location: reuseLogin ? "~/.claude" : `~/.orberus/profiles/${name}`,
         native: reuseLogin,
         isDefault: state.profiles.length === 0,

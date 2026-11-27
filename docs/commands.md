@@ -117,15 +117,17 @@ orberus list        # or: orberus ls
 ```
 
 ```text
-┌─────────┬─────────────────┬──────────────────────────────────┬───────┬─────────┬──────┐
-│ Profile │ Account         │ Config folder                    │ Rules │ Default │ Here │
-├─────────┼─────────────────┼──────────────────────────────────┼───────┼─────────┼──────┤
-│ perso   │ me@example.com  │ ~/.claude (Claude Code default)  │       │ ●       │ ✓    │
-│ work    │ me@acme.example │ ~/.orberus/profiles/work │ 1     │         │      │
-└─────────┴─────────────────┴──────────────────────────────────┴───────┴─────────┴──────┘
+┌─────────┬─────────────────┬────────┬─────────────────────────────────┬───────┬─────────┬──────┐
+│ Profile │ Account         │ Plan   │ Config folder                   │ Rules │ Default │ Here │
+├─────────┼─────────────────┼────────┼─────────────────────────────────┼───────┼─────────┼──────┤
+│ perso   │ me@example.com  │ Max 5x │ ~/.claude (Claude Code default) │       │ ●       │ ✓    │
+│ work    │ me@acme.example │ Team   │ ~/.orberus/profiles/work        │ 1     │         │      │
+└─────────┴─────────────────┴────────┴─────────────────────────────────┴───────┴─────────┴──────┘
 ```
 
 "Account" is the account logged in to the profile, or `not logged in`.
+"Plan" is that account's subscription, as Claude Code recorded it at login
+(`Pro`, `Max 5x`, `Team`…); empty when it is not known.
 "Here" marks the profile used in the current folder.
 
 ## default
@@ -162,7 +164,7 @@ Which profile applies in the current folder, and why.
 
 ```text
   Profile  work
-  Account  me@acme.example
+  Account  me@acme.example (Team)
   Why      locked rule git_remote = "github.com/acme/*" in config.toml
   Config   ~/.orberus/profiles/work
   Claude   /opt/homebrew/bin/claude

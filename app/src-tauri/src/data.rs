@@ -35,6 +35,9 @@ pub struct ProfileView {
     pub name: String,
     /// `None` when nobody is logged in to this profile.
     pub account: Option<String>,
+    /// The account's subscription, as a short name: "Max 5x". `None` when
+    /// unknown. A product name: the page shows it as is, in every language.
+    pub plan: Option<String>,
     /// Its config folder, as people write it: `~/.claude`.
     pub location: String,
     /// True when that folder is Claude Code's own default one.
@@ -436,6 +439,7 @@ pub fn overview(env: &Env) -> Result<Overview> {
         profiles.push(ProfileView {
             name: name.clone(),
             account: view::account(env, config, name),
+            plan: view::plan(env, config, name),
             location: view::short_path(env, &dir),
             native,
             is_default: config.default.as_deref() == Some(name),
