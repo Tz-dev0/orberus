@@ -36,6 +36,7 @@ try disk
 try usage
 try rule add --path "$home/projects" --profile work
 try rule list
+try ide
 try remove client --yes
 
 # doctor reports the machine itself (PATH, Claude Code installed): on a bare

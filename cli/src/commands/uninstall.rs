@@ -5,9 +5,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use orberus_core::config;
+use orberus_core::ide::{self, State};
 use orberus_core::limits;
 use orberus_core::paths::Env;
 use orberus_core::purge;
+use orberus_core::tool;
 use orberus_core::uninstall::{self, Binary};
 use orberus_core::view::short_path;
 
@@ -22,6 +24,12 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
     let apps = uninstall::installed_apps(env);
     let binary = uninstall::binary(env)?;
 
+    // The editors whose extension was sent through our wrapper.
+    let editors: Vec<ide::Editor> = ide::editors(env)
+        .into_iter()
+        .filter(|editor| ide::state(env, &tool::CLAUDE, editor) == State::On)
+        .collect();
+
     // Checked before anything is printed, so a refusal comes first.
     if purge {
         uninstall::data_folder(env)?;
@@ -34,6 +42,12 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
     }
     if uninstall::shell_files_have_our_line(env) {
         ui.detail("the PATH line that setup added to your shell config");
+    }
+    for editor in &editors {
+        ui.detail(&format!(
+            "the setting that sends {}'s Claude Code extension through Orberus",
+            editor.name
+        ));
     }
     if let Binary::Ours(path) = &binary {
         ui.detail(&format!("orberus itself: {}", short_path(env, path)));
@@ -93,6 +107,29 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
     }
     if uninstall::remove_shim(env)? {
         ui.success("Shim removed");
+    }
+    // The editors first, the wrapper after: an editor must never be left
+    // pointing to a file that is gone.
+    let mut editors_cleared = true;
+    for editor in &editors {
+        match ide::turn_off(env, &tool::CLAUDE, editor) {
+            Ok(_) => ui.success(&format!(
+                "{}: its Claude Code extension starts Claude Code itself again",
+                editor.name
+            )),
+            Err(error) => {
+                editors_cleared = false;
+                ui.warning(&format!("{error:#}"));
+            }
+        }
+    }
+    if editors_cleared {
+        uninstall::remove_wrapper(env)?;
+    } else {
+        ui.warning(&format!(
+            "{} is kept: an editor still starts it",
+            short_path(env, &tool::CLAUDE.wrapper_path(env))
+        ));
     }
     let shell = uninstall::clean_shell_files(env)?;
     for file in &shell.cleaned {

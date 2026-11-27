@@ -1,6 +1,7 @@
 //! Undoing what `orberus setup` and the install commands put on the
-//! machine: the shim, the `PATH` line in the shell config, the binary, the
-//! menu bar app and, on request only, the profiles themselves.
+//! machine: the shim, the editors' wrapper, the `PATH` line in the shell
+//! config, the binary, the menu bar app and, on request only, the profiles
+//! themselves.
 //!
 //! Each step is a small function that says what it did, so the CLI can
 //! report it line by line. `~/.claude` is never touched by any of them.
@@ -136,6 +137,24 @@ pub fn remove_shim(env: &Env) -> Result<bool> {
     };
     fs::remove_file(&shim).with_context(|| format!("cannot remove {}", shim.display()))?;
     Ok(true)
+}
+
+/// Removes the wrapper that editor extensions start, and its folder.
+/// Returns false when there was none.
+///
+/// To be called after [`crate::ide::turn_off`] for every editor: a setting
+/// left behind would name a file that is gone, and the extension would no
+/// longer start.
+pub fn remove_wrapper(env: &Env) -> Result<bool> {
+    let wrapper = tool::CLAUDE.wrapper_path(env);
+    let existed = wrapper.symlink_metadata().is_ok();
+    if existed {
+        fs::remove_file(&wrapper)
+            .with_context(|| format!("cannot remove {}", wrapper.display()))?;
+    }
+    // Only an empty folder goes, as for `bin` below.
+    let _ = fs::remove_dir(env.ide_dir());
+    Ok(existed)
 }
 
 /// Where the running `orberus` is, and whether `uninstall` may remove it.

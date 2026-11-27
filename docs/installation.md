@@ -84,8 +84,8 @@ orberus uninstall
 ```
 
 It removes the shim, the `PATH` line that `setup` added to your shell config,
-`orberus` itself and the menu bar app (moved to the Trash), after showing you
-the list and asking. Open a new terminal afterwards: `claude` is the real
+the setting that `orberus ide on` wrote in your editors, `orberus` itself and
+the menu bar app (moved to the Trash), after showing you the list and asking. Open a new terminal afterwards: `claude` is the real
 Claude Code again.
 
 Your profiles are kept in `~/.orberus`: the config, the rules and the

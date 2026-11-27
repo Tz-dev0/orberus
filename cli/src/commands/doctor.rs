@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use orberus_core::config;
+use orberus_core::ide::{self, State};
 use orberus_core::launch;
 use orberus_core::paths::Env;
 use orberus_core::retention::{self, Retention};
@@ -72,6 +73,22 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         ui.detail(&short_path(env, real));
     }
 
+    // An editor told to start the wrapper would start nothing without it.
+    let editors: Vec<(String, State)> = ide::editors(env)
+        .into_iter()
+        .map(|editor| {
+            let state = ide::state(env, tool, &editor);
+            (editor.name, state)
+        })
+        .collect();
+    if editors.iter().any(|(_, state)| *state == State::On) {
+        check(
+            tool.wrapper_path(env).exists(),
+            "the wrapper your editors start is installed",
+            "run: orberus setup",
+        );
+    }
+
     check(
         !loaded.config.profiles.is_empty(),
         "at least one profile exists",
@@ -98,6 +115,24 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         &format!("{} is not set by something else", tool.config_env),
         "remove it from your shell config: orberus sets it for each launch",
     );
+
+    // Not a failure: the extension works, but with its own idea of the
+    // account. Said only when the extension is installed somewhere.
+    let skipping: Vec<&str> = editors
+        .iter()
+        .filter(|(_, state)| *state == State::Off)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    if !skipping.is_empty() && ide::extension_installed(env, tool) {
+        ui.warning(&format!(
+            "the {} extension skips Orberus in {}",
+            tool.name,
+            skipping.join(", ")
+        ));
+        ui.detail(
+            "it starts its own copy of Claude Code; to pick the account by folder there too: orberus ide on",
+        );
+    }
 
     // Not a failure: a warning about what Claude Code will delete by itself.
     for name in loaded.config.profiles.keys() {

@@ -98,6 +98,32 @@ pub fn find_real(env: &Env, config: &Config, tool: &Tool) -> Result<PathBuf> {
         })
 }
 
+/// Splits what an editor extension passes to the wrapper: its own copy of
+/// the tool first, when it has one, then the tool's arguments.
+///
+/// The tool's arguments start with an option or a subcommand (`auth`),
+/// never with an absolute path, so an absolute first argument is the copy
+/// to start. One that cannot be started is an error: passing it on would
+/// hand a path to the tool as if it was a prompt.
+pub fn handed_over(mut args: Vec<OsString>) -> Result<(Option<PathBuf>, Vec<OsString>)> {
+    let first_is_a_path = args
+        .first()
+        .is_some_and(|first| Path::new(first).is_absolute());
+    if !first_is_a_path {
+        return Ok((None, args));
+    }
+    // `remove(0)` takes the first argument out and keeps the others in
+    // order.
+    let binary = PathBuf::from(args.remove(0));
+    if !is_executable(&binary) {
+        bail!(
+            "the editor asked to start {}, which is not an executable file",
+            binary.display()
+        );
+    }
+    Ok((Some(binary), args))
+}
+
 /// Starts the real tool. On macOS and Linux this replaces the current
 /// process, so signals and the terminal behave as if it was started
 /// directly. Returns the exit code only on platforms without `exec`.
@@ -130,5 +156,48 @@ pub fn launch(tool: &Tool, real: &Path, target: Target, args: Vec<OsString>) -> 
             .status()
             .with_context(|| format!("cannot start {}", real.display()))?;
         Ok(status.code().unwrap_or(1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(list: &[&str]) -> Vec<OsString> {
+        list.iter().map(OsString::from).collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_absolute_first_argument_is_the_copy_to_start() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let copy = temp.path().join("claude");
+        fs::write(&copy, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&copy, fs::Permissions::from_mode(0o755)).unwrap();
+        let copy_text = copy.to_str().unwrap();
+
+        let (binary, rest) = handed_over(args(&[copy_text, "auth", "status"])).unwrap();
+        assert_eq!(binary, Some(copy.clone()));
+        assert_eq!(rest, args(&["auth", "status"]));
+
+        // A file that cannot be run is refused, not passed on as a prompt.
+        fs::set_permissions(&copy, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(handed_over(args(&[copy_text, "--print"])).is_err());
+        assert!(handed_over(args(&["/nowhere/claude", "--print"])).is_err());
+    }
+
+    #[test]
+    fn anything_else_first_means_no_copy_was_handed_over() {
+        for list in [
+            &["--output-format", "stream-json"][..],
+            &["auth", "status", "--json"][..],
+            &["relative/claude"][..],
+            &[][..],
+        ] {
+            let (binary, rest) = handed_over(args(list)).unwrap();
+            assert_eq!(binary, None);
+            assert_eq!(rest, args(list));
+        }
     }
 }

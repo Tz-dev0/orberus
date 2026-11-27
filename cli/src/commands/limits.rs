@@ -13,15 +13,8 @@ use orberus_core::limits::{self, Capture, Reading};
 use orberus_core::paths::Env;
 use orberus_core::tool;
 
-use crate::commands::pick_profile;
+use crate::commands::{pick_profile, Switch};
 use crate::ui::{Cell, Style, Ui};
-
-/// `on` or `off`, as typed after `orberus limits`.
-#[derive(Clone, Copy, clap::ValueEnum)]
-pub(crate) enum Switch {
-    On,
-    Off,
-}
 
 fn now() -> u64 {
     // A clock set before 1970 gives 0 rather than a crash.

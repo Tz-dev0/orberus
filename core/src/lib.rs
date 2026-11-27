@@ -11,6 +11,7 @@
 //! - What the user set up: [`config`], [`rules`], [`paths`].
 //! - Which account a folder gets, and starting the tool with it:
 //!   [`resolve`], [`git`], [`tool`], [`launch`].
+//! - Editors whose extension starts the tool by itself: [`ide`].
 //! - Reading Claude Code's own files: [`view`] (who is logged in),
 //!   [`sessions`], [`usage`], [`disk`], [`retention`], [`limits`].
 //! - Reading Claude Desktop's own files: [`desktop`] (plan usage).
@@ -20,6 +21,8 @@ pub mod config;
 pub mod desktop;
 pub mod disk;
 pub mod git;
+pub mod ide;
+mod jsonc;
 pub mod launch;
 pub mod limits;
 pub mod paths;
