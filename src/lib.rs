@@ -12,6 +12,7 @@ pub mod resolve;
 pub mod retention;
 pub mod rules;
 pub mod sessions;
+pub mod tool;
 pub mod uninstall;
 pub mod usage;
 pub mod view;

@@ -22,7 +22,14 @@ pub fn short_path(env: &Env, path: &Path) -> String {
 pub fn location(env: &Env, config: &Config, name: &str) -> Result<String> {
     Ok(match config::profile_dir(env, config, name)? {
         Some(dir) => short_path(env, &dir),
-        None => "~/.claude (Claude Code default)".to_string(),
+        None => {
+            let tool = &crate::tool::CLAUDE;
+            format!(
+                "{} ({} default)",
+                short_path(env, &tool.native_dir(env)),
+                tool.name
+            )
+        }
     })
 }
 

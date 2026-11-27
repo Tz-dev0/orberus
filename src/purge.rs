@@ -41,7 +41,7 @@ pub fn folder(env: &Env, config: &Config, name: &str) -> Result<PathBuf> {
     // `starts_with` compares whole path components: `/a/b` starts with `/a`.
     let holds_home = env.home.starts_with(&dir);
     let holds_config = env.root.starts_with(&dir);
-    if holds_home || holds_config || dir == env.home.join(".claude") {
+    if holds_home || holds_config || dir == crate::tool::CLAUDE.native_dir(env) {
         bail!(
             "refusing to delete {}: it holds more than this profile",
             dir.display()

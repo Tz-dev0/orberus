@@ -103,7 +103,7 @@ pub fn profile_usage(env: &Env, config: &Config, name: &str) -> Result<Usage> {
     Ok(match config::profile_dir(env, config, name)? {
         Some(dir) => measure(&dir),
         None => {
-            let mut usage = measure(&env.home.join(".claude"));
+            let mut usage = measure(&crate::tool::CLAUDE.native_dir(env));
             usage.other += tree_size(&env.home.join(".claude.json"));
             usage
         }

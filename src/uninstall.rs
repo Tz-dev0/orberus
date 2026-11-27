@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 
 use crate::paths::Env;
+use crate::tool;
 
 /// The comment `setup` writes above its `PATH` line. `uninstall` looks for
 /// the same text, which is why it lives in one place.
@@ -23,11 +24,6 @@ pub const APPS_ENV: &str = "ORBERUS_APPS";
 /// The identifier of the menu bar app, as written in its Info.plist.
 const APP_IDENTIFIER: &str = "com.github.tzdev0.orberus";
 const APP_NAME: &str = "Orberus.app";
-
-#[cfg(unix)]
-const SHIM_NAME: &str = "claude";
-#[cfg(not(unix))]
-const SHIM_NAME: &str = "claude.exe";
 
 /// The line `setup` adds to a shell config, in its two spellings: with
 /// `$HOME` when the folder is under the home folder, and absolute.
@@ -127,7 +123,7 @@ pub fn shell_files_have_our_line(env: &Env) -> bool {
 
 /// The shim, when it is installed.
 pub fn shim(env: &Env) -> Option<PathBuf> {
-    let shim = env.bin_dir().join(SHIM_NAME);
+    let shim = tool::CLAUDE.shim_path(env);
     // `symlink_metadata` does not follow the link: a shim whose target is
     // gone still counts as installed.
     shim.symlink_metadata().is_ok().then_some(shim)
@@ -243,7 +239,7 @@ pub fn trash_app(env: &Env, app: &Path) -> Result<PathBuf> {
 /// never `~/.claude` or a folder that holds it.
 pub fn data_folder(env: &Env) -> Result<PathBuf> {
     let root = env.root.clone();
-    let claude = env.home.join(".claude");
+    let claude = tool::CLAUDE.native_dir(env);
     // `starts_with` compares whole path components: `/a/b` starts with `/a`.
     if env.home.starts_with(&root) || claude.starts_with(&root) {
         bail!(
