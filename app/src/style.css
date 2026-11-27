@@ -1,7 +1,13 @@
 /* A menu bar popover. It borrows the manners of a native macOS menu: system
    type, full-width rows that light up under the pointer, no cards. The one
    thing of its own is the seal: a colored disc per profile, filled when an
-   account is signed in and hollow when the profile is empty. */
+   account is signed in and hollow when the profile is empty.
+
+   Motion: the page is rebuilt on every change, so nothing here animates a
+   layout. What just appeared gets the class "enter" (see `settle` in
+   main.ts) and fades or shifts into its final place; the rest stays still.
+   Opening the window is the one staged moment: the mark draws itself, the
+   seals are stamped one after the other, the lines follow. */
 
 :root {
   color-scheme: light dark;
@@ -19,6 +25,12 @@
   --on-alert: #fff;
   --stand-in: #ececee;
   --field: rgb(255 255 255 / 0.7);
+  /* Fast out, gentle landing; and the same with a slight overshoot, for
+     what is stamped or pressed. */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spring: cubic-bezier(0.3, 1.5, 0.5, 1);
+  /* How far apart two entrances start. */
+  --step: 18ms;
   font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
 }
 
@@ -57,6 +69,89 @@ body {
   -webkit-user-select: none;
   cursor: default;
   overflow: hidden;
+}
+
+/* Between two openings the page is blank: see the "blur" listener. */
+#app.away {
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------------ motion */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+@keyframes slide {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+
+/* A stamp coming down on paper: it arrives large and lands with a bounce. */
+@keyframes stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+}
+
+/* The dotted line of a rule runs from the place to the profile. */
+@keyframes lead {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes ripple {
+  from {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+@keyframes turn-open {
+  from {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes turn-shut {
+  from {
+    transform: rotate(90deg);
+  }
+}
+
+/* What just appeared. "backwards" holds the first frame during the delay,
+   and the element ends on its own style, so nothing is left behind. */
+.enter {
+  animation: rise 0.22s var(--ease) backwards;
+  animation-delay: calc(min(var(--i, 0), 16) * var(--step));
 }
 
 /* Browser preview only: a panel to stand in for the native window. */
@@ -131,6 +226,22 @@ h1 {
   stroke-linecap: round;
 }
 
+/* On opening: the disc is stamped, then the ring draws itself around it. */
+.mark.enter {
+  animation: none;
+}
+
+.mark.enter .mark-disc {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: stamp 0.32s var(--spring) backwards;
+}
+
+.mark.enter .mark-ring {
+  stroke-dasharray: 1;
+  animation: draw 0.5s 0.12s var(--ease) backwards;
+}
+
 /* ---------------------------------------------------------------- profiles */
 
 .profile {
@@ -138,11 +249,49 @@ h1 {
   display: flex;
   align-items: center;
   border-radius: 7px;
+  /* Keeps the glow below behind the row's own content. */
+  isolation: isolate;
 }
 
-.profile:hover,
-.profile:focus-within {
-  background: var(--hover);
+/* Under the pointer a row glows in its profile's color, strongest behind
+   the seal: which account a click would use is felt before it is read. */
+.profile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--hue) 26%, transparent),
+    color-mix(in srgb, var(--hue) 7%, transparent) 62%
+  );
+  opacity: 0;
+  transition: opacity 0.16s ease-out;
+  pointer-events: none;
+}
+
+.profile:hover::before,
+.profile:focus-within::before {
+  opacity: 1;
+}
+
+/* A profile's row does not move as a block: its seal is stamped, then its
+   text follows. */
+.profile.enter {
+  animation: none;
+}
+
+.profile.enter .seal {
+  animation: stamp 0.34s var(--spring) backwards;
+  animation-delay: calc(min(var(--i, 0), 16) * var(--step) * 2);
+}
+
+.profile.enter .who,
+.profile.enter .go,
+.profile.enter .default-tag {
+  animation: rise 0.24s var(--ease) backwards;
+  animation-delay: calc(min(var(--i, 0), 16) * var(--step) * 2 + 70ms);
 }
 
 /* Rows and their buttons light up quickly, without a hard flash. */
@@ -158,8 +307,11 @@ h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     transition: none !important;
+    animation: none !important;
   }
 }
 
@@ -177,11 +329,8 @@ h1 {
   background: var(--press);
 }
 
-.profile-open:disabled {
-  opacity: 0.5;
-}
-
 .seal {
+  position: relative;
   flex: none;
   width: 30px;
   height: 30px;
@@ -195,13 +344,38 @@ h1 {
     0 1px 2px rgb(0 0 0 / 0.18);
   color: var(--on-seal);
   font: 600 14px/1 ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+  transition: transform 0.14s var(--spring);
+}
+
+/* Pressed like a stamp while the button is held. */
+.profile-open:active .seal {
+  transform: scale(0.9);
 }
 
 /* The default profile wears a second ring: the one used where no rule
    says otherwise. */
-.is-default .seal {
-  outline: 1.5px solid color-mix(in srgb, var(--hue) 70%, transparent);
-  outline-offset: 2px;
+.is-default .seal::before {
+  content: "";
+  position: absolute;
+  inset: -3.5px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--hue) 70%, transparent);
+}
+
+/* When the default moves to another profile, the ring closes in on it. */
+.profile:has(.default-tag.enter) .seal::before {
+  animation: stamp 0.4s var(--spring) backwards;
+}
+
+/* While a click is being answered (the folder picker is open), rings
+   leave the seal like ripples. */
+.profile-open.busy .seal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--hue);
+  animation: ripple 1s ease-out infinite;
 }
 
 /* An empty profile: the seal is only an outline, waiting for an account. */
@@ -246,7 +420,8 @@ h1 {
 }
 
 .profile-open:hover .go,
-.profile-open:focus-visible .go {
+.profile-open:focus-visible .go,
+.profile-open.busy .go {
   background: var(--hue);
   color: var(--on-seal);
   box-shadow: none;
@@ -457,10 +632,38 @@ h2 {
 }
 
 .rule-where {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
   gap: 10px;
+}
+
+/* Dots from the place to the profile. They take the profile's color when
+   the rule is pointed at. */
+.leader {
+  flex: 1;
+  min-width: 10px;
+  height: 2px;
+  --dot: var(--faint);
+  background: radial-gradient(circle at center, var(--dot) 0.8px, transparent 1.1px) left
+    center / 6px 2px repeat-x;
+  opacity: 0.8;
+  transition: opacity 0.16s ease-out;
+}
+
+.rule:hover .leader {
+  --dot: var(--hue);
+  opacity: 1;
+}
+
+.rule.enter .leader {
+  animation: lead 0.45s var(--ease) backwards;
+  animation-delay: calc(min(var(--i, 0), 16) * var(--step) + 120ms);
+}
+
+.rule.enter .rule-profile {
+  animation: pop 0.3s var(--spring) backwards;
+  animation-delay: calc(min(var(--i, 0), 16) * var(--step) + 360ms);
 }
 
 .rule-part {
@@ -645,12 +848,22 @@ h2 {
   width: 12px;
   height: 12px;
   stroke-width: 1.6;
-  transition: transform 0.12s ease-out;
 }
 
 /* The arrow points down when the section is open. */
 .fold[aria-expanded="true"] .icon {
   transform: rotate(90deg);
+}
+
+/* It turns when the section was just folded or unfolded. The line is
+   rebuilt with the page, so a transition would have nothing to start from:
+   the turn is played from the other position. */
+.fold.turned[aria-expanded="true"] .icon {
+  animation: turn-open 0.2s var(--ease);
+}
+
+.fold.turned[aria-expanded="false"] .icon {
+  animation: turn-shut 0.2s var(--ease);
 }
 
 .fold-title {
@@ -660,6 +873,23 @@ h2 {
 .fold-sum {
   font-weight: 400;
   font-variant-numeric: tabular-nums;
+}
+
+/* A sum that asks for a look, with a dot as in a notification. */
+.fold-flag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.fold-flag::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .storage {
@@ -702,7 +932,9 @@ h2 {
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: var(--hue);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hue) 70%, transparent), var(--hue));
+  /* Grows from its last width: from nothing when the section unfolds. */
+  transition: width 0.55s var(--ease);
 }
 
 /* A profile's storage line is a button that unfolds its conversations. */
@@ -726,6 +958,12 @@ h2 {
   flex: none;
   width: 14px;
   color: var(--muted);
+}
+
+.pick-mark.enter,
+.segment.enter {
+  animation-name: pop;
+  animation-timing-function: var(--spring);
 }
 
 .pick-name {
@@ -789,6 +1027,11 @@ h2 {
   opacity: 1;
   pointer-events: auto;
   margin-right: 0;
+}
+
+/* The button of the second click comes in from the side it is on. */
+.talk-go.enter {
+  animation-name: slide;
 }
 
 .talk-go {

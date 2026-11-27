@@ -34,6 +34,14 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/** Names an element across rebuilds of the page. The page is built anew on
+ *  every change, so this name is how `settle` tells what just appeared (and
+ *  plays its entrance) from what was already on screen (and stays still). */
+function keyed<T extends Element>(node: T, key: string): T {
+  node.setAttribute("data-key", key);
+  return node;
+}
+
 // Small line icons, drawn on a 16px grid.
 const ICONS = {
   folder: "M2 4.5a1 1 0 0 1 1-1h3.2l1.3 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z",
@@ -108,6 +116,10 @@ function onClick(node: HTMLButtonElement, action: () => Promise<void>): void {
   node.type = "button";
   node.addEventListener("click", async () => {
     node.disabled = true;
+    // Shown while the action runs: a profile's seal pulses until the
+    // folder picker has answered.
+    node.classList.add("busy");
+    pending += 1;
     errorText = "";
     try {
       await action();
@@ -115,11 +127,16 @@ function onClick(node: HTMLButtonElement, action: () => Promise<void>): void {
       errorText = String(error);
       errorAt = Date.now();
     } finally {
+      pending -= 1;
       node.disabled = false;
     }
     await refresh();
   });
 }
+
+// How many actions are running. A folder picker takes the focus away
+// without the window being closed: see the "blur" listener.
+let pending = 0;
 
 let errorText = "";
 let errorAt = 0;
@@ -150,7 +167,7 @@ function count(rules: number): string {
 
 /** Takes the place of a profile's row while its removal is confirmed. */
 function removeRow(profile: Profile, overview: Overview): HTMLElement {
-  const row = el("li", "profile-form");
+  const row = keyed(el("li", "profile-form"), `confirm:${profile.name}`);
   row.style.setProperty("--hue", hue(profile.name));
   if (!profile.account) row.classList.add("signed-out");
 
@@ -218,7 +235,7 @@ function removeRow(profile: Profile, overview: Overview): HTMLElement {
 
 function profileRow(profile: Profile, overview: Overview): HTMLElement {
   if (removing === profile.name) return removeRow(profile, overview);
-  const row = el("li", "profile");
+  const row = keyed(el("li", "profile"), `profile:${profile.name}`);
   row.style.setProperty("--hue", hue(profile.name));
   if (!profile.account) row.classList.add("signed-out");
   if (profile.isDefault) row.classList.add("is-default");
@@ -242,7 +259,9 @@ function profileRow(profile: Profile, overview: Overview): HTMLElement {
   row.append(open);
 
   if (profile.isDefault) {
-    const tag = el("span", "default-tag", "Default");
+    // Named after the profile: when the default moves, the tag and the
+    // ring around the seal arrive on the new one.
+    const tag = keyed(el("span", "default-tag", "Default"), `default:${profile.name}`);
     tag.title = "Used where no rule applies";
     row.append(tag);
   }
@@ -277,7 +296,7 @@ function newProfileRow(overview: Overview): HTMLElement {
   const nextHue = HUES[freeHue("", taken)];
 
   if (!adding) {
-    const row = el("li", "profile new signed-out");
+    const row = keyed(el("li", "profile new signed-out"), "profile:+");
     row.style.setProperty("--hue", nextHue);
     const open = el("button", "profile-open");
     const who = el("span", "who");
@@ -295,7 +314,7 @@ function newProfileRow(overview: Overview): HTMLElement {
     return row;
   }
 
-  const row = el("li", "profile-form signed-out");
+  const row = keyed(el("li", "profile-form signed-out"), "form:profile");
   row.style.setProperty("--hue", nextHue);
   const form = el("form");
 
@@ -386,7 +405,7 @@ function closeRuleForm(): void {
 /** The last line of the rules: a way to add one, then the form. */
 function newRuleRow(overview: Overview): HTMLElement {
   if (!ruleDraft) {
-    const row = el("li", "rule rule-new");
+    const row = keyed(el("li", "rule rule-new"), "rule:+");
     const open = el("button", "rule-add");
     open.title = "Choose a folder, then where the rule applies and which profile it uses";
     open.append(icon("plus"), el("span", "", "New rule…"));
@@ -412,7 +431,7 @@ function newRuleRow(overview: Overview): HTMLElement {
   if (!overview.profiles.some((profile) => profile.name === draftProfile)) {
     draftProfile = overview.profiles[0].name;
   }
-  const row = el("li", "profile-form rule-form");
+  const row = keyed(el("li", "profile-form rule-form"), "form:rule");
   row.style.setProperty("--hue", hue(draftProfile));
   const form = el("form");
 
@@ -497,7 +516,11 @@ function newRuleRow(overview: Overview): HTMLElement {
 }
 
 function ruleRow(rule: Rule, overview: Overview): HTMLElement {
-  const row = el("li", "rule");
+  const row = keyed(
+    el("li", "rule"),
+    `rule:${rule.source}:${rule.gitRemote ?? ""}:${rule.path ?? ""}:${rule.profile}`,
+  );
+  row.style.setProperty("--hue", hue(rule.profile));
   const where = el("span", "rule-where");
   if (rule.gitRemote) {
     const part = el("span", "rule-part");
@@ -509,7 +532,11 @@ function ruleRow(rule: Rule, overview: Overview): HTMLElement {
     part.append(icon("folder", "Folder"), el("span", "rule-pattern", rule.path));
     where.append(part);
   }
-  row.append(where);
+  // A dotted line from the place to the profile it leads to, as between a
+  // chapter and its page number.
+  const leader = el("span", "leader");
+  leader.setAttribute("aria-hidden", "true");
+  row.append(where, leader);
 
   if (rule.source === "team.toml") {
     const team = el("span", "rule-team", "Team");
@@ -523,14 +550,13 @@ function ruleRow(rule: Rule, overview: Overview): HTMLElement {
     row.append(lock);
   }
   const target = el("span", "rule-profile");
-  target.style.setProperty("--hue", hue(rule.profile));
   target.append(el("span", "dot"), el("span", "", rule.profile));
 
   // Only your own rules can go: a team rule has no place of its own.
   const place = rule.index;
   if (place !== null && removingRule === place) {
     // Second click: it really goes.
-    const go = el("button", "talk-go", "Remove rule");
+    const go = keyed(el("button", "talk-go", "Remove rule"), `go:rule:${place}`);
     onClick(go, async () => {
       removingRule = null;
       await api.removeRule(rule);
@@ -560,10 +586,13 @@ function mark(): SVGElement {
   svg.setAttribute("viewBox", "0 0 22 16");
   svg.setAttribute("class", "mark");
   svg.setAttribute("aria-hidden", "true");
+  keyed(svg, "mark");
   // The ring is an arc that stops short of the disc, so they never touch.
   const ring = document.createElementNS(space, "path");
   ring.setAttribute("d", "M12.6 3.1a5.6 5.6 0 1 1 0 9.8");
   ring.setAttribute("class", "mark-ring");
+  // Its length counts as 1, so the stylesheet can draw it from 0 to 1.
+  ring.setAttribute("pathLength", "1");
   const disc = document.createElementNS(space, "circle");
   disc.setAttribute("cx", "7.5");
   disc.setAttribute("cy", "8");
@@ -630,7 +659,7 @@ function conversationList(name: string, overview: Overview): HTMLElement {
     return list;
   }
   for (const talk of conversations.items) {
-    const row = el("li", "talk");
+    const row = keyed(el("li", "talk"), `talk:${name}:${talk.id}`);
     const text = el("span", "talk-text");
     text.append(el("span", "talk-title", talk.title), el("span", "talk-detail", talk.detail));
     row.title = talk.title;
@@ -642,7 +671,7 @@ function conversationList(name: string, overview: Overview): HTMLElement {
       row.append(busy);
     } else if (trashing === talk.id) {
       // Second click: it really goes.
-      const go = el("button", "talk-go", "Move to Trash");
+      const go = keyed(el("button", "talk-go", "Move to Trash"), `go:talk:${talk.id}`);
       onClick(go, async () => {
         trashing = null;
         await api.trashConversation(name, talk.id);
@@ -678,14 +707,16 @@ function foldLine(
   open: boolean,
   sum: string,
   flip: () => void,
+  // True when the sum asks for a look: it is then written in amber.
+  flagged = false,
 ): HTMLButtonElement {
-  const toggle = el("button", "fold");
+  const toggle = keyed(el("button", "fold"), `fold:${id}`);
   toggle.type = "button";
   toggle.dataset.fold = id;
   toggle.title = hint;
   toggle.setAttribute("aria-expanded", String(open));
   toggle.append(icon("chevron"), el("span", "fold-title", label));
-  if (!open) toggle.append(el("span", "fold-sum", sum));
+  if (!open) toggle.append(el("span", flagged ? "fold-sum fold-flag" : "fold-sum", sum));
   toggle.addEventListener("click", () => {
     flip();
     // The page was rebuilt: keep the keyboard on the line just used.
@@ -761,7 +792,7 @@ function historySection(overview: Overview): HTMLElement {
 
   const list = el("ul", "storage");
   for (const profile of overview.profiles) {
-    const row = el("li", "storage-row");
+    const row = keyed(el("li", "storage-row"), `keep:${profile.name}`);
     row.style.setProperty("--hue", hue(profile.name));
     row.append(el("span", "storage-name", profile.name));
     if (profile.keepsDays === null) {
@@ -779,6 +810,7 @@ function historySection(overview: Overview): HTMLElement {
         button.setAttribute("aria-pressed", String(current));
         if (current) {
           button.type = "button";
+          keyed(button, `kept:${profile.name}:${choice.days}`);
         } else {
           onClick(button, () => api.setRetention(profile.name, choice.days));
         }
@@ -816,7 +848,7 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
   // The biggest profile fills the bar; the others are drawn against it.
   const biggest = Math.max(...sizes.map((size) => size.total), 1);
   for (const size of sizes) {
-    const item = el("li", "storage-item");
+    const item = keyed(el("li", "storage-item"), `size:${size.name}`);
     item.style.setProperty("--hue", hue(size.name));
     // The line is a button: it unfolds the profile's biggest conversations.
     const picked = pickedProfile === size.name;
@@ -836,6 +868,7 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
     // A profile with anything at all keeps a visible sliver.
     const share = size.total > 0 ? Math.max(size.total / biggest, 0.02) : 0;
     fill.style.width = `${(share * 100).toFixed(1)}%`;
+    fill.dataset.bar = `size:${size.name}`;
     bar.append(fill);
     row.append(
       el("span", "storage-name", size.name),
@@ -867,7 +900,7 @@ function usageDetail(used: Usage): HTMLElement {
   }
   list.append(el("li", "talks-note", "Projects, against today's rules"));
   for (const project of used.projects) {
-    const row = el("li", "talk used");
+    const row = keyed(el("li", "talk used"), `project:${used.name}:${project.folder}`);
     row.title = `${project.folder}\n${project.why}`;
     row.append(el("span", "used-share", project.share), el("span", "used-folder", project.folder));
     if (project.note) {
@@ -889,7 +922,7 @@ function usageDetail(used: Usage): HTMLElement {
   heading.title = `${used.reread}.\nClaude reads the whole conversation again each time it answers`;
   list.append(heading);
   for (const talk of used.talks) {
-    const row = el("li", "talk");
+    const row = keyed(el("li", "talk"), `context:${used.name}:${talk.id}`);
     const text = el("span", "talk-text");
     text.append(el("span", "talk-title", talk.title), el("span", "talk-detail", talk.detail));
     const context = el("span", talk.heavy ? "talk-size used-flag" : "talk-size", talk.context);
@@ -920,6 +953,7 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
         usageOpen = !usageOpen;
         render(overview);
       },
+      flagged > 0,
     ),
   );
   if (!usageOpen) return section;
@@ -927,7 +961,7 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
   const list = el("ul", "storage");
   const heaviest = Math.max(...profiles.map((used) => used.weight), 1e-9);
   for (const used of profiles) {
-    const item = el("li", "storage-item");
+    const item = keyed(el("li", "storage-item"), `used:${used.name}`);
     item.style.setProperty("--hue", hue(used.name));
     const picked = usagePicked === used.name;
     const row = el("button", "storage-row storage-pick");
@@ -945,6 +979,7 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
     const fill = el("span", "bar-fill");
     const share = used.weight > 0 ? Math.max(used.weight / heaviest, 0.02) : 0;
     fill.style.width = `${(share * 100).toFixed(1)}%`;
+    fill.dataset.bar = `used:${used.name}`;
     bar.append(fill);
     row.append(
       el("span", "storage-name", used.name),
@@ -995,12 +1030,14 @@ function terminalSection(overview: Overview): HTMLElement {
     return section;
   }
   const choice = (label: string, hint: string, selected: boolean, path: string | null) => {
-    const item = el("li", "storage-item");
+    const item = keyed(el("li", "storage-item"), `terminal:${path ?? ""}`);
     const row = el("button", "storage-row storage-pick pick-row");
     row.setAttribute("role", "menuitemradio");
     row.setAttribute("aria-checked", String(selected));
     row.title = hint;
-    row.append(el("span", "pick-mark", selected ? "✓" : ""), el("span", "pick-name", label));
+    const check = el("span", "pick-mark", selected ? "✓" : "");
+    if (selected) keyed(check, `picked:${path ?? ""}`);
+    row.append(check, el("span", "pick-name", label));
     if (selected) {
       row.type = "button";
     } else {
@@ -1037,9 +1074,60 @@ function menu(): HTMLElement {
 }
 
 function notice(text: string, kind = ""): HTMLElement {
-  const node = el("p", `notice ${kind}`.trim(), text);
+  const node = keyed(el("p", `notice ${kind}`.trim(), text), `notice:${text}`);
   if (kind === "error") node.setAttribute("role", "alert");
   return node;
+}
+
+// What the last page showed: the named elements, the width of each bar and
+// which sections were unfolded. `settle` compares the new page with it.
+let seen = new Set<string>();
+let widths = new Map<string, string>();
+let folds = new Map<string, boolean>();
+
+/** Gives the new page its motion. Only what changed moves: an element not
+ *  on the last page plays its entrance, a bar slides from its last width,
+ *  an arrow turns when its section was just folded or unfolded. The layout
+ *  is final at once (the window is sized on it); the motion is only
+ *  opacity and small shifts on top. */
+function settle(page: HTMLElement): void {
+  const now = new Set<string>();
+  // The place among what appears together, so entrances follow each other
+  // from top to bottom.
+  let order = 0;
+  for (const node of page.querySelectorAll<HTMLElement | SVGElement>("[data-key]")) {
+    const key = node.getAttribute("data-key") ?? "";
+    now.add(key);
+    if (seen.has(key)) continue;
+    node.classList.add("enter");
+    node.style.setProperty("--i", String(order));
+    order += 1;
+  }
+  seen = now;
+
+  const drawn = new Map<string, string>();
+  for (const fill of page.querySelectorAll<HTMLElement>("[data-bar]")) {
+    const key = fill.dataset.bar ?? "";
+    const target = fill.style.width;
+    const from = widths.get(key) ?? "0%";
+    drawn.set(key, target);
+    if (from === target) continue;
+    fill.style.width = from;
+    // Reading a measure makes the browser take the starting width into
+    // account; without it only the final width would ever be drawn.
+    void fill.offsetWidth;
+    fill.style.width = target;
+  }
+  widths = drawn;
+
+  const open = new Map<string, boolean>();
+  for (const fold of page.querySelectorAll<HTMLElement>("[data-fold]")) {
+    const id = fold.dataset.fold ?? "";
+    const state = fold.getAttribute("aria-expanded") === "true";
+    open.set(id, state);
+    if (folds.has(id) && folds.get(id) !== state) fold.classList.add("turned");
+  }
+  folds = open;
 }
 
 function render(overview: Overview | null, loadError = ""): void {
@@ -1067,7 +1155,7 @@ function render(overview: Overview | null, loadError = ""): void {
     // A rule needs a profile to lead to: no section before the first one.
     if (overview.profiles.length > 0) {
       const section = el("section", "rules-section");
-      const title = el("h2", "", "Rules");
+      const title = keyed(el("h2", "", "Rules"), "title:rules");
       title.title = "Checked from top to bottom. A rule sends a folder or a repository to a profile";
       const list = el("ul", "rules");
       list.append(...overview.rules.map((rule) => ruleRow(rule, overview)), newRuleRow(overview));
@@ -1088,6 +1176,8 @@ function render(overview: Overview | null, loadError = ""): void {
 
   page.append(menu());
   root.replaceChildren(page);
+  root.classList.remove("away");
+  settle(page);
   // Rebuilding the page drops the cursor: put it back in the form.
   page.querySelector<HTMLInputElement>(".name-input")?.focus();
   // The window takes the height of what it shows, like a native menu.
@@ -1132,6 +1222,28 @@ window.addEventListener("focus", () => {
   // focus away and back within the same second.
   if (Date.now() - errorAt > 10_000) errorText = "";
   void refresh();
+});
+
+// The window closes when it loses the focus. Forget what was on screen, so
+// the next opening plays its entrances, and blank the page meanwhile:
+// otherwise the old page would flash before them. Not while a folder
+// picker or a form is open, where the window stays or comes straight back.
+window.addEventListener("blur", () => {
+  if (pending > 0 || adding || removing || ruleDraft) return;
+  seen = new Set();
+  widths = new Map();
+  if (insideApp) root.classList.add("away");
+});
+
+// A safety net: should the window ever be shown without taking the focus,
+// the first move of the pointer brings the page back.
+let waking = false;
+window.addEventListener("pointermove", () => {
+  if (waking || !root.classList.contains("away")) return;
+  waking = true;
+  void refresh().finally(() => {
+    waking = false;
+  });
 });
 
 window.addEventListener("keydown", (event) => {
