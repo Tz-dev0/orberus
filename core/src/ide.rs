@@ -27,7 +27,17 @@
 //! documentation of it. Which folders an editor keeps its settings in is
 //! what is seen on a Mac with VS Code and Cursor; the paths for Linux and
 //! Windows are the ones VS Code documents and were never tried.
+//!
+//! Whether the extension is installed in one editor is read in two steps,
+//! because the folder of an editor's settings does not say where its
+//! extensions are. Each editor's app carries a `product.json` that names
+//! both: `nameShort` is its settings folder (`Code`, `Cursor`) and
+//! `dataFolderName` the folder, under the home folder, that holds its
+//! extensions (`.vscode`, `.cursor`). An editor whose app is not found in
+//! the Applications folders is simply not told apart: Orberus then only
+//! knows whether the extension is installed somewhere.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -36,6 +46,7 @@ use anyhow::{bail, Context, Result};
 use crate::jsonc;
 use crate::paths::Env;
 use crate::tool::Tool;
+use crate::uninstall::app_folders;
 
 /// One settings file of an editor of the VS Code family.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +55,8 @@ pub struct Editor {
     /// that has its own settings is listed apart, with its folder's name.
     pub name: String,
     pub settings: PathBuf,
+    /// Where the editor keeps its extensions, when its app was found.
+    pub extensions: Option<PathBuf>,
 }
 
 /// What an editor's settings say about the wrapper.
@@ -87,9 +100,45 @@ fn display_name(folder: &str) -> String {
 /// this family keeps (`User/globalStorage` next to `User/settings.json`),
 /// so one that appears tomorrow is found too.
 pub fn editors(env: &Env) -> Vec<Editor> {
+    editors_with(env, &app_folders(env))
+}
+
+/// Where each editor keeps its extensions, by the name of its settings
+/// folder, read in the `product.json` of the apps of these folders.
+fn extension_folders(env: &Env, app_folders: &[PathBuf]) -> HashMap<String, PathBuf> {
+    let mut found = HashMap::new();
+    for folder in app_folders {
+        let Ok(apps) = fs::read_dir(folder) else {
+            continue;
+        };
+        for app in apps.flatten() {
+            let product = app.path().join("Contents/Resources/app/product.json");
+            // Most apps have no such file: they are not editors.
+            let Ok(text) = fs::read_to_string(product) else {
+                continue;
+            };
+            let Ok(product) = serde_json::from_str::<serde_json::Value>(&text) else {
+                continue;
+            };
+            // `as_str` gives `None` for a missing or non-text value.
+            let (Some(settings), Some(data)) = (
+                product["nameShort"].as_str(),
+                product["dataFolderName"].as_str(),
+            ) else {
+                continue;
+            };
+            found.insert(settings.to_string(), env.home.join(data).join("extensions"));
+        }
+    }
+    found
+}
+
+/// [`editors`], with the folders to look for the editors' apps in.
+fn editors_with(env: &Env, app_folders: &[PathBuf]) -> Vec<Editor> {
     let Ok(entries) = fs::read_dir(settings_base(env)) else {
         return Vec::new();
     };
+    let extension_folders = extension_folders(env, app_folders);
     let mut found = Vec::new();
     // `flatten` skips the entries that cannot be read.
     for entry in entries.flatten() {
@@ -97,7 +146,9 @@ pub fn editors(env: &Env) -> Vec<Editor> {
         if !user.join("globalStorage").is_dir() {
             continue;
         }
-        let name = display_name(&entry.file_name().to_string_lossy());
+        let folder = entry.file_name().to_string_lossy().to_string();
+        let name = display_name(&folder);
+        let extensions = extension_folders.get(&folder).cloned();
         // An editor profile with settings of its own does not read the
         // main file for this setting.
         if let Ok(profiles) = fs::read_dir(user.join("profiles")) {
@@ -107,6 +158,7 @@ pub fn editors(env: &Env) -> Vec<Editor> {
                     found.push(Editor {
                         name: format!("{name} (profile {})", profile.file_name().to_string_lossy()),
                         settings,
+                        extensions: extensions.clone(),
                     });
                 }
             }
@@ -114,6 +166,7 @@ pub fn editors(env: &Env) -> Vec<Editor> {
         found.push(Editor {
             name,
             settings: user.join("settings.json"),
+            extensions,
         });
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
@@ -236,29 +289,57 @@ pub fn turn_off(env: &Env, tool: &Tool, editor: &Editor) -> Result<bool> {
     Ok(true)
 }
 
-/// True when the tool's extension is installed in some editor.
-///
-/// Editors of this family keep their extensions in a folder of their own
-/// under the home folder (`~/.vscode/extensions`, `~/.cursor/extensions`),
-/// one folder per extension, named after its identifier.
-pub fn extension_installed(env: &Env, tool: &Tool) -> bool {
+/// True when a folder of extensions holds the tool's extension: one folder
+/// per extension, named after its identifier and its version.
+fn holds_extension(folder: &Path, tool: &Tool) -> bool {
     let Some(extension) = &tool.extension else {
         return false;
     };
     let prefix = format!("{}-", extension.id);
+    fs::read_dir(folder).is_ok_and(|extensions| {
+        extensions
+            .flatten()
+            .any(|extension| extension.file_name().to_string_lossy().starts_with(&prefix))
+    })
+}
+
+/// Whether the tool's extension is installed in this editor. `None` when
+/// that cannot be told, because the editor's app was not found.
+pub fn has_extension(tool: &Tool, editor: &Editor) -> Option<bool> {
+    editor
+        .extensions
+        .as_deref()
+        .map(|folder| holds_extension(folder, tool))
+}
+
+/// True when the tool's extension is installed in some editor, whichever.
+///
+/// Editors of this family keep their extensions in a folder of their own
+/// under the home folder (`~/.vscode/extensions`, `~/.cursor/extensions`).
+fn extension_somewhere(env: &Env, tool: &Tool) -> bool {
     let Ok(entries) = fs::read_dir(&env.home) else {
         return false;
     };
     entries.flatten().any(|entry| {
-        if !entry.file_name().to_string_lossy().starts_with('.') {
-            return false;
-        }
-        fs::read_dir(entry.path().join("extensions")).is_ok_and(|extensions| {
-            extensions
-                .flatten()
-                .any(|extension| extension.file_name().to_string_lossy().starts_with(&prefix))
-        })
+        entry.file_name().to_string_lossy().starts_with('.')
+            && holds_extension(&entry.path().join("extensions"), tool)
     })
+}
+
+/// The editors where the tool's extension starts the tool by itself: the
+/// setting is not on, and the extension is installed there. For an editor
+/// that cannot be told apart, an extension installed anywhere counts.
+pub fn skipping(env: &Env, tool: &Tool) -> Vec<Editor> {
+    // Looked up at most once, and only if some editor needs it.
+    let mut somewhere = None;
+    editors(env)
+        .into_iter()
+        .filter(|editor| state(env, tool, editor) == State::Off)
+        .filter(|editor| match has_extension(tool, editor) {
+            Some(installed) => installed,
+            None => *somewhere.get_or_insert_with(|| extension_somewhere(env, tool)),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -276,6 +357,28 @@ mod tests {
             home,
         };
         (temp, env)
+    }
+
+    /// The editors, with apps looked for in the test's own folder only.
+    fn found(env: &Env) -> Vec<Editor> {
+        editors_with(env, &[env.home.join("Applications")])
+    }
+
+    /// The app of an editor, with what its `product.json` says.
+    fn app(env: &Env, name: &str, settings_folder: &str, data_folder: &str) {
+        let folder = env
+            .home
+            .join("Applications")
+            .join(name)
+            .join("Contents/Resources/app");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("product.json"),
+            format!(
+                "{{\"nameShort\": \"{settings_folder}\", \"dataFolderName\": \"{data_folder}\"}}"
+            ),
+        )
+        .unwrap();
     }
 
     /// An editor as it leaves its folders behind, with these settings.
@@ -298,7 +401,7 @@ mod tests {
         fs::create_dir_all(settings_base(&env).join("Slack/User")).unwrap();
         fs::create_dir_all(settings_base(&env).join("Claude")).unwrap();
 
-        let found = editors(&env);
+        let found = found(&env);
         let names: Vec<&str> = found.iter().map(|editor| editor.name.as_str()).collect();
         assert_eq!(names, ["Cursor", "VS Code"]);
         assert!(found[1].settings.ends_with("Code/User/settings.json"));
@@ -314,7 +417,7 @@ mod tests {
         // A profile folder with no settings of its own is not listed.
         fs::create_dir_all(profiles.join("builtin/agents")).unwrap();
 
-        let names: Vec<String> = editors(&env).into_iter().map(|e| e.name).collect();
+        let names: Vec<String> = found(&env).into_iter().map(|e| e.name).collect();
         assert_eq!(names, ["VS Code", "VS Code (profile -1a2b3c)"]);
     }
 
@@ -323,7 +426,7 @@ mod tests {
         let (_temp, env) = world();
         let before = "{\n    // my settings\n    \"editor.fontSize\": 13,\n}\n";
         let file = editor(&env, "Code", Some(before));
-        let code = editors(&env).remove(0);
+        let code = found(&env).remove(0);
         assert_eq!(state(&env, &CLAUDE, &code), State::Off);
 
         assert!(turn_on(&env, &CLAUDE, &code).unwrap());
@@ -344,7 +447,7 @@ mod tests {
     fn an_editor_with_no_settings_file_gets_one() {
         let (_temp, env) = world();
         let file = editor(&env, "Cursor", None);
-        let cursor = editors(&env).remove(0);
+        let cursor = found(&env).remove(0);
         assert_eq!(state(&env, &CLAUDE, &cursor), State::Off);
         assert!(turn_on(&env, &CLAUDE, &cursor).unwrap());
         assert_eq!(state(&env, &CLAUDE, &cursor), State::On);
@@ -359,7 +462,7 @@ mod tests {
         let (_temp, env) = world();
         let before = format!("{{\n    \"{KEY}\": \"/opt/company/claude-wrap\"\n}}\n");
         let file = editor(&env, "Code", Some(&before));
-        let code = editors(&env).remove(0);
+        let code = found(&env).remove(0);
         assert_eq!(
             state(&env, &CLAUDE, &code),
             State::Other("/opt/company/claude-wrap".to_string())
@@ -378,7 +481,7 @@ mod tests {
             "Code",
             Some(&format!("{{\n    \"{KEY}\": \"\"\n}}\n")),
         );
-        let code = editors(&env).remove(0);
+        let code = found(&env).remove(0);
         assert_eq!(state(&env, &CLAUDE, &code), State::Off);
         assert!(turn_on(&env, &CLAUDE, &code).unwrap());
         assert_eq!(state(&env, &CLAUDE, &code), State::On);
@@ -391,7 +494,7 @@ mod tests {
         let (_temp, env) = world();
         let before = "{ \"editor.fontSize\": 13";
         let file = editor(&env, "Code", Some(before));
-        let code = editors(&env).remove(0);
+        let code = found(&env).remove(0);
         assert!(matches!(state(&env, &CLAUDE, &code), State::Unreadable(_)));
         let error = turn_on(&env, &CLAUDE, &code).unwrap_err().to_string();
         // The message carries the line to add by hand.
@@ -401,18 +504,52 @@ mod tests {
     }
 
     #[test]
-    fn the_extension_is_looked_for_in_the_editors_own_folders() {
+    fn the_extension_is_looked_for_in_each_editors_own_folder() {
         let (_temp, env) = world();
-        assert!(!extension_installed(&env, &CLAUDE));
+        editor(&env, "Code", Some("{}"));
+        editor(&env, "Cursor", Some("{}"));
+        editor(&env, "Unknown Fork", Some("{}"));
+        app(&env, "Visual Studio Code.app", "Code", ".vscode");
+        app(&env, "Cursor.app", "Cursor", ".cursor");
+        // An app that is not an editor, and one whose file says nothing.
+        fs::create_dir_all(env.home.join("Applications/Notes.app/Contents")).unwrap();
+        app(&env, "Broken.app", "", "");
+        fs::create_dir_all(
+            env.home
+                .join(".vscode/extensions/anthropic.claude-code-2.1.325-darwin-arm64"),
+        )
+        .unwrap();
+        fs::create_dir_all(env.home.join(".cursor/extensions/ms-python.python-1.0")).unwrap();
+
+        let found = found(&env);
+        let has: Vec<(&str, Option<bool>)> = found
+            .iter()
+            .map(|editor| (editor.name.as_str(), has_extension(&CLAUDE, editor)))
+            .collect();
+        assert_eq!(
+            has,
+            [
+                ("Cursor", Some(false)),
+                // No app found for it: it cannot be told.
+                ("Unknown Fork", None),
+                ("VS Code", Some(true)),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_extension_anywhere_counts_only_under_an_editors_folder() {
+        let (_temp, env) = world();
+        assert!(!extension_somewhere(&env, &CLAUDE));
         fs::create_dir_all(env.home.join(".vscode/extensions/ms-python.python-1.0")).unwrap();
         // The same name outside an editor's extensions folder is nothing.
         fs::create_dir_all(env.home.join("extensions/anthropic.claude-code-2.1")).unwrap();
-        assert!(!extension_installed(&env, &CLAUDE));
+        assert!(!extension_somewhere(&env, &CLAUDE));
         fs::create_dir_all(
             env.home
                 .join(".cursor/extensions/anthropic.claude-code-2.1.325-darwin-arm64"),
         )
         .unwrap();
-        assert!(extension_installed(&env, &CLAUDE));
+        assert!(extension_somewhere(&env, &CLAUDE));
     }
 }

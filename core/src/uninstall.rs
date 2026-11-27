@@ -208,6 +208,19 @@ pub fn remove_launchers(env: &Env) -> Result<bool> {
     Ok(true)
 }
 
+/// The folders where apps are installed: the one named by `ORBERUS_APPS`
+/// when it is set (tests), the usual two on a Mac, none elsewhere.
+pub(crate) fn app_folders(env: &Env) -> Vec<PathBuf> {
+    match std::env::var_os(APPS_ENV) {
+        Some(folder) if !folder.is_empty() => vec![PathBuf::from(folder)],
+        _ if cfg!(target_os = "macos") => vec![
+            PathBuf::from("/Applications"),
+            env.home.join("Applications"),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 /// The copies of the menu bar app that are installed.
 ///
 /// A folder named like the app is only counted when its Info.plist carries
@@ -216,14 +229,7 @@ pub fn installed_apps(env: &Env) -> Vec<PathBuf> {
     if !cfg!(target_os = "macos") {
         return Vec::new();
     }
-    let folders = match std::env::var_os(APPS_ENV) {
-        Some(folder) if !folder.is_empty() => vec![PathBuf::from(folder)],
-        _ => vec![
-            PathBuf::from("/Applications"),
-            env.home.join("Applications"),
-        ],
-    };
-    folders
+    app_folders(env)
         .into_iter()
         .map(|folder| folder.join(APP_NAME))
         .filter(|app| {

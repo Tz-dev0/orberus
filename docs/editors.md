@@ -63,6 +63,11 @@ Good to know:
 - **An editor is found by its folders**, not by its name, so an editor built
   on VS Code that Orberus has never heard of is listed too. An editor profile
   that has its own settings is listed on its own line.
+- **An editor without the extension is left alone.** It is listed as
+  `not installed`, and `orberus ide on` skips it unless you name it. Orberus
+  reads where each editor keeps its extensions in the editor's own app; for
+  an app it cannot find (not in an Applications folder), it only knows
+  whether the extension is installed somewhere.
 - **A locked rule holds in the editor too.** When the config is wrong, or a
   locked rule forbids the profile that was asked for, Claude Code does not
   start, and Orberus prints the reason where the extension reads errors.

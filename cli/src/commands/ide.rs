@@ -22,13 +22,14 @@ pub(crate) fn ide_command(
     let Some(switch) = switch else {
         return list(ui, env, tool, &editors);
     };
+    let named = editor.is_some();
     let editors = chosen(editors, editor.as_deref())?;
     if editors.is_empty() {
         println!("{NO_EDITOR}");
         return Ok(0);
     }
     match switch {
-        Switch::On => on(ui, env, tool, &editors),
+        Switch::On => on(ui, env, tool, &editors, named),
         Switch::Off => off(ui, env, tool, &editors),
     }
 }
@@ -75,6 +76,10 @@ fn list(ui: &Ui, env: &Env, tool: &Tool, editors: &[Editor]) -> Result<i32> {
         .map(|editor| {
             let extension = match ide::state(env, tool, editor) {
                 State::On => Cell::styled("through Orberus", Style::Green),
+                // Nothing skips Orberus where the extension is not there.
+                State::Off if ide::has_extension(tool, editor) == Some(false) => {
+                    Cell::styled("not installed", Style::Dim)
+                }
                 State::Off => {
                     skipped = true;
                     Cell::styled("skips Orberus", Style::Yellow)
@@ -105,19 +110,34 @@ fn list(ui: &Ui, env: &Env, tool: &Tool, editors: &[Editor]) -> Result<i32> {
     Ok(0)
 }
 
-fn on(ui: &Ui, env: &Env, tool: &Tool, editors: &[Editor]) -> Result<i32> {
+/// `named` tells that the user asked for this editor by its name: it is
+/// then written even where the extension is not installed yet. Without a
+/// name, an editor that has no use for the setting is left as it is.
+fn on(ui: &Ui, env: &Env, tool: &Tool, editors: &[Editor], named: bool) -> Result<i32> {
     // The file the setting names must be there before an editor reads it.
     let wrapper = tool.wrapper_path(env);
     if !wrapper.exists() {
         install_link(&wrapper)?;
     }
     let mut problems = 0;
+    let mut written = 0;
     for editor in editors {
-        match ide::turn_on(env, tool, editor) {
-            Ok(true) => ui.success(&format!(
-                "{}: its {} extension now goes through Orberus",
+        let without_extension = ide::has_extension(tool, editor) == Some(false);
+        if without_extension && !named && ide::state(env, tool, editor) == State::Off {
+            ui.detail(&format!(
+                "{}: the {} extension is not installed there, left as it is",
                 editor.name, tool.name
-            )),
+            ));
+            continue;
+        }
+        match ide::turn_on(env, tool, editor) {
+            Ok(true) => {
+                written += 1;
+                ui.success(&format!(
+                    "{}: its {} extension now goes through Orberus",
+                    editor.name, tool.name
+                ));
+            }
             Ok(false) => ui.success(&format!("{}: already on", editor.name)),
             Err(error) => {
                 problems += 1;
@@ -125,9 +145,11 @@ fn on(ui: &Ui, env: &Env, tool: &Tool, editors: &[Editor]) -> Result<i32> {
             }
         }
     }
-    println!();
-    ui.detail("The account is picked from the folder the editor has open, by the same rules");
-    ui.detail("as in a terminal. Reload the editor's window for it to apply.");
+    if written > 0 {
+        println!();
+        ui.detail("The account is picked from the folder the editor has open, by the same rules");
+        ui.detail("as in a terminal. Reload the editor's window for it to apply.");
+    }
     Ok(if problems == 0 { 0 } else { 1 })
 }
 

@@ -61,6 +61,9 @@ setting. Both act on every editor found, or on the one you name, as the list
 shows it: `orberus ide on "VS Code"`. Reload the editor's window after
 either.
 
+An editor where the extension is not installed is listed as `not installed`.
+`orberus ide on` leaves it alone, unless you name it.
+
 ```text
 $ orberus ide on
 ✓ Cursor: its Claude Code extension now goes through Orberus

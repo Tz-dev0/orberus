@@ -117,13 +117,12 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
     );
 
     // Not a failure: the extension works, but with its own idea of the
-    // account. Said only when the extension is installed somewhere.
-    let skipping: Vec<&str> = editors
-        .iter()
-        .filter(|(_, state)| *state == State::Off)
-        .map(|(name, _)| name.as_str())
+    // account. Only for an editor where the extension is installed.
+    let skipping: Vec<String> = ide::skipping(env, tool)
+        .into_iter()
+        .map(|editor| editor.name)
         .collect();
-    if !skipping.is_empty() && ide::extension_installed(env, tool) {
+    if !skipping.is_empty() {
         ui.warning(&format!(
             "the {} extension skips Orberus in {}",
             tool.name,

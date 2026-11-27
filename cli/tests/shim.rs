@@ -124,6 +124,24 @@ impl World {
         file
     }
 
+    /// The app of an editor, with the two names its `product.json` gives:
+    /// its settings folder and, under the home folder, its data folder.
+    fn app(&self, name: &str, settings_folder: &str, data_folder: &str) {
+        let folder = self
+            .home
+            .join("Applications")
+            .join(name)
+            .join("Contents/Resources/app");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("product.json"),
+            format!(
+                "{{\"nameShort\": \"{settings_folder}\", \"dataFolderName\": \"{data_folder}\"}}"
+            ),
+        )
+        .unwrap();
+    }
+
     fn repo(&self, relative: &str, remote: &str) -> PathBuf {
         let repo = self.home.join(relative);
         fs::create_dir_all(repo.join(".git")).unwrap();
@@ -913,6 +931,44 @@ fn ide_can_be_turned_on_for_one_editor_only() {
     assert!(fs::read_to_string(&code).unwrap().contains(key));
     world.ok(&home, &["ide", "off", "VS Code"]);
     assert!(!fs::read_to_string(&code).unwrap().contains(key));
+}
+
+#[test]
+fn an_editor_without_the_extension_is_not_said_to_skip_orberus() {
+    let world = World::new();
+    let home = world.home.clone();
+    let code = world.editor("Code", "{}");
+    let cursor = world.editor("Cursor", "{}");
+    world.app("Visual Studio Code.app", "Code", ".vscode");
+    world.app("Cursor.app", "Cursor", ".cursor");
+    // The extension is installed in VS Code only.
+    world.bundled();
+    let key = "claudeCode.claudeProcessWrapper";
+
+    let listed = world.ok(&home, &["ide"]);
+    let line = |name: &str| listed.lines().find(|line| line.contains(name)).unwrap();
+    assert!(line("VS Code").contains("skips Orberus"), "{listed}");
+    assert!(line("Cursor").contains("not installed"), "{listed}");
+    let doctor = text(&world.orberus(&home, &["doctor"]));
+    assert!(doctor.contains("skips Orberus in VS Code\n"), "{doctor}");
+
+    // Without a name, only the editor that has the extension is written.
+    let done = world.ok(&home, &["ide", "on"]);
+    assert!(
+        done.contains("Cursor: the Claude Code extension is not installed there"),
+        "{done}"
+    );
+    assert!(fs::read_to_string(&code).unwrap().contains(key));
+    assert_eq!(fs::read_to_string(&cursor).unwrap(), "{}");
+    // Nothing is left to say, here or in doctor.
+    let listed = world.ok(&home, &["ide"]);
+    assert!(!listed.contains("orberus ide on"), "{listed}");
+    let doctor = text(&world.orberus(&home, &["doctor"]));
+    assert!(!doctor.contains("skips Orberus"), "{doctor}");
+
+    // Asked for by its name, it is prepared for the day the extension comes.
+    world.ok(&home, &["ide", "on", "cursor"]);
+    assert!(fs::read_to_string(&cursor).unwrap().contains(key));
 }
 
 #[test]

@@ -94,10 +94,7 @@ pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
         ),
     ];
     // Only for someone who has such an editor, and has not done it yet.
-    let editors_left = ide::editors(env)
-        .iter()
-        .any(|editor| ide::state(env, tool, editor) == ide::State::Off);
-    if editors_left {
+    if !ide::skipping(env, tool).is_empty() {
         steps.push((
             "orberus ide on",
             "use it in VS Code, Cursor and the like too",
