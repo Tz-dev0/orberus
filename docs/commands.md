@@ -332,6 +332,7 @@ orberus limits off work
 │ work    │ 3%     │ in 4h  │ 11%    │ in 4d  │ under 1m ago │
 └─────────┴────────┴────────┴────────┴────────┴──────────────┘
   The last numbers Claude Code showed for each account, not a live reading.
+  Rounded to a whole percent: approximate to about 1% when fresh.
 ```
 
 The numbers come from Claude Code itself. It hands them to its
@@ -342,9 +343,12 @@ each time Claude Code runs it, the limits are noted in
 `~/.orberus/limits/<profile>.json`, and a line like `work · 5h 3% · week 11%`
 shows under the prompt.
 
-- They are the last numbers Claude Code reported, with their age. A profile
-  you have not used for a while shows old numbers; a limit whose reset time
-  has passed reads 0%.
+- **These are not live numbers.** They are the last ones Claude Code
+  reported, with their age. A profile you have not used for a while shows old
+  numbers; a limit whose reset time has passed reads 0%.
+- **They are approximate, to about one percent.** Each number is rounded to a
+  whole percent, so it can differ by a point from what Claude shows, and by
+  more when it is old: check the "Updated" column.
 - A status line of your own is kept: it stays the one shown, and
   `orberus limits off` puts your settings back as they were.
 - Orberus never asks Anthropic for these numbers and never reads your login.

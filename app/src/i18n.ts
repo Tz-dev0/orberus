@@ -129,7 +129,8 @@ const en = {
   limitFact: "{used} · resets {when}",
   limitFresh: "{used} · started over",
   limitsUpdated: "Updated {when}",
-  limitsHint: "The last numbers Claude Code showed for this account, not a live reading",
+  limitsHint:
+    "The last numbers Claude Code showed for this account, not a live reading.\nRounded to a whole percent: approximate to about 1% when fresh",
   limitsWaiting: "Limits appear after the next answer in Claude Code",
   limitsShow: "Show 5-hour and weekly limits",
   limitsShowHint:
@@ -308,7 +309,8 @@ const fr: Record<Key, string> = {
   limitFact: "{used} · remise à zéro {when}",
   limitFresh: "{used} · repartie de zéro",
   limitsUpdated: "Mis à jour {when}",
-  limitsHint: "Les derniers chiffres que Claude Code a affichés pour ce compte, pas une mesure en direct",
+  limitsHint:
+    "Les derniers chiffres que Claude Code a affichés pour ce compte, pas une mesure en direct.\nArrondis au pourcent : approximatifs à environ 1 % près quand ils sont récents",
   limitsWaiting: "Les limites apparaîtront après la prochaine réponse dans Claude Code",
   limitsShow: "Afficher les limites de 5 h et hebdomadaire",
   limitsShowHint:

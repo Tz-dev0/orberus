@@ -24,8 +24,9 @@ Opening the app again from the Finder or Spotlight shows the window.
   from your config or from team rules.
 - **Usage** (folded): for each profile, its account's 5-hour and weekly
   limits, as Claude shows them: how much is used, when it starts over, and a
-  bar where full is the limit. They are the last numbers Claude Code reported
-  for that account, with their age; "Show 5-hour and weekly limits" turns the
+  bar where full is the limit. These are not live numbers: they are the last
+  ones Claude Code reported for that account, with their age, rounded to a
+  whole percent, so approximate to about one percent when fresh; "Show 5-hour and weekly limits" turns the
   reporting on for a profile (see [`orberus limits`](commands.md#limits)).
   Click a profile to see its heaviest projects of the last 7 days, each
   checked against today's rules, and the conversations that send the most

@@ -151,6 +151,7 @@ fn table(ui: &Ui, env: &Env, config: &Config) -> Result<()> {
         &rows,
     );
     ui.detail("The last numbers Claude Code showed for each account, not a live reading.");
+    ui.detail("Rounded to a whole percent: approximate to about 1% when fresh.");
     if any_off {
         ui.detail(&format!(
             "Turn it on for a profile with: {}",
