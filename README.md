@@ -1,6 +1,8 @@
 <div align="center">
+  <img src="app/src-tauri/icons/128x128@2x.png" width="96" height="96" alt="">
   <h1>Orberus</h1>
-  <p><b>The right Claude Code account for each folder. Automatically.</b></p>
+  <p><b>The right account for each folder. Automatically.</b></p>
+  <p>Several Claude Code accounts on one Mac, picked by the folder you are in.<br>Codex is next.</p>
   <p>
     <a href="https://github.com/Tz-dev0/orberus/releases"><img src="https://img.shields.io/github/v/release/Tz-dev0/orberus?label=version&style=flat-square" alt="Version"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT license"></a>
@@ -8,28 +10,39 @@
   </p>
 </div>
 
-`orberus` keeps several Claude Code accounts on one Mac (work, personal,
-client) and picks the account from the folder you are in. A company repository
-always opens with the company account, a side project with yours, and a locked
-rule refuses the wrong one.
+<p align="center">
+  <img src="docs/images/terminal.svg" width="840" alt="In a company repository, typing claude starts the work account. In a personal folder it starts the personal one. Asking for the personal account in the company repository is refused.">
+</p>
 
-```text
-~/code/acme-api $ claude
-orberus: work (locked rule git_remote = "github.com/acme/*" in config.toml)
+`orberus` keeps several accounts on one Mac (work, personal, client) and picks
+the account from the folder you are in. You keep typing `claude`: a company
+repository always opens with the company account, a side project with yours,
+and a locked rule refuses the wrong one.
 
-~/code/blog $ claude
-orberus: perso (default profile)
-
-~/code/acme-api $ ORBERUS_PROFILE=perso claude
-orberus: refused: this folder is locked to profile 'work' by rule
-git_remote = "github.com/acme/*" in config.toml, so profile 'perso' cannot be used here
-```
-
-> Not affiliated with Anthropic. Claude is a trademark of Anthropic.
+> Not affiliated with Anthropic or OpenAI. Claude is a trademark of Anthropic.
 >
-> Early version: Claude Code only, developed and tested on macOS.
-> It is meant for people who hold several legitimate, paid accounts. It does
-> not switch accounts to get around usage limits.
+> Early version, developed and tested on macOS. It is meant for people who
+> hold several legitimate, paid accounts. It does not switch accounts to get
+> around usage limits.
+
+## Where it runs
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/platforms-dark.svg">
+    <img src="docs/images/platforms-light.svg" width="840" alt="Works today: Claude Code, on macOS (Apple Silicon and Intel). Coming next: Codex, Claude Desktop profiles, and Windows.">
+  </picture>
+</p>
+
+A filled seal works today; an outlined one is planned, with no date yet.
+
+- **Claude Code on macOS** is what Orberus handles now.
+- **Codex** is the next tool: the same profiles and the same rules would pick
+  its account too. Nothing of it is in the releases yet.
+- **Claude Desktop**: Orberus already reads the plan usage it notes, for the
+  limits. Giving each profile its own Claude Desktop account is planned.
+- **Windows**: the command builds and passes its tests there, but it was
+  never tried in front of a real Claude Code. Not supported yet.
 
 ## Features
 
@@ -46,7 +59,22 @@ git_remote = "github.com/acme/*" in config.toml, so profile 'perso' cannot be us
   them no rule covers. Work done on the wrong account shows up there.
 - **Disk space and history**: see what each profile takes, choose how long
   conversations are kept, and move the biggest ones to the Trash.
+- **Limits at a glance**: the 5-hour and weekly limits of each account, side
+  by side.
 - **Menu bar app** (optional): the same profiles and rules, one click away.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/app-dark.png">
+    <img src="docs/images/app-light.png" width="320" alt="The menu bar app: three profiles with the account logged in to each, and two rules that send a GitHub organisation and a folder to the work profile.">
+  </picture>
+  &nbsp;&nbsp;
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/usage-dark.png">
+    <img src="docs/images/usage-light.png" width="320" alt="The same window with Usage open: the 5-hour and weekly limits of each account as bars, with when they reset.">
+  </picture>
+</p>
+<p align="center"><sub>The menu bar app, drawn from its real interface with made-up accounts.</sub></p>
 
 ## Quick start
 
@@ -228,8 +256,8 @@ $ orberus retention work 365
 ### Menu bar app
 
 A small app that lives in the menu bar: your profiles and who is logged in to
-each, the rules, the usage by project, the disk space, and a button to open
-Claude Code in a profile.
+each, the rules, the limits and the usage by project, the disk space, and a
+button to open Claude Code in a profile. It speaks English and French.
 It reads and writes the same config as the CLI and is optional. See
 [docs/app.md](docs/app.md).
 
