@@ -23,7 +23,9 @@ What this does:
 1. downloads the latest release and puts `orberus` in `~/.orberus/bin`;
 2. `setup` creates `~/.orberus/bin/claude`, a link to `orberus`. This
    is the shim that picks the account when you type `claude`;
-3. `setup` offers to add that folder to your `PATH`, in `~/.zshrc` or in your
+3. `setup` offers to add that folder to your `PATH`. With zsh, in two files:
+   `~/.zshrc`, which a terminal window reads, and `~/.zprofile`, which apps
+   and scripts read when they start a shell of their own. With bash, in your
    bash profile. With another shell, add this line to its config yourself:
 
    ```sh

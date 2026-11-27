@@ -27,6 +27,7 @@ pub mod retention;
 pub mod rules;
 pub mod sessions;
 mod settings;
+pub mod shell;
 pub mod tool;
 pub mod uninstall;
 pub mod usage;

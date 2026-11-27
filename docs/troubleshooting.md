@@ -35,6 +35,18 @@ terminal:
 export PATH="$HOME/.orberus/bin:$PATH"
 ```
 
+### `claude` is the shim in a terminal, but not in an app or a script
+
+A terminal window and an app do not start the shell the same way. zsh reads
+`~/.zshrc` only in a terminal; an app or a script that starts zsh to run one
+command reads `~/.zprofile` instead. With the `PATH` line in `~/.zshrc`
+alone, `claude` there is the real Claude Code: no account is picked, and
+nothing says so.
+
+`orberus doctor` reports it as "apps and scripts get the shim too". Run
+`orberus setup` again: it adds the line to `~/.zprofile`. Installations made
+before version 0.1.5 only have it in `~/.zshrc`.
+
 ### "real Claude Code is found" fails
 
 The shim found no other `claude` in your `PATH`. Install Claude Code, or tell
@@ -95,6 +107,9 @@ app again from the Finder or Spotlight: its window appears.
   and keychain.
 - **`setup` writes the `PATH` line for zsh and bash only.** With another
   shell, add it yourself.
+- **A script that reads no shell config at all** (`#!/bin/sh`, a `cron` job,
+  a launch agent) has its own `PATH` and does not go through the shim, unless
+  it calls `~/.orberus/bin/claude` by its full path.
 - **Editing through commands drops comments** in `config.toml`.
 - **`usage` is an estimate.** It reads the conversations Claude Code keeps on
   this Mac, in a format that is not documented and may change. It does not

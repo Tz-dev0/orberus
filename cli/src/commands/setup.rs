@@ -1,29 +1,40 @@
 //! `orberus setup`: the `claude` link and the `PATH` line.
 
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use orberus_core::paths::Env;
+use orberus_core::shell;
 use orberus_core::tool;
-use orberus_core::uninstall;
 use orberus_core::view::short_path;
 
 use crate::ui::Ui;
 
-/// The config file of the user's shell, when we know how to write to it.
-fn shell_config(env: &Env) -> Option<PathBuf> {
+/// The name of the user's shell: `zsh`, `bash`.
+fn shell_name() -> Option<String> {
     let shell = std::env::var("SHELL").ok()?;
-    let name = Path::new(&shell).file_name()?.to_str()?.to_string();
-    match name.as_str() {
-        "zsh" => Some(env.home.join(".zshrc")),
-        // Terminal on macOS starts bash as a login shell, which reads
-        // ~/.bash_profile and not ~/.bashrc.
-        "bash" if cfg!(target_os = "macos") => Some(env.home.join(".bash_profile")),
-        "bash" => Some(env.home.join(".bashrc")),
-        _ => None,
-    }
+    Some(Path::new(&shell).file_name()?.to_str()?.to_string())
+}
+
+/// The shell config files that should put the shim in `PATH` and do not.
+///
+/// The first file of a shell is the one a terminal reads: when the shim
+/// folder is already in this terminal's `PATH`, it got there somehow, and
+/// that file is left alone. The others (apps, scripts) are always checked.
+pub(crate) fn path_missing_in(env: &Env) -> Vec<PathBuf> {
+    let bin = env.bin_dir();
+    let in_path = std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir == bin));
+    let files = shell_name()
+        .map(|name| shell::configs(env, &name))
+        .unwrap_or_default();
+    files
+        .into_iter()
+        .enumerate()
+        .filter(|(index, file)| !shell::mentions(env, file) && !(*index == 0 && in_path))
+        .map(|(_, file)| file)
+        .collect()
 }
 
 pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
@@ -76,63 +87,52 @@ pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
 fn setup_path(ui: &Ui, env: &Env, bin: &Path) -> Result<()> {
     let in_path = std::env::var_os("PATH")
         .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir == bin));
-    if in_path {
-        ui.success("The shim folder is in your PATH");
+    let known_shell = shell_name().is_some_and(|name| !shell::configs(env, &name).is_empty());
+    let missing = path_missing_in(env);
+
+    if missing.is_empty() && (in_path || known_shell) {
+        if in_path {
+            ui.success("The shim folder is in your PATH");
+        } else {
+            // Written by an earlier setup: only a new terminal is missing.
+            ui.success("Your shell config already puts the shim in your PATH");
+            ui.detail("open a new terminal for it to apply");
+        }
         return Ok(());
     }
 
-    // Written with $HOME when possible, so the line still works if the home
-    // folder moves (a restored backup, a renamed account).
-    let absolute = bin.display().to_string();
-    let with_home = bin
-        .strip_prefix(&env.home)
-        .ok()
-        .map(|rest| format!("$HOME/{}", rest.display()));
-    let line = format!(
-        "export PATH=\"{}:$PATH\"",
-        with_home.as_deref().unwrap_or(&absolute)
-    );
-    let rc = shell_config(env);
-
-    // Already written by an earlier setup: only a new terminal is missing.
-    // We look for both spellings of the folder, absolute and with $HOME.
-    if let Some(rc) = &rc {
-        let text = fs::read_to_string(rc).unwrap_or_default();
-        let mentioned = text.contains(&absolute)
-            || with_home
-                .as_deref()
-                .is_some_and(|spelling| text.contains(spelling));
-        if mentioned {
-            ui.success(&format!(
-                "{} already puts the shim in your PATH",
-                short_path(env, rc)
-            ));
-            ui.detail("open a new terminal for it to apply");
-            return Ok(());
-        }
-    }
-
-    if let Some(rc) = &rc {
-        let question = format!("Add the shim to your PATH in {}?", short_path(env, rc));
+    if !missing.is_empty() {
+        let names: Vec<String> = missing.iter().map(|file| short_path(env, file)).collect();
+        let question = format!("Add the shim to your PATH in {}?", names.join(" and "));
         if ui.interactive() && ui.confirm(&question, true)? {
-            // `append(true)` adds at the end and never rewrites what is there.
-            let mut file = fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(rc)
-                .with_context(|| format!("cannot open {}", rc.display()))?;
-            writeln!(file, "\n{}\n{line}", uninstall::PATH_COMMENT)
-                .with_context(|| format!("cannot write {}", rc.display()))?;
-            ui.success(&format!("Added to {}", short_path(env, rc)));
+            for file in &missing {
+                shell::add_line(env, file)?;
+                ui.success(&format!("Added to {}", short_path(env, file)));
+            }
+            ui.detail("a terminal reads the first file; apps and scripts read the other");
             ui.detail("open a new terminal for it to apply");
             return Ok(());
         }
     }
 
-    ui.warning("The shim folder is not in your PATH yet");
+    if in_path {
+        // This terminal is fine; what is missing is for apps and scripts.
+        ui.success("The shim folder is in your PATH");
+        ui.warning("Apps and scripts that start their own shell would skip the shim");
+    } else {
+        ui.warning("The shim folder is not in your PATH yet");
+    }
     println!();
-    println!("Add this line to your shell config, then open a new terminal:");
+    if missing.is_empty() {
+        println!("Add this line to your shell config, then open a new terminal:");
+    } else {
+        let names: Vec<String> = missing.iter().map(|file| short_path(env, file)).collect();
+        println!(
+            "Add this line to {}, then open a new terminal:",
+            names.join(" and ")
+        );
+    }
     println!();
-    println!("  {}", ui.command(&line));
+    println!("  {}", ui.command(&shell::path_line(env)));
     Ok(())
 }

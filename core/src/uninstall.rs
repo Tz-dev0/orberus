@@ -38,7 +38,7 @@ pub fn path_lines(env: &Env) -> Vec<String> {
 
 /// The shell config files where `setup` may have written its line.
 fn shell_files(env: &Env) -> Vec<PathBuf> {
-    [".zshrc", ".bash_profile", ".bashrc"]
+    [".zshrc", ".zprofile", ".bash_profile", ".bashrc"]
         .iter()
         .map(|name| env.home.join(name))
         .collect()
