@@ -81,10 +81,11 @@ Good to know:
 What was tried, with version 2.1.325 of the extension:
 
 - in VS Code, a conversation in the Claude Code panel gets the profile of
-  its folder. This was seen with the profile that reuses `~/.claude`;
-- a profile with a folder of its own was tried with the extension's copy of
-  Claude Code started by hand, the way the extension starts it, and not yet
-  in the panel;
+  its folder (seen with the profile that reuses `~/.claude`);
+- in a folder that goes to a profile with a folder of its own and no login,
+  the panel asks to sign in, while other windows keep their account. What
+  the panel lists as past conversations there was not looked at, and neither
+  was the refusal of a locked rule;
 - Cursor and the other editors built on VS Code install the same extension;
   they were not tried one by one.
 
