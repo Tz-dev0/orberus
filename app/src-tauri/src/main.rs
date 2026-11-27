@@ -38,6 +38,16 @@ struct LastHidden(Mutex<Option<Instant>>);
 /// several threads can read and write without a lock.
 struct Picking(AtomicBool);
 
+/// The "Quit" line of the menu under a right click. The page knows the
+/// language of the system; this side does not, so the page names it.
+struct QuitItem(MenuItem<tauri::Wry>);
+
+#[tauri::command]
+fn set_quit_label(app: AppHandle, label: String) {
+    // Failing to rename a menu line is not worth an error on screen.
+    let _ = app.state::<QuitItem>().0.set_text(label);
+}
+
 /// When the window was last shown without a click (launch or reopen).
 struct LastPresented(Mutex<Option<Instant>>);
 
@@ -159,12 +169,16 @@ fn pick_folder(app: &AppHandle, title: &str, start: PathBuf, then_hide: bool) ->
 /// Asks which folder a new rule is about, and returns what the form can
 /// offer for it. `None` when the user cancels.
 #[tauri::command]
-async fn pick_rule_folder(app: AppHandle) -> Result<Option<data::RuleDraft>, String> {
+async fn pick_rule_folder(
+    app: AppHandle,
+    // The title of the folder picker, written by the page in its language.
+    title: String,
+) -> Result<Option<data::RuleDraft>, String> {
     if app.state::<Picking>().0.load(Ordering::SeqCst) {
         return Ok(None);
     }
     let env = Env::from_process().map_err(|error| format!("{error:#}"))?;
-    let picked = pick_folder(&app, "Folder the rule is about", env.home.clone(), false);
+    let picked = pick_folder(&app, &title, env.home.clone(), false);
     Ok(picked.map(|folder| data::rule_draft(&env, &folder)))
 }
 
@@ -203,7 +217,7 @@ fn remove_rule(
 /// `async` matters here: Tauri runs an async command off the main thread,
 /// and the folder picker would freeze the app if it waited on the main one.
 #[tauri::command]
-async fn open_claude(app: AppHandle, name: String) -> Result<bool, String> {
+async fn open_claude(app: AppHandle, name: String, title: String) -> Result<bool, String> {
     // A second click while the picker is open must not stack another one.
     if app.state::<Picking>().0.load(Ordering::SeqCst) {
         return Ok(false);
@@ -211,7 +225,6 @@ async fn open_claude(app: AppHandle, name: String) -> Result<bool, String> {
     let env = Env::from_process().map_err(|error| format!("{error:#}"))?;
     // Start where this profile was last used, or in the home folder.
     let start = data::last_folder(&env, &name).unwrap_or_else(|| env.home.clone());
-    let title = format!("Open Claude Code as {name} in");
     let Some(folder) = pick_folder(&app, &title, start, true) else {
         return Ok(false);
     };
@@ -387,6 +400,7 @@ fn main() {
             set_terminal,
             open_claude,
             open_config,
+            set_quit_label,
             fit,
             hide,
             quit
@@ -399,6 +413,8 @@ fn main() {
             // Right click on the icon: a one-line menu to quit.
             let quit = MenuItem::with_id(app, "quit", "Quit Orberus", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
+            // Kept so the page can rename it in its language.
+            app.manage(QuitItem(quit.clone()));
             // `include_bytes!` puts the PNG inside the binary at build time.
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
 

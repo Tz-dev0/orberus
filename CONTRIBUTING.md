@@ -45,6 +45,21 @@ folder and prints how each one ends.
 | `scripts/` | Packaging and smoke test |
 | `docs/` | The documentation |
 
+## Texts of the app
+
+Every word the window shows is in `app/src/i18n.ts`, once per language. The
+Rust side of the app sends data (bytes, seconds, shares from 0 to 1, short
+codes), never a sentence, so a text is only ever written in that file.
+
+- A new text: add its key to `en` and to every other language. TypeScript
+  refuses a build with a missing key.
+- A new language: one more object shaped like `en`, and one more line in
+  `LANGUAGES`.
+- To look at a language in the browser preview: `npm run dev`, then
+  `http://localhost:1420/?lang=fr`.
+
+The command line is in English only.
+
 ## Before you open a pull request
 
 ```sh

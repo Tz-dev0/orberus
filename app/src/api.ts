@@ -1,5 +1,9 @@
 // The calls to the Rust side, with their types. The shapes mirror the
 // structs in src-tauri/src/data.rs.
+//
+// What comes back is data, never a sentence: sizes in bytes, ages in
+// seconds, shares from 0 to 1, states as short codes. The words are in
+// i18n.ts. An error is the exception: its text comes from Rust, in English.
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -7,7 +11,10 @@ export interface Profile {
   name: string;
   /** null when nobody is signed in to this profile. */
   account: string | null;
+  /** Its config folder: "~/.claude". */
   location: string;
+  /** True when that folder is Claude Code's own default one. */
+  native: boolean;
   isDefault: boolean;
   rules: number;
   /** How many of those rules come from team.toml: they stay when the
@@ -15,10 +22,11 @@ export interface Profile {
   teamRules: number;
   /** False when its folder must never be deleted, as for ~/.claude. */
   canPurge: boolean;
-  /** How long it keeps its conversations, in words: "30 days". */
-  keeps: string;
-  /** The same in days; null when its settings file cannot be read. */
+  /** How long it keeps its conversations, in days; null when its settings
+   *  file cannot be read. */
   keepsDays: number | null;
+  /** Why that file cannot be read, when it cannot. */
+  keepsError: string | null;
 }
 
 export interface Rule {
@@ -36,7 +44,6 @@ export interface Rule {
 
 /** One way to say where a new rule applies. */
 export interface RuleChoice {
-  label: string;
   path: string | null;
   gitRemote: string | null;
 }
@@ -52,21 +59,26 @@ export interface RuleDraft {
 /** The disk space one profile takes. */
 export interface Storage {
   name: string;
-  /** In bytes, to draw the bars to scale. */
+  /** Everything, in bytes. */
   total: number;
-  /** For people: "3.4 GB". */
-  size: string;
-  /** What takes it, in words. */
-  detail: string;
+  /** What takes it, in bytes. */
+  conversations: number;
+  fileHistory: number;
+  extensions: number;
+  other: number;
 }
 
 /** One conversation of a profile. */
 export interface Conversation {
   id: string;
-  title: string;
-  /** Where it worked and when it was last used. */
-  detail: string;
-  size: string;
+  /** null when it has no title. */
+  title: string | null;
+  /** Where it worked: "~/app". */
+  folder: string | null;
+  /** How long ago it was last used, in seconds. */
+  idleSecs: number;
+  /** In bytes. */
+  size: number;
   /** Changed in the last hour: it may still be open. */
   inUse: boolean;
 }
@@ -80,21 +92,34 @@ export interface Conversations {
 
 export interface StorageOverview {
   profiles: Storage[];
-  /** All profiles together: "3.5 GB". */
-  total: string;
+  /** All profiles together, in bytes. */
+  total: number;
+}
+
+/** Why a folder gets its profile. */
+export interface Reason {
+  kind: "locked" | "explicit" | "file" | "rule" | "default";
+  /** With "locked" and "rule": the rule as written in the config. */
+  rule: string | null;
+  /** With "locked" and "rule": "team.toml" or "config.toml". */
+  source: string | null;
+  /** With "file": the .orberus-profile that decides. */
+  file: string | null;
 }
 
 /** One project a profile was used in. */
 export interface UsageProject {
   folder: string;
-  /** Its part of the profile's usage: "63%". */
-  share: string;
+  /** Its part of the profile's usage, from 0 to 1. */
+  share: number;
   /** What today's rules say about it. */
   state: "covered" | "default" | "elsewhere" | "gone" | "unknown";
-  /** The same in a few words; empty when a rule covers it. */
-  note: string;
-  /** The full explanation, shown on hover. */
-  why: string;
+  /** With "elsewhere": the profile claude would use there today. */
+  profile: string | null;
+  /** With "covered" and "elsewhere": what decides. */
+  reason: Reason | null;
+  /** With "unknown": why the rules could not be checked. */
+  error: string | null;
   /** True when the line deserves a look. */
   flagged: boolean;
 }
@@ -102,10 +127,13 @@ export interface UsageProject {
 /** One conversation, by what it sends with each answer. */
 export interface UsageTalk {
   id: string;
-  title: string;
-  detail: string;
-  /** Tokens sent with each answer, on average: "417k". */
-  context: string;
+  title: string | null;
+  /** Where it worked. */
+  folder: string;
+  /** Its part of the profile's usage, from 0 to 1. */
+  share: number;
+  /** Tokens sent with each answer, on average. */
+  context: number;
   heavy: boolean;
 }
 
@@ -113,14 +141,16 @@ export interface Usage {
   name: string;
   /** Estimated weight, to draw the bars to scale. */
   weight: number;
-  /** Its part of all profiles: "72%". Empty with no activity. */
-  share: string;
+  /** Its part of all profiles, from 0 to 1; null with no activity. */
+  share: number | null;
   projects: UsageProject[];
   moreProjects: number;
   talks: UsageTalk[];
   /** Projects that deserve a look. */
   flagged: number;
-  reread: string;
+  /** The part that went to reading context again, from 0 to 1; null with
+   *  no activity. */
+  reread: number | null;
 }
 
 export interface UsageOverview {
@@ -162,7 +192,7 @@ export interface Api {
   removeProfile(name: string, purge: boolean): Promise<void>;
   /** Asks which folder a new rule is about. Resolves to null when the
    *  choice is cancelled. */
-  pickRuleFolder(): Promise<RuleDraft | null>;
+  pickRuleFolder(title: string): Promise<RuleDraft | null>;
   addRule(choice: RuleChoice, profile: string, locked: boolean): Promise<void>;
   /** Removes one of your own rules, given as the page shows it. */
   removeRule(rule: Rule): Promise<void>;
@@ -174,7 +204,9 @@ export interface Api {
   setRetention(name: string, days: number): Promise<void>;
   /** Asks for a project folder, then opens Claude Code there in a terminal.
    *  Resolves to false when the folder choice is cancelled. */
-  openClaude(name: string): Promise<boolean>;
+  openClaude(name: string, title: string): Promise<boolean>;
+  /** Names the "Quit" line of the menu under a right click on the icon. */
+  setQuitLabel(label: string): Promise<void>;
   /** The terminal apps that can be chosen. */
   terminals(): Promise<Terminal[]>;
   /** Chooses the terminal app by its path; null goes back to macOS's own. */
@@ -192,7 +224,7 @@ const tauri: Api = {
   usage: () => invoke<UsageOverview>("usage"),
   setDefault: (name) => invoke("set_default", { name }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
-  pickRuleFolder: () => invoke<RuleDraft | null>("pick_rule_folder"),
+  pickRuleFolder: (title) => invoke<RuleDraft | null>("pick_rule_folder", { title }),
   addRule: (choice, profile, locked) =>
     invoke("add_rule", { path: choice.path, gitRemote: choice.gitRemote, profile, locked }),
   removeRule: (rule) =>
@@ -207,7 +239,8 @@ const tauri: Api = {
   trashConversation: (name, id) => invoke("trash_conversation", { name, id }),
   setRetention: (name, days) => invoke("set_retention", { name, days }),
   removeProfile: (name, purge) => invoke("remove_profile", { name, purge }),
-  openClaude: (name) => invoke<boolean>("open_claude", { name }),
+  openClaude: (name, title) => invoke<boolean>("open_claude", { name, title }),
+  setQuitLabel: (label) => invoke("set_quit_label", { label }),
   terminals: () => invoke<Terminal[]>("terminals"),
   setTerminal: (path) => invoke("set_terminal", { path }),
   openConfig: () => invoke("open_config"),
@@ -219,44 +252,45 @@ const tauri: Api = {
 // Sample data, used only when the page is opened in a plain browser with
 // `npm run dev`. It makes the layout easy to work on without the app shell.
 function preview(): Api {
+  const day = 86_400;
   const talks: Record<string, Conversation[]> = {
     perso: [
-      { id: "a1", title: "Check the invoices export", detail: "~/Desktop, 2 days ago", size: "815 MB", inUse: false },
-      { id: "a2", title: "Mobile career and recognition", detail: "~/Desktop, 1 day ago", size: "779 MB", inUse: false },
-      { id: "a3", title: "Check the invoices export", detail: "~/Desktop, 20 minutes ago", size: "581 MB", inUse: true },
-      { id: "a4", title: "Untitled (9879d850)", detail: "~/code/app, 13 days ago", size: "37 MB", inUse: false },
+      { id: "a1", title: "Check the invoices export", folder: "~/Desktop", idleSecs: 2 * day, size: 815e6, inUse: false },
+      { id: "a2", title: "Mobile career and recognition", folder: "~/Desktop", idleSecs: day, size: 779e6, inUse: false },
+      { id: "a3", title: "Check the invoices export", folder: "~/Desktop", idleSecs: 20 * 60, size: 581e6, inUse: true },
+      { id: "9879d850-0000", title: null, folder: "~/code/app", idleSecs: 13 * day, size: 37e6, inUse: false },
     ],
-    work: [
-      { id: "b1", title: "Payment retries", detail: "~/clients/acme, 4 days ago", size: "600 MB", inUse: false },
-    ],
+    work: [{ id: "b1", title: "Payment retries", folder: "~/clients/acme", idleSecs: 4 * day, size: 600e6, inUse: false }],
   };
   const state: Overview = {
     shimInstalled: true,
     canReuseLogin: false,
     terminal: null,
     profiles: [
-      { name: "perso", account: "me@example.com", location: "~/.claude", isDefault: true, rules: 0, teamRules: 0, canPurge: false, keeps: "120 days", keepsDays: 120 },
+      { name: "perso", account: "me@example.com", location: "~/.claude", native: true, isDefault: true, rules: 0, teamRules: 0, canPurge: false, keepsDays: 120, keepsError: null },
       {
         name: "work",
         account: "me@acme.example",
         location: "~/.orberus/profiles/work",
+        native: false,
         isDefault: false,
         rules: 2,
         teamRules: 1,
         canPurge: true,
-        keeps: "30 days",
         keepsDays: 30,
+        keepsError: null,
       },
       {
         name: "client",
         account: null,
         location: "~/.orberus/profiles/client",
+        native: false,
         isDefault: false,
         rules: 0,
         teamRules: 0,
         canPurge: true,
-        keeps: "30 days",
         keepsDays: 30,
+        keepsError: null,
       },
     ],
     rules: [
@@ -267,53 +301,67 @@ function preview(): Api {
   return {
     overview: async () => structuredClone(state),
     storage: async () => {
-      const sample: Record<string, [number, string, string]> = {
-        perso: [3.5e9, "3.5 GB", "3.4 GB conversations, 41 MB plugins and skills, 35 MB file history"],
-        work: [6.4e8, "640 MB", "600 MB conversations, 31 MB plugins and skills, 9.0 MB other"],
+      // conversations, file history, plugins and skills, other: in bytes.
+      const sample: Record<string, [number, number, number, number]> = {
+        perso: [3.4e9, 35e6, 41e6, 24e6],
+        work: [600e6, 0, 31e6, 9e6],
       };
       const profiles = state.profiles.map(({ name }) => {
-        const [total, size, detail] = sample[name] ?? [0, "0 B", ""];
-        return { name, total, size, detail };
+        const [conversations, fileHistory, extensions, other] = sample[name] ?? [0, 0, 0, 0];
+        return { name, total: conversations + fileHistory + extensions + other, conversations, fileHistory, extensions, other };
       });
-      return { profiles, total: "4.1 GB" };
+      return { profiles, total: profiles.reduce((sum, profile) => sum + profile.total, 0) };
     },
     usage: async () => {
+      const team: Reason = { kind: "locked", rule: 'git_remote = "github.com/acme/*"', source: "team.toml", file: null };
+      const byDefault: Reason = { kind: "default", rule: null, source: null, file: null };
+      const pinned: Reason = { kind: "file", rule: null, source: null, file: "~/code/dotfiles/.orberus-profile" };
+      const project = (folder: string, share: number, state: UsageProject["state"], more: Partial<UsageProject> = {}): UsageProject => ({
+        folder,
+        share,
+        state,
+        profile: null,
+        reason: null,
+        error: null,
+        flagged: false,
+        ...more,
+      });
       const sample: Record<string, Omit<Usage, "name">> = {
         perso: {
           weight: 28,
-          share: "28%",
+          share: 0.28,
           projects: [
-            { folder: "~/code/blog", share: "79%", state: "default", note: "no rule", why: "No rule names this project: it uses perso only as the default", flagged: true },
-            { folder: "~/code/dotfiles", share: "21%", state: "covered", note: "", why: "Sent to perso by pinned with .orberus-profile", flagged: false },
+            project("~/code/blog", 0.79, "default", { flagged: true }),
+            project("~/code/dotfiles", 0.21, "covered", { reason: pinned }),
           ],
           moreProjects: 0,
           talks: [
-            { id: "c1", title: "Blog redesign", detail: "~/code/blog, 74% of this profile", context: "142k", heavy: false },
-            { id: "c2", title: "Untitled (e5f6a7b8)", detail: "~/code/dotfiles, 21% of this profile", context: "38k", heavy: false },
+            { id: "c1", title: "Blog redesign", folder: "~/code/blog", share: 0.74, context: 142_000, heavy: false },
+            { id: "e5f6a7b8-0000", title: null, folder: "~/code/dotfiles", share: 0.21, context: 38_000, heavy: false },
           ],
           flagged: 1,
-          reread: "About 81% went to reading context again",
+          reread: 0.81,
         },
         work: {
           weight: 72,
-          share: "72%",
+          share: 0.72,
           projects: [
-            { folder: "~/code/acme-api", share: "63%", state: "covered", note: "", why: 'Sent to work by locked team rule git_remote = "github.com/acme/*"', flagged: false },
-            { folder: "~/code/blog", share: "26%", state: "elsewhere", note: "would use perso", why: "Started there today, claude would use perso (default profile). It ran with work by an explicit choice, or the rules changed since", flagged: true },
-            { folder: "~/code/acme-web", share: "9%", state: "covered", note: "", why: 'Sent to work by locked team rule git_remote = "github.com/acme/*"', flagged: false },
-            { folder: "~/code/old-prototype", share: "2%", state: "gone", note: "folder gone", why: "The folder was deleted, so its rules cannot be checked", flagged: false },
+            project("~/code/acme-api", 0.63, "covered", { reason: team }),
+            project("~/code/blog", 0.26, "elsewhere", { profile: "perso", reason: byDefault, flagged: true }),
+            project("~/code/acme-web", 0.09, "covered", { reason: team }),
+            project("~/code/old-prototype", 0.02, "gone"),
           ],
           moreProjects: 3,
           talks: [
-            { id: "d1", title: "Payment retries", detail: "~/code/acme-api, 61% of this profile", context: "417k", heavy: true },
-            { id: "d2", title: "Migrate the invoices table", detail: "~/code/acme-api, 20% of this profile", context: "229k", heavy: true },
-            { id: "d3", title: "Fix flaky login test", detail: "~/code/acme-web, 3% of this profile", context: "64k", heavy: false },
+            { id: "d1", title: "Payment retries", folder: "~/code/acme-api", share: 0.61, context: 417_000, heavy: true },
+            { id: "d2", title: "Migrate the invoices table", folder: "~/code/acme-api", share: 0.2, context: 229_000, heavy: true },
+            { id: "d3", title: "Fix flaky login test", folder: "~/code/acme-web", share: 0.03, context: 64_000, heavy: false },
           ],
           flagged: 1,
-          reread: "About 88% went to reading context again",
+          reread: 0.88,
         },
       };
-      const idle = { weight: 0, share: "", projects: [], moreProjects: 0, talks: [], flagged: 0, reread: "" };
+      const idle = { weight: 0, share: null, projects: [], moreProjects: 0, talks: [], flagged: 0, reread: null };
       const profiles = state.profiles.map(({ name }) => ({ name, ...(sample[name] ?? idle) }));
       return { profiles, days: 7, flagged: profiles.reduce((sum, profile) => sum + profile.flagged, 0) };
     },
@@ -333,12 +381,13 @@ function preview(): Api {
         name,
         account: reuseLogin ? "me@example.com" : null,
         location: reuseLogin ? "~/.claude" : `~/.orberus/profiles/${name}`,
+        native: reuseLogin,
         isDefault: state.profiles.length === 0,
         rules: 0,
         teamRules: 0,
         canPurge: !reuseLogin,
-        keeps: "30 days",
         keepsDays: 30,
+        keepsError: null,
       });
       state.profiles.sort((a, b) => a.name.localeCompare(b.name));
       if (reuseLogin) state.canReuseLogin = false;
@@ -346,9 +395,9 @@ function preview(): Api {
     pickRuleFolder: async () => ({
       folder: "~/code/blog",
       choices: [
-        { label: "Every repository of github.com/me", path: null, gitRemote: "github.com/me/*" },
-        { label: "Only the repository github.com/me/blog", path: null, gitRemote: "github.com/me/blog" },
-        { label: "The folder ~/code/blog and everything below", path: "~/code/blog", gitRemote: null },
+        { path: null, gitRemote: "github.com/me/*" },
+        { path: null, gitRemote: "github.com/me/blog" },
+        { path: "~/code/blog", gitRemote: null },
       ],
     }),
     addRule: async (choice, profile, locked) => {
@@ -381,11 +430,10 @@ function preview(): Api {
     setRetention: async (name, days) => {
       const profile = state.profiles.find((profile) => profile.name === name);
       if (!profile) throw `unknown profile '${name}'`;
-      profile.keepsDays = days;
       if (!Number.isInteger(days) || days < 1) {
         throw "Claude Code refuses 0: the shortest it accepts is 1 day";
       }
-      profile.keeps = days === 365 ? "1 year" : days === 1 ? "1 day" : `${days} days`;
+      profile.keepsDays = days;
     },
     removeProfile: async (name, _purge) => {
       state.profiles = state.profiles.filter((profile) => profile.name !== name);
@@ -407,6 +455,7 @@ function preview(): Api {
     setTerminal: async (path) => {
       state.terminal = path ? path.replace(/^.*\/|\.app$/g, "") : null;
     },
+    setQuitLabel: async () => {},
     openConfig: async () => {},
     fit: async () => {},
     hide: async () => {},

@@ -7,6 +7,8 @@ import {
   insideApp,
   type Overview,
   type Profile,
+  type Reason,
+  type UsageProject,
   type Conversations,
   type Rule,
   type RuleDraft,
@@ -15,6 +17,7 @@ import {
   type Usage,
   type UsageOverview,
 } from "./api";
+import { ago, bytes, count, days, language, percent, t, tokens } from "./i18n";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 // In the app the window itself is the frosted panel. In a browser there is
@@ -160,11 +163,6 @@ let removing: string | null = null;
 // Whether its folder and login go too. Off each time the question opens.
 let purging = false;
 
-/** How many rules, in words: "1 rule", "2 rules". */
-function count(rules: number): string {
-  return rules === 1 ? "1 rule" : `${rules} rules`;
-}
-
 /** Takes the place of a profile's row while its removal is confirmed. */
 function removeRow(profile: Profile, overview: Overview): HTMLElement {
   const row = keyed(el("li", "profile-form"), `confirm:${profile.name}`);
@@ -174,17 +172,15 @@ function removeRow(profile: Profile, overview: Overview): HTMLElement {
   const line = el("div", "form-line");
   line.append(
     el("span", "seal", profile.name.slice(0, 1).toUpperCase()),
-    el("span", "name", `Remove ${profile.name}?`),
+    el("span", "name", t("removeAsk", { name: profile.name })),
   );
   row.append(line);
 
   // Say exactly what goes and what stays, before the click.
   const own = profile.rules - profile.teamRules;
-  const rules = own > 0 ? ` Your ${count(own)} for it will be removed too.` : "";
-  const kept = profile.canPurge
-    ? "Its Claude Code folder stays on this Mac, with its login and history."
-    : `Its folder ${profile.location} is your own Claude Code setup: it stays on this Mac.`;
-  const deleted = `${profile.location} will be deleted with its history and settings, and its login removed from the keychain. This cannot be undone.`;
+  const rules = own > 0 ? ` ${count(own, "ownRuleOne", "ownRuleMany")}` : "";
+  const kept = profile.native ? t("keptNative", { location: profile.location }) : t("keptFolder");
+  const deleted = t("deletedFolder", { location: profile.location });
   const note = el("p", "form-note", (purging ? deleted : kept) + rules);
   row.append(note);
 
@@ -197,22 +193,15 @@ function removeRow(profile: Profile, overview: Overview): HTMLElement {
       purging = box.checked;
       render(overview);
     });
-    label.append(box, el("span", "", "Also delete its folder and sign out"));
+    label.append(box, el("span", "", t("alsoDelete")));
     row.append(label);
   }
   if (profile.teamRules > 0) {
-    const needs = profile.teamRules === 1 ? "needs" : "need";
-    row.append(
-      el(
-        "p",
-        "form-error",
-        `${count(profile.teamRules)} from your team ${needs} this profile: Claude Code will refuse to start where ${profile.teamRules === 1 ? "it applies" : "they apply"}.`,
-      ),
-    );
+    row.append(el("p", "form-error", count(profile.teamRules, "teamNeedsOne", "teamNeedsMany")));
   }
 
   const buttons = el("div", "form-buttons");
-  const cancel = el("button", "quiet-button", "Cancel");
+  const cancel = el("button", "quiet-button", t("cancel"));
   cancel.type = "button";
   cancel.addEventListener("click", () => {
     removing = null;
@@ -221,7 +210,7 @@ function removeRow(profile: Profile, overview: Overview): HTMLElement {
   const confirm = el(
     "button",
     "filled-button danger",
-    purging ? "Remove and delete" : "Remove profile",
+    purging ? t("removeAndDelete") : t("removeProfile"),
   );
   onClick(confirm, async () => {
     const purge = purging && profile.canPurge;
@@ -246,30 +235,28 @@ function profileRow(profile: Profile, overview: Overview): HTMLElement {
   const who = el("span", "who");
   who.append(
     el("span", "name", profile.name),
-    el("span", "account", profile.account ?? "Not signed in"),
+    el("span", "account", profile.account ?? t("notSignedIn")),
   );
   // The "…" says a question comes first: which project folder.
-  open.append(who, el("span", "go", profile.account ? "Open…" : "Sign in…"));
-  open.title = profile.account
-    ? `Choose a project folder, then open Claude Code there as ${profile.account}`
-    : "Choose a project folder, then open Claude Code there to sign in";
+  open.append(who, el("span", "go", profile.account ? t("open") : t("signIn")));
+  open.title = profile.account ? t("openHint", { account: profile.account }) : t("signInHint");
   onClick(open, async () => {
-    await api.openClaude(profile.name);
+    await api.openClaude(profile.name, t("pickOpenTitle", { name: profile.name }));
   });
   row.append(open);
 
   if (profile.isDefault) {
     // Named after the profile: when the default moves, the tag and the
     // ring around the seal arrive on the new one.
-    const tag = keyed(el("span", "default-tag", "Default"), `default:${profile.name}`);
-    tag.title = "Used where no rule applies";
+    const tag = keyed(el("span", "default-tag", t("default")), `default:${profile.name}`);
+    tag.title = t("defaultHint");
     row.append(tag);
   }
 
   if (!profile.isDefault) {
     // Words and not an icon: an icon alone did not say what it would do.
-    const set = el("button", "set-default", "Set as default");
-    set.title = `Use ${profile.name} where no rule applies`;
+    const set = el("button", "set-default", t("setDefault"));
+    set.title = t("setDefaultHint", { name: profile.name });
     onClick(set, () => api.setDefault(profile.name));
     row.append(set);
   }
@@ -277,8 +264,8 @@ function profileRow(profile: Profile, overview: Overview): HTMLElement {
   // Nothing is removed on this click: the row first asks to confirm.
   const remove = el("button", "remove");
   remove.type = "button";
-  remove.title = `Remove ${profile.name}…`;
-  remove.append(icon("bin", `Remove ${profile.name}`));
+  remove.title = t("removeProfileHint", { name: profile.name });
+  remove.append(icon("bin", t("removeProfileLabel", { name: profile.name })));
   remove.addEventListener("click", () => {
     removing = profile.name;
     purging = false;
@@ -300,7 +287,7 @@ function newProfileRow(overview: Overview): HTMLElement {
     row.style.setProperty("--hue", nextHue);
     const open = el("button", "profile-open");
     const who = el("span", "who");
-    who.append(el("span", "name", "New profile…"));
+    who.append(el("span", "name", t("newProfile")));
     open.append(el("span", "seal", "+"), who);
     open.type = "button";
     open.addEventListener("click", () => {
@@ -323,8 +310,8 @@ function newProfileRow(overview: Overview): HTMLElement {
   const input = el("input", "name-input");
   input.type = "text";
   input.value = draftName;
-  input.placeholder = "Name, for example work";
-  input.setAttribute("aria-label", "Profile name");
+  input.placeholder = t("namePlaceholder");
+  input.setAttribute("aria-label", t("nameLabel"));
   input.autocomplete = "off";
   input.spellcheck = false;
   input.maxLength = 40;
@@ -347,7 +334,7 @@ function newProfileRow(overview: Overview): HTMLElement {
     box.addEventListener("change", () => {
       draftReuse = box.checked;
     });
-    label.append(box, el("span", "", "Use the Claude Code login already on this Mac"));
+    label.append(box, el("span", "", t("reuseLogin")));
     form.append(label);
   }
 
@@ -358,13 +345,13 @@ function newProfileRow(overview: Overview): HTMLElement {
   }
 
   const buttons = el("div", "form-buttons");
-  const cancel = el("button", "quiet-button", "Cancel");
+  const cancel = el("button", "quiet-button", t("cancel"));
   cancel.type = "button";
   cancel.addEventListener("click", () => {
     closeForm();
     render(overview);
   });
-  const create = el("button", "filled-button", "Create profile");
+  const create = el("button", "filled-button", t("createProfile"));
   create.type = "submit";
   buttons.append(cancel, create);
   form.append(buttons);
@@ -402,18 +389,31 @@ function closeRuleForm(): void {
   ruleError = "";
 }
 
+/** Where a rule would apply, in words. The shape of the choice says which
+ *  kind it is: a pattern ending in `/*` covers an owner's repositories. */
+function choiceText(choice: { path: string | null; gitRemote: string | null }): string {
+  if (choice.gitRemote?.endsWith("/*")) return t("choiceOwner", { owner: choice.gitRemote.slice(0, -2) });
+  if (choice.gitRemote) return t("choiceRepo", { repo: choice.gitRemote });
+  return t("choiceFolder", { path: choice.path ?? "" });
+}
+
+/** A conversation's title, or the start of its id when it has none. */
+function titleOf(talk: { id: string; title: string | null }): string {
+  return talk.title ?? t("untitled", { id: talk.id.slice(0, 8) });
+}
+
 /** The last line of the rules: a way to add one, then the form. */
 function newRuleRow(overview: Overview): HTMLElement {
   if (!ruleDraft) {
     const row = keyed(el("li", "rule rule-new"), "rule:+");
     const open = el("button", "rule-add");
-    open.title = "Choose a folder, then where the rule applies and which profile it uses";
-    open.append(icon("plus"), el("span", "", "New rule…"));
+    open.title = t("newRuleHint");
+    open.append(icon("plus"), el("span", "", t("newRule")));
     onClick(open, async () => {
       closeForm();
       removing = null;
       removingRule = null;
-      const draft = await api.pickRuleFolder();
+      const draft = await api.pickRuleFolder(t("pickRuleTitle"));
       if (!draft) return;
       closeRuleForm();
       ruleDraft = draft;
@@ -436,7 +436,7 @@ function newRuleRow(overview: Overview): HTMLElement {
   const form = el("form");
 
   const where = el("fieldset", "rule-choices");
-  where.append(el("legend", "", "Where the rule applies"));
+  where.append(el("legend", "", t("ruleWhere")));
   draft.choices.forEach((choice, index) => {
     const label = el("label", "form-check");
     const radio = el("input");
@@ -449,7 +449,7 @@ function newRuleRow(overview: Overview): HTMLElement {
       render(overview);
     });
     label.title = choice.gitRemote ? `git_remote = "${choice.gitRemote}"` : `path = "${choice.path}"`;
-    label.append(radio, el("span", "", choice.label));
+    label.append(radio, el("span", "", choiceText(choice)));
     where.append(label);
   });
   form.append(where);
@@ -467,18 +467,18 @@ function newRuleRow(overview: Overview): HTMLElement {
     ruleError = "";
     render(overview);
   });
-  use.append(el("span", "", "Profile to use there"), select);
+  use.append(el("span", "", t("ruleProfile")), select);
   form.append(use);
 
   const lock = el("label", "form-check");
-  lock.title = "A locked rule wins over everything: Claude Code does not start there with another profile";
+  lock.title = t("lockHint");
   const box = el("input");
   box.type = "checkbox";
   box.checked = draftLocked;
   box.addEventListener("change", () => {
     draftLocked = box.checked;
   });
-  lock.append(box, el("span", "", "Lock it: refuse any other profile there"));
+  lock.append(box, el("span", "", t("lockIt")));
   form.append(lock);
 
   if (ruleError) {
@@ -488,13 +488,13 @@ function newRuleRow(overview: Overview): HTMLElement {
   }
 
   const buttons = el("div", "form-buttons");
-  const cancel = el("button", "quiet-button", "Cancel");
+  const cancel = el("button", "quiet-button", t("cancel"));
   cancel.type = "button";
   cancel.addEventListener("click", () => {
     closeRuleForm();
     render(overview);
   });
-  const create = el("button", "filled-button", "Add rule");
+  const create = el("button", "filled-button", t("addRule"));
   create.type = "submit";
   buttons.append(cancel, create);
   form.append(buttons);
@@ -524,12 +524,12 @@ function ruleRow(rule: Rule, overview: Overview): HTMLElement {
   const where = el("span", "rule-where");
   if (rule.gitRemote) {
     const part = el("span", "rule-part");
-    part.append(icon("branch", "Git remote"), el("span", "rule-pattern", rule.gitRemote));
+    part.append(icon("branch", t("gitRemote")), el("span", "rule-pattern", rule.gitRemote));
     where.append(part);
   }
   if (rule.path) {
     const part = el("span", "rule-part");
-    part.append(icon("folder", "Folder"), el("span", "rule-pattern", rule.path));
+    part.append(icon("folder", t("folder")), el("span", "rule-pattern", rule.path));
     where.append(part);
   }
   // A dotted line from the place to the profile it leads to, as between a
@@ -539,14 +539,14 @@ function ruleRow(rule: Rule, overview: Overview): HTMLElement {
   row.append(where, leader);
 
   if (rule.source === "team.toml") {
-    const team = el("span", "rule-team", "Team");
-    team.title = "Provided by your company in team.toml";
+    const team = el("span", "rule-team", t("team"));
+    team.title = t("teamHint");
     row.append(team);
   }
   if (rule.locked) {
     const lock = el("span", "rule-lock");
-    lock.title = "Locked: no other profile can be used there";
-    lock.append(icon("lock", "Locked"));
+    lock.title = t("lockedHint");
+    lock.append(icon("lock", t("locked")));
     row.append(lock);
   }
   const target = el("span", "rule-profile");
@@ -556,7 +556,7 @@ function ruleRow(rule: Rule, overview: Overview): HTMLElement {
   const place = rule.index;
   if (place !== null && removingRule === place) {
     // Second click: it really goes.
-    const go = keyed(el("button", "talk-go", "Remove rule"), `go:rule:${place}`);
+    const go = keyed(el("button", "talk-go", t("removeRule")), `go:rule:${place}`);
     onClick(go, async () => {
       removingRule = null;
       await api.removeRule(rule);
@@ -567,8 +567,8 @@ function ruleRow(rule: Rule, overview: Overview): HTMLElement {
   if (place !== null) {
     const bin = el("button", "remove rule-bin");
     bin.type = "button";
-    bin.title = "Remove this rule";
-    bin.append(icon("bin", "Remove this rule"));
+    bin.title = t("removeThisRule");
+    bin.append(icon("bin", t("removeThisRule")));
     bin.addEventListener("click", () => {
       removingRule = place;
       render(overview);
@@ -604,7 +604,7 @@ function mark(): SVGElement {
 
 function header(): HTMLElement {
   const top = el("header");
-  top.append(mark(), el("h1", "", "Orberus"));
+  top.append(mark(), el("h1", "", t("appName")));
   return top;
 }
 
@@ -651,27 +651,30 @@ async function loadConversations(overview: Overview): Promise<void> {
 function conversationList(name: string, overview: Overview): HTMLElement {
   const list = el("ul", "talks");
   if (!conversations) {
-    list.append(el("li", "talks-note", "Reading…"));
+    list.append(el("li", "talks-note", t("reading")));
     return list;
   }
   if (conversations.items.length === 0) {
-    list.append(el("li", "talks-note", "No conversation on disk."));
+    list.append(el("li", "talks-note", t("noConversation")));
     return list;
   }
   for (const talk of conversations.items) {
     const row = keyed(el("li", "talk"), `talk:${name}:${talk.id}`);
     const text = el("span", "talk-text");
-    text.append(el("span", "talk-title", talk.title), el("span", "talk-detail", talk.detail));
-    row.title = talk.title;
+    const title = titleOf(talk);
+    // Where it worked, when it has a folder, then when it was last used.
+    const detail = [talk.folder, ago(talk.idleSecs)].filter(Boolean).join(", ");
+    text.append(el("span", "talk-title", title), el("span", "talk-detail", detail));
+    row.title = title;
     row.append(text);
 
     if (talk.inUse) {
-      const busy = el("span", "talk-size", "In use?");
-      busy.title = "Changed in the last hour: it may still be open, so it stays";
+      const busy = el("span", "talk-size", t("inUse"));
+      busy.title = t("inUseHint");
       row.append(busy);
     } else if (trashing === talk.id) {
       // Second click: it really goes.
-      const go = keyed(el("button", "talk-go", "Move to Trash"), `go:talk:${talk.id}`);
+      const go = keyed(el("button", "talk-go", t("moveToTrash")), `go:talk:${talk.id}`);
       onClick(go, async () => {
         trashing = null;
         await api.trashConversation(name, talk.id);
@@ -679,11 +682,11 @@ function conversationList(name: string, overview: Overview): HTMLElement {
       });
       row.append(go);
     } else {
-      row.append(el("span", "talk-size", talk.size));
+      row.append(el("span", "talk-size", bytes(talk.size)));
       const bin = el("button", "remove talk-bin");
       bin.type = "button";
-      bin.title = "Move to the Trash. Claude Code will no longer list it to resume";
-      bin.append(icon("bin", `Move ${talk.title} to the Trash`));
+      bin.title = t("trashHint");
+      bin.append(icon("bin", t("trashLabel", { title })));
       bin.addEventListener("click", () => {
         trashing = talk.id;
         render(overview);
@@ -693,8 +696,7 @@ function conversationList(name: string, overview: Overview): HTMLElement {
     list.append(row);
   }
   if (conversations.more > 0) {
-    const others = conversations.more === 1 ? "1 smaller one" : `${conversations.more} smaller ones`;
-    list.append(el("li", "talks-note", `And ${others}: orberus clean ${name}`));
+    list.append(el("li", "talks-note", count(conversations.more, "smallerOne", "smallerMany", { name })));
   }
   return list;
 }
@@ -728,24 +730,20 @@ function foldLine(
 // The choices offered for how long conversations are kept. Claude Code
 // deletes them after 30 days unless told otherwise. Any other number of
 // days goes in the field next to them.
-const KEEP = [
-  { days: 30, label: "30 days" },
-  { days: 90, label: "90 days" },
-  { days: 365, label: "1 year" },
-];
+const KEEP = [30, 90, 365];
 
 /** The exact number of days, to read and to type. Enter, or leaving the
  *  field, applies it. */
 function daysField(profile: Profile): HTMLElement {
   const field = el("label", "days-field");
-  field.title = "Number of days, 1 or more";
+  field.title = t("daysFieldHint");
   const input = el("input", "days-input");
   input.type = "number";
   input.min = "1";
   input.step = "1";
   input.inputMode = "numeric";
   input.value = String(profile.keepsDays);
-  input.setAttribute("aria-label", `Days ${profile.name} keeps its conversations`);
+  input.setAttribute("aria-label", t("daysFieldLabel", { name: profile.name }));
   input.addEventListener("change", async () => {
     const days = Number(input.value);
     if (days === profile.keepsDays) return;
@@ -766,20 +764,21 @@ function daysField(profile: Profile): HTMLElement {
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") input.blur();
   });
-  field.append(input, el("span", "", "d"));
+  field.append(input, el("span", "", t("daysUnit")));
   return field;
 }
 
 /** How long each profile keeps its conversations, with a way to change it. */
 function historySection(overview: Overview): HTMLElement {
   const section = el("section", "storage-section");
-  const kept = new Set(overview.profiles.map((profile) => profile.keeps));
-  const sum = kept.size === 1 ? overview.profiles[0].keeps : "Varies";
+  const kept = new Set(overview.profiles.map((profile) => profile.keepsDays));
+  const only = overview.profiles[0].keepsDays;
+  const sum = kept.size === 1 && only !== null ? days(only) : t("varies");
   section.append(
     foldLine(
       "history",
-      "Conversations kept",
-      "Claude Code deletes older conversations by itself, without a message",
+      t("kept"),
+      t("keptHint"),
       historyOpen,
       sum,
       () => {
@@ -797,22 +796,22 @@ function historySection(overview: Overview): HTMLElement {
     row.append(el("span", "storage-name", profile.name));
     if (profile.keepsDays === null) {
       // Its settings file cannot be read: say so, and offer nothing.
-      const unknown = el("span", "keep-unknown", "Settings file unreadable");
-      unknown.title = profile.keeps;
+      const unknown = el("span", "keep-unknown", t("settingsUnreadable"));
+      unknown.title = profile.keepsError ?? "";
       row.append(unknown);
     } else {
       const choices = el("span", "segments");
       choices.setAttribute("role", "group");
-      choices.setAttribute("aria-label", `How long ${profile.name} keeps its conversations`);
+      choices.setAttribute("aria-label", t("keepGroup", { name: profile.name }));
       for (const choice of KEEP) {
-        const button = el("button", "segment", choice.label);
-        const current = profile.keepsDays === choice.days;
+        const button = el("button", "segment", days(choice));
+        const current = profile.keepsDays === choice;
         button.setAttribute("aria-pressed", String(current));
         if (current) {
           button.type = "button";
-          keyed(button, `kept:${profile.name}:${choice.days}`);
+          keyed(button, `kept:${profile.name}:${choice}`);
         } else {
-          onClick(button, () => api.setRetention(profile.name, choice.days));
+          onClick(button, () => api.setRetention(profile.name, choice));
         }
         choices.append(button);
       }
@@ -824,6 +823,22 @@ function historySection(overview: Overview): HTMLElement {
   return section;
 }
 
+/** What takes a profile's space, biggest first: "3.4 GB conversations,
+ *  41 MB plugins and skills". Empty when nothing is stored. */
+function storageDetail(size: StorageOverview["profiles"][number]): string {
+  const parts: [number, string][] = [
+    [size.conversations, t("partConversations")],
+    [size.fileHistory, t("partFileHistory")],
+    [size.extensions, t("partExtensions")],
+    [size.other, t("partOther")],
+  ];
+  return parts
+    .filter(([amount]) => amount > 0)
+    .sort((a, b) => b[0] - a[0])
+    .map(([amount, what]) => `${bytes(amount)} ${what}`)
+    .join(", ");
+}
+
 /** A line that unfolds to one line per profile: a bar to scale, then the
  *  size. Folded, it shows the sum. */
 function storageSection(measured: StorageOverview, overview: Overview): HTMLElement {
@@ -832,10 +847,10 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
   section.append(
     foldLine(
       "storage",
-      "Storage",
-      "Disk space taken by each profile's Claude Code folder",
+      t("storage"),
+      t("storageHint"),
       storageOpen,
-      measured.total,
+      bytes(measured.total),
       () => {
         storageOpen = !storageOpen;
         render(overview);
@@ -855,7 +870,7 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
     const row = el("button", "storage-row storage-pick");
     row.type = "button";
     row.setAttribute("aria-expanded", String(picked));
-    row.title = `${size.detail || "Nothing stored yet"}\nClick to see its biggest conversations`;
+    row.title = `${storageDetail(size) || t("nothingStored")}\n${t("storageClick")}`;
     row.addEventListener("click", () => {
       pickedProfile = picked ? null : size.name;
       conversations = null;
@@ -873,7 +888,7 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
     row.append(
       el("span", "storage-name", size.name),
       bar,
-      el("span", "storage-size", size.total > 0 ? size.size : "Empty"),
+      el("span", "storage-size", size.total > 0 ? bytes(size.total) : t("empty")),
     );
     item.append(row);
     if (picked) item.append(conversationList(size.name, overview));
@@ -890,45 +905,97 @@ let usageOpen = false;
 // The profile whose projects and conversations are unfolded.
 let usagePicked: string | null = null;
 
+/** Why a folder gets its profile, as the end of a sentence. */
+function reasonText(reason: Reason | null): string {
+  switch (reason?.kind) {
+    case "locked":
+      return t("reasonLocked", { rule: reason.rule ?? "", source: reason.source ?? "" });
+    case "rule":
+      return t("reasonRule", { rule: reason.rule ?? "", source: reason.source ?? "" });
+    case "file":
+      return t("reasonFile", { file: reason.file ?? "" });
+    case "explicit":
+      return t("reasonExplicit");
+    default:
+      return t("reasonDefault");
+  }
+}
+
+/** What today's rules say about a project, in a few words. Empty when a
+ *  rule covers it. */
+function projectNote(project: UsageProject): string {
+  switch (project.state) {
+    case "covered":
+      return "";
+    case "default":
+      return t("noteDefault");
+    case "elsewhere":
+      return t("noteElsewhere", { profile: project.profile ?? "" });
+    case "gone":
+      return t("noteGone");
+    default:
+      return t("noteUnknown");
+  }
+}
+
+/** The same in full, shown on hover. `name` is the profile that was used. */
+function projectWhy(project: UsageProject, name: string): string {
+  switch (project.state) {
+    case "covered":
+      return t("whyCovered", { name, reason: reasonText(project.reason) });
+    case "default":
+      return t("whyDefault", { name });
+    case "elsewhere":
+      return t("whyElsewhere", { name, profile: project.profile ?? "", reason: reasonText(project.reason) });
+    case "gone":
+      return t("whyGone");
+    default:
+      return project.error ?? "";
+  }
+}
+
 /** What one profile was used for: its projects against the rules, then
  *  the conversations that send the most with each answer. */
 function usageDetail(used: Usage): HTMLElement {
   const list = el("ul", "talks");
   if (used.projects.length === 0) {
-    list.append(el("li", "talks-note", "No conversation in this period."));
+    list.append(el("li", "talks-note", t("noActivity")));
     return list;
   }
-  list.append(el("li", "talks-note", "Projects, against today's rules"));
+  list.append(el("li", "talks-note", t("projectsHeading")));
   for (const project of used.projects) {
     const row = keyed(el("li", "talk used"), `project:${used.name}:${project.folder}`);
-    row.title = `${project.folder}\n${project.why}`;
-    row.append(el("span", "used-share", project.share), el("span", "used-folder", project.folder));
-    if (project.note) {
-      row.append(el("span", project.flagged ? "used-note used-flag" : "used-note", project.note));
+    row.title = `${project.folder}\n${projectWhy(project, used.name)}`;
+    row.append(el("span", "used-share", percent(project.share)), el("span", "used-folder", project.folder));
+    const note = projectNote(project);
+    if (note) {
+      row.append(el("span", project.flagged ? "used-note used-flag" : "used-note", note));
     } else {
       // A rule covers it: nothing to read, a quiet mark is enough.
       const ok = el("span", "used-note used-ok", "✓");
-      ok.setAttribute("aria-label", "Covered by a rule");
+      ok.setAttribute("aria-label", t("covered"));
       row.append(ok);
     }
     list.append(row);
   }
   if (used.moreProjects > 0) {
-    const others = used.moreProjects === 1 ? "1 lighter one" : `${used.moreProjects} lighter ones`;
-    list.append(el("li", "talks-note", `And ${others}: orberus usage ${used.name}`));
+    list.append(
+      el("li", "talks-note", count(used.moreProjects, "lighterOne", "lighterMany", { name: used.name })),
+    );
   }
 
-  const heading = el("li", "talks-note", "Conversations, by tokens sent with each answer");
-  heading.title = `${used.reread}.\nClaude reads the whole conversation again each time it answers`;
+  const heading = el("li", "talks-note", t("talksHeading"));
+  if (used.reread !== null) heading.title = t("rereadHint", { share: percent(used.reread) });
   list.append(heading);
   for (const talk of used.talks) {
     const row = keyed(el("li", "talk"), `context:${used.name}:${talk.id}`);
     const text = el("span", "talk-text");
-    text.append(el("span", "talk-title", talk.title), el("span", "talk-detail", talk.detail));
-    const context = el("span", talk.heavy ? "talk-size used-flag" : "talk-size", talk.context);
-    row.title = talk.heavy
-      ? `${talk.title}\nSends ${talk.context} tokens with each answer. /compact inside it, or a new conversation when the subject changes, lightens it`
-      : `${talk.title}\nSends ${talk.context} tokens with each answer`;
+    const title = titleOf(talk);
+    const detail = t("talkDetail", { folder: talk.folder, share: percent(talk.share) });
+    text.append(el("span", "talk-title", title), el("span", "talk-detail", detail));
+    const sent = tokens(talk.context);
+    const context = el("span", talk.heavy ? "talk-size used-flag" : "talk-size", sent);
+    row.title = `${title}\n${t(talk.heavy ? "talkHeavy" : "talkSends", { context: sent })}`;
     row.append(text, context);
     list.append(row);
   }
@@ -941,14 +1008,14 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
   const profiles = read.profiles.filter((used) => hues.has(used.name));
   const flagged = profiles.reduce((sum, used) => sum + used.flagged, 0);
   const section = el("section", "storage-section");
-  const period = `Last ${read.days} days`;
+  const period = t("lastDays", { n: read.days });
   section.append(
     foldLine(
       "usage",
-      "Usage",
-      `Which projects used each account over the ${period.toLowerCase()}.\nAn estimate from the conversations kept on this Mac, not your plan's limits`,
+      t("usage"),
+      t("usageHint", { n: read.days }),
       usageOpen,
-      flagged > 0 ? `${flagged} to check` : period,
+      flagged > 0 ? t("toCheck", { n: flagged }) : period,
       () => {
         usageOpen = !usageOpen;
         render(overview);
@@ -969,8 +1036,8 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
     row.setAttribute("aria-expanded", String(picked));
     row.title =
       used.flagged > 0
-        ? `${used.flagged} project(s) to check\nClick to see its projects and conversations`
-        : "Click to see its projects and conversations";
+        ? `${count(used.flagged, "projectsToCheckOne", "projectsToCheckMany")}\n${t("usageClick")}`
+        : t("usageClick");
     row.addEventListener("click", () => {
       usagePicked = picked ? null : used.name;
       render(overview);
@@ -984,7 +1051,7 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
     row.append(
       el("span", "storage-name", used.name),
       bar,
-      el("span", "storage-size", used.share || "Idle"),
+      el("span", "storage-size", used.share === null ? t("idle") : percent(used.share)),
     );
     item.append(row);
     if (picked) item.append(usageDetail(used));
@@ -1005,10 +1072,10 @@ function terminalSection(overview: Overview): HTMLElement {
   section.append(
     foldLine(
       "terminal",
-      "Terminal",
-      "The app a profile's “Open…” button starts Claude Code in",
+      t("terminal"),
+      t("terminalHint"),
       terminalOpen,
-      overview.terminal ?? "System default",
+      overview.terminal ?? t("systemDefault"),
       () => {
         terminalOpen = !terminalOpen;
         terminalList = null;
@@ -1025,7 +1092,7 @@ function terminalSection(overview: Overview): HTMLElement {
 
   const list = el("ul", "storage");
   if (!terminalList) {
-    list.append(el("li", "talks-note", "Looking for terminal apps…"));
+    list.append(el("li", "talks-note", t("lookingTerminals")));
     section.append(list);
     return section;
   }
@@ -1051,13 +1118,13 @@ function terminalSection(overview: Overview): HTMLElement {
   };
   list.append(
     choice(
-      "System default",
-      "The app macOS opens .command files with: Terminal, unless you changed it",
+      t("systemDefault"),
+      t("systemDefaultHint"),
       !terminalList.some((terminal) => terminal.selected),
       null,
     ),
     ...terminalList.map((terminal) => choice(terminal.name, terminal.path, terminal.selected, terminal.path)),
-    el("li", "talks-note", "Listed: the installed apps that can run a script file."),
+    el("li", "talks-note", t("terminalsNote")),
   );
   section.append(list);
   return section;
@@ -1066,9 +1133,9 @@ function terminalSection(overview: Overview): HTMLElement {
 function menu(): HTMLElement {
   const footer = el("footer");
   footer.append(
-    menuItem("Edit config file…", "⌘,", () => api.openConfig()),
-    menuItem("Quit Orberus", "⌘Q", () => api.quit()),
-    el("p", "legal", "Not affiliated with Anthropic"),
+    menuItem(t("editConfig"), "⌘,", () => api.openConfig()),
+    menuItem(t("quit"), "⌘Q", () => api.quit()),
+    el("p", "legal", t("legal")),
   );
   return footer;
 }
@@ -1140,11 +1207,11 @@ function render(overview: Overview | null, loadError = ""): void {
   if (overview) {
     assignHues(overview.profiles);
     if (!overview.shimInstalled) {
-      page.append(notice("The claude shim is not installed. Run “orberus setup” in a terminal."));
+      page.append(notice(t("shimMissing")));
     }
     const main = el("main");
     if (overview.profiles.length === 0 && !adding) {
-      main.append(el("p", "empty", "No profile yet. A profile is one Claude account."));
+      main.append(el("p", "empty", t("noProfile")));
     }
     const list = el("ul", "profiles");
     list.append(
@@ -1155,8 +1222,8 @@ function render(overview: Overview | null, loadError = ""): void {
     // A rule needs a profile to lead to: no section before the first one.
     if (overview.profiles.length > 0) {
       const section = el("section", "rules-section");
-      const title = keyed(el("h2", "", "Rules"), "title:rules");
-      title.title = "Checked from top to bottom. A rule sends a folder or a repository to a profile";
+      const title = keyed(el("h2", "", t("rules")), "title:rules");
+      title.title = t("rulesHint");
       const list = el("ul", "rules");
       list.append(...overview.rules.map((rule) => ruleRow(rule, overview)), newRuleRow(overview));
       section.append(title, list);
@@ -1281,5 +1348,10 @@ window.addEventListener("keydown", (event) => {
     void api.hide();
   }
 });
+
+// The page says which language it speaks, for what the native side
+// writes: the document itself, and the menu under a right click.
+document.documentElement.lang = language;
+void api.setQuitLabel(t("quit")).catch(() => {});
 
 void refresh();
