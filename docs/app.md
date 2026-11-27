@@ -54,6 +54,16 @@ Removing a profile works as `orberus remove` does: the profile's Claude Code
 folder is kept unless you tick "Also delete its folder and sign out", which is
 `orberus remove --purge`.
 
+## Language
+
+The window follows the language of macOS: French when French comes first
+among your preferred languages, English otherwise. Sizes, percentages and
+dates are written the way that language writes them (`3,4 Go`, `63 %`,
+`il y a 2 jours`).
+
+Two things stay in English: the message of an error, and the `orberus`
+command line.
+
 ## What it does not do yet
 
 - A rule that needs both a folder and a git remote, or a pattern typed by

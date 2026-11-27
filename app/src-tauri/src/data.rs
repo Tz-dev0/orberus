@@ -2,6 +2,11 @@
 //!
 //! Everything takes an `Env`, like the core, so it can be tested against a
 //! temporary folder instead of the real `~/.orberus`.
+//!
+//! What goes to the page is data, never a sentence: sizes in bytes, ages in
+//! seconds, shares as fractions, states as short codes. The page writes the
+//! words, in the language of the system (see `app/src/i18n.ts`). The one
+//! exception is an error: its text comes from the core, in English.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,6 +20,7 @@ use orberus::config::{self, RuleSource};
 use orberus::disk;
 use orberus::paths::Env;
 use orberus::purge;
+use orberus::resolve::Reason;
 use orberus::retention::{self, Retention};
 use orberus::rules;
 use orberus::sessions;
@@ -29,7 +35,10 @@ pub struct ProfileView {
     pub name: String,
     /// `None` when nobody is logged in to this profile.
     pub account: Option<String>,
+    /// Its config folder, as people write it: `~/.claude`.
     pub location: String,
+    /// True when that folder is Claude Code's own default one.
+    pub native: bool,
     pub is_default: bool,
     pub rules: usize,
     /// How many of those rules come from the team file. They stay when the
@@ -37,11 +46,12 @@ pub struct ProfileView {
     pub team_rules: usize,
     /// False when its folder must never be deleted, as for `~/.claude`.
     pub can_purge: bool,
-    /// How long it keeps its conversations, in words: "30 days".
-    pub keeps: String,
-    /// The same in days. `None` when its settings file cannot be read,
-    /// and then it cannot be changed from here either.
+    /// How long it keeps its conversations, in days. `None` when its
+    /// settings file cannot be read, and then it cannot be changed from
+    /// here either.
     pub keeps_days: Option<u64>,
+    /// Why the settings file cannot be read, when it cannot.
+    pub keeps_error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -78,12 +88,13 @@ pub struct Overview {
 #[serde(rename_all = "camelCase")]
 pub struct StorageView {
     pub name: String,
-    /// In bytes, to draw the bars to scale.
+    /// Everything, in bytes.
     pub total: u64,
-    /// The same, for people: "3.4 GB".
-    pub size: String,
-    /// What takes it, in words, biggest first.
-    pub detail: String,
+    /// What takes it, in bytes.
+    pub conversations: u64,
+    pub file_history: u64,
+    pub extensions: u64,
+    pub other: u64,
 }
 
 /// The "Storage" section: every profile, and the sum shown while the
@@ -92,8 +103,8 @@ pub struct StorageView {
 #[serde(rename_all = "camelCase")]
 pub struct StorageOverview {
     pub profiles: Vec<StorageView>,
-    /// All profiles together, for people: "3.5 GB".
-    pub total: String,
+    /// All profiles together, in bytes.
+    pub total: u64,
 }
 
 /// Measures every profile. This walks whole folders, so the page asks for
@@ -103,28 +114,16 @@ pub fn storage(env: &Env) -> Result<StorageOverview> {
     let mut views = Vec::new();
     for name in config.profiles.keys() {
         let usage = disk::profile_usage(env, &config, name)?;
-        let mut parts = [
-            (usage.sessions, "conversations"),
-            (usage.file_history, "file history"),
-            (usage.extensions, "plugins and skills"),
-            (usage.other, "other"),
-        ];
-        // Biggest first. `Reverse` flips the order of the comparison.
-        parts.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
-        let detail = parts
-            .iter()
-            .filter(|(size, _)| *size > 0)
-            .map(|(size, what)| format!("{} {what}", disk::human(*size)))
-            .collect::<Vec<_>>()
-            .join(", ");
         views.push(StorageView {
             name: name.clone(),
             total: usage.total(),
-            size: disk::human(usage.total()),
-            detail,
+            conversations: usage.sessions,
+            file_history: usage.file_history,
+            extensions: usage.extensions,
+            other: usage.other,
         });
     }
-    let total = disk::human(views.iter().map(|view| view.total).sum());
+    let total = views.iter().map(|view| view.total).sum();
     Ok(StorageOverview {
         profiles: views,
         total,
@@ -136,12 +135,14 @@ pub fn storage(env: &Env) -> Result<StorageOverview> {
 #[serde(rename_all = "camelCase")]
 pub struct ConversationView {
     pub id: String,
-    /// Its title, or the start of its id when it has none.
-    pub title: String,
-    /// Where it worked and when it was last used: "~/app, 2 days ago".
-    pub detail: String,
-    /// "815 MB".
-    pub size: String,
+    /// `None` when it has no title: the page then shows the start of its id.
+    pub title: Option<String>,
+    /// Where it worked, as people write it: "~/app".
+    pub folder: Option<String>,
+    /// How long ago it was last used, in seconds.
+    pub idle_secs: u64,
+    /// In bytes.
+    pub size: u64,
     /// Changed in the last hour: it may still be open, so it cannot go.
     pub in_use: bool,
 }
@@ -166,21 +167,19 @@ pub fn conversations(env: &Env, name: &str) -> Result<Conversations> {
     let items = found
         .iter()
         .take(LISTED)
-        .map(|session| {
-            let used = sessions::ago(session.last_used, now);
-            ConversationView {
-                id: session.id.clone(),
-                title: match &session.title {
-                    Some(title) => title.clone(),
-                    None => format!("Untitled ({})", &session.id[..8]),
-                },
-                detail: match &session.folder {
-                    Some(folder) => format!("{}, {used}", view::short_path(env, Path::new(folder))),
-                    None => used,
-                },
-                size: disk::human(session.size),
-                in_use: session.in_use(now),
-            }
+        .map(|session| ConversationView {
+            id: session.id.clone(),
+            title: session.title.clone(),
+            folder: session
+                .folder
+                .as_ref()
+                .map(|folder| view::short_path(env, Path::new(folder))),
+            // A date in the future (a clock that moved) counts as now.
+            idle_secs: now
+                .duration_since(session.last_used)
+                .map_or(0, |age| age.as_secs()),
+            size: session.size,
+            in_use: session.in_use(now),
         })
         .collect();
     Ok(Conversations {
@@ -202,21 +201,56 @@ pub fn trash_conversation(env: &Env, name: &str, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Why a folder gets its profile, as data: the page writes the sentence.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasonView {
+    /// "locked", "explicit", "file", "rule" or "default".
+    pub kind: &'static str,
+    /// With "locked" and "rule": the rule as written in the config,
+    /// `git_remote = "github.com/acme/*"`.
+    pub rule: Option<String>,
+    /// With "locked" and "rule": `team.toml` or `config.toml`.
+    pub source: Option<&'static str>,
+    /// With "file": the `.orberus-profile` that decides.
+    pub file: Option<String>,
+}
+
+fn reason_view(env: &Env, reason: &Reason) -> ReasonView {
+    let (kind, rule, source, file) = match reason {
+        Reason::Locked { rule, source } => {
+            ("locked", Some(rule.clone()), Some(source.label()), None)
+        }
+        Reason::Rule { rule, source } => ("rule", Some(rule.clone()), Some(source.label()), None),
+        Reason::RepoFile(path) => ("file", None, None, Some(view::short_path(env, path))),
+        Reason::Explicit => ("explicit", None, None, None),
+        Reason::Default => ("default", None, None, None),
+    };
+    ReasonView {
+        kind,
+        rule,
+        source,
+        file,
+    }
+}
+
 /// One project a profile was used in, for the "Usage" section.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageProject {
     /// "~/code/acme-api".
     pub folder: String,
-    /// Its part of the profile's usage: "63%".
-    pub share: String,
+    /// Its part of the profile's usage, from 0 to 1.
+    pub share: f64,
     /// What today's rules say, in a word: "covered", "default",
     /// "elsewhere", "gone" or "unknown".
     pub state: &'static str,
-    /// The same for people, short: "no rule", "would use perso".
-    pub note: String,
-    /// The full explanation, shown on hover.
-    pub why: String,
+    /// With "elsewhere": the profile `claude` would use there today.
+    pub profile: Option<String>,
+    /// With "covered" and "elsewhere": what decides.
+    pub reason: Option<ReasonView>,
+    /// With "unknown": why the rules could not be checked.
+    pub error: Option<String>,
     /// True when the line deserves a look.
     pub flagged: bool,
 }
@@ -226,11 +260,14 @@ pub struct UsageProject {
 #[serde(rename_all = "camelCase")]
 pub struct UsageTalk {
     pub id: String,
-    pub title: String,
-    /// "~/code/acme-api, 61% of this profile".
-    pub detail: String,
-    /// Tokens sent with each answer, on average: "417k".
-    pub context: String,
+    /// `None` when it has no title.
+    pub title: Option<String>,
+    /// Where it worked: "~/code/acme-api".
+    pub folder: String,
+    /// Its part of the profile's usage, from 0 to 1.
+    pub share: f64,
+    /// Tokens sent with each answer, on average.
+    pub context: u64,
     /// Above the size from which a conversation is flagged.
     pub heavy: bool,
 }
@@ -242,8 +279,9 @@ pub struct UsageView {
     pub name: String,
     /// Its estimated weight, to draw the bars to scale. No unit.
     pub weight: f64,
-    /// Its part of all profiles together: "72%". Empty with no activity.
-    pub share: String,
+    /// Its part of all profiles together, from 0 to 1. `None` with no
+    /// activity.
+    pub share: Option<f64>,
     /// The heaviest projects, heaviest first.
     pub projects: Vec<UsageProject>,
     /// How many lighter projects are not listed.
@@ -252,8 +290,9 @@ pub struct UsageView {
     pub talks: Vec<UsageTalk>,
     /// Projects that deserve a look, among all of them.
     pub flagged: usize,
-    /// "About 88% went to reading context again". Empty with no activity.
-    pub reread: String,
+    /// The part of its usage that went to reading context again, from 0
+    /// to 1. `None` with no activity.
+    pub reread: Option<f64>,
 }
 
 /// The "Usage" section.
@@ -265,6 +304,16 @@ pub struct UsageOverview {
     pub days: u64,
     /// Projects that deserve a look, all profiles together.
     pub flagged: usize,
+}
+
+/// `part` of `whole`, from 0 to 1. Nothing out of nothing is 0, not NaN:
+/// JSON has no way to write "not a number".
+fn part(part: f64, whole: f64) -> f64 {
+    if whole > 0.0 {
+        part / whole
+    } else {
+        0.0
+    }
 }
 
 /// The period the window looks at, like `orberus usage` by default.
@@ -293,38 +342,26 @@ pub fn usage(env: &Env) -> Result<UsageOverview> {
         let mut flagged = 0;
         let mut projects = Vec::new();
         for folder in &used.folders {
-            let (state, note, why, flag) = match usage::verdict(env, &loaded, name, &folder.folder)
-            {
-                Verdict::Covered(reason) => (
-                    "covered",
-                    String::new(),
-                    format!("Sent to {name} by {}", usage::rule_text(&reason)),
-                    false,
-                ),
-                Verdict::NoRule => (
-                    "default",
-                    "no rule".to_string(),
-                    format!("No rule names this project: it uses {name} only as the default"),
-                    has_rules,
-                ),
-                Verdict::Elsewhere { profile, reason } => (
-                    "elsewhere",
-                    format!("would use {profile}"),
-                    format!(
-                        "Started there today, claude would use {profile} ({}). \
-                         It ran with {name} by an explicit choice, or the rules changed since",
-                        usage::rule_text(&reason)
+            let (state, profile, reason, error, flag) =
+                match usage::verdict(env, &loaded, name, &folder.folder) {
+                    Verdict::Covered(reason) => (
+                        "covered",
+                        None,
+                        Some(reason_view(env, &reason)),
+                        None,
+                        false,
                     ),
-                    true,
-                ),
-                Verdict::Gone => (
-                    "gone",
-                    "folder gone".to_string(),
-                    "The folder was deleted, so its rules cannot be checked".to_string(),
-                    false,
-                ),
-                Verdict::Unknown(why) => ("unknown", "not checked".to_string(), why, false),
-            };
+                    Verdict::NoRule => ("default", None, None, None, has_rules),
+                    Verdict::Elsewhere { profile, reason } => (
+                        "elsewhere",
+                        Some(profile),
+                        Some(reason_view(env, &reason)),
+                        None,
+                        true,
+                    ),
+                    Verdict::Gone => ("gone", None, None, None, false),
+                    Verdict::Unknown(why) => ("unknown", None, None, Some(why), false),
+                };
             if flag {
                 flagged += 1;
             }
@@ -333,10 +370,11 @@ pub fn usage(env: &Env) -> Result<UsageOverview> {
             if projects.len() < USAGE_PROJECTS {
                 projects.push(UsageProject {
                     folder: view::short_path(env, &folder.folder),
-                    share: usage::percent(folder.tokens.weight(), whole),
+                    share: part(folder.tokens.weight(), whole),
                     state,
-                    note,
-                    why,
+                    profile,
+                    reason,
+                    error,
                     flagged: flag,
                 });
             }
@@ -347,17 +385,10 @@ pub fn usage(env: &Env) -> Result<UsageOverview> {
             .take(USAGE_TALKS)
             .map(|talk| UsageTalk {
                 id: talk.id.clone(),
-                title: match sessions::title(&talk.transcript) {
-                    Some(title) => title,
-                    // `chars`: an id shorter than 8 bytes must not panic.
-                    None => format!("Untitled ({})", talk.id.chars().take(8).collect::<String>()),
-                },
-                detail: format!(
-                    "{}, {} of this profile",
-                    view::short_path(env, &talk.folder),
-                    usage::percent(talk.tokens.weight(), whole)
-                ),
-                context: usage::tokens_text(talk.context),
+                title: sessions::title(&talk.transcript),
+                folder: view::short_path(env, &talk.folder),
+                share: part(talk.tokens.weight(), whole),
+                context: talk.context,
                 heavy: talk.context >= usage::HEAVY_CONTEXT,
             })
             .collect();
@@ -365,23 +396,12 @@ pub fn usage(env: &Env) -> Result<UsageOverview> {
         views.push(UsageView {
             name: name.clone(),
             weight: whole,
-            share: if active {
-                usage::percent(whole, all)
-            } else {
-                String::new()
-            },
+            share: active.then(|| part(whole, all)),
             more_projects: used.folders.len().saturating_sub(USAGE_PROJECTS),
             projects,
             talks,
             flagged,
-            reread: if active {
-                format!(
-                    "About {:.0}% went to reading context again",
-                    used.total.reread_share() * 100.0
-                )
-            } else {
-                String::new()
-            },
+            reread: active.then(|| used.total.reread_share()),
         });
     }
     let flagged = views.iter().map(|view| view.flagged).sum();
@@ -403,19 +423,21 @@ pub fn overview(env: &Env) -> Result<Overview> {
     let mut profiles = Vec::new();
     for name in config.profiles.keys() {
         let kept = retention::read(env, config, name)?;
-        let (keeps, keeps_days) = match &kept {
+        let (keeps_days, keeps_error) = match kept {
             // Claude Code's default is shown as the number it stands for.
-            Retention::Default => (
-                retention::days_text(retention::DEFAULT_DAYS),
-                Some(retention::DEFAULT_DAYS),
-            ),
-            Retention::Days(days) => (retention::days_text(*days), Some(*days)),
-            Retention::Unknown(_) => (kept.describe(), None),
+            Retention::Default => (Some(retention::DEFAULT_DAYS), None),
+            Retention::Days(days) => (Some(days), None),
+            Retention::Unknown(why) => (None, Some(why)),
         };
+        // `None` is the native profile: the tool's own default folder.
+        let dir = config::profile_dir(env, config, name)?;
+        let native = dir.is_none();
+        let dir = dir.unwrap_or_else(|| orberus::tool::CLAUDE.native_dir(env));
         profiles.push(ProfileView {
             name: name.clone(),
             account: view::account(env, config, name),
-            location: view::location(env, config, name)?,
+            location: view::short_path(env, &dir),
+            native,
             is_default: config.default.as_deref() == Some(name),
             rules: loaded
                 .rules()
@@ -426,8 +448,8 @@ pub fn overview(env: &Env) -> Result<Overview> {
                 .filter(|(rule, source)| rule.profile == *name && *source == RuleSource::Team)
                 .count(),
             can_purge: purge::folder(env, config, name).is_ok(),
-            keeps,
             keeps_days,
+            keeps_error,
         });
     }
     // Team rules come first in the list; the user's own are numbered from
@@ -459,7 +481,6 @@ pub fn overview(env: &Env) -> Result<Overview> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuleChoice {
-    pub label: String,
     pub path: Option<String>,
     pub git_remote: Option<String>,
 }
@@ -482,7 +503,6 @@ pub fn rule_draft(env: &Env, folder: &Path) -> RuleDraft {
         choices: rules::choices(env, folder)
             .into_iter()
             .map(|choice| RuleChoice {
-                label: choice.label,
                 path: choice.path,
                 git_remote: choice.git_remote,
             })
@@ -870,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn storage_measures_each_profile_and_names_the_biggest_part_first() {
+    fn storage_measures_each_profile_and_what_takes_it() {
         let (_temp, env) = world();
         let sessions = env.profiles_dir().join("work/projects/app");
         fs::create_dir_all(&sessions).unwrap();
@@ -879,17 +899,17 @@ mod tests {
 
         let overview = storage(&env).unwrap();
         // Only "work" holds anything, so the sum is its size.
-        assert_eq!(overview.total, overview.profiles[1].size);
+        assert_eq!(overview.total, overview.profiles[1].total);
         let storage = overview.profiles;
         assert_eq!(storage.len(), 2);
         // "perso" is native and its ~/.claude does not exist in this world.
         assert_eq!(storage[0].total, 0);
-        assert_eq!(storage[0].detail, "");
         let work = &storage[1];
-        assert!(work.total >= 300_000, "{work:?}");
-        assert!(work.size.ends_with("KB"), "{work:?}");
-        assert!(work.detail.contains("conversations, "), "{work:?}");
-        assert!(work.detail.ends_with(" other"), "{work:?}");
+        assert!(work.conversations >= 300_000, "{work:?}");
+        // The settings file is none of the named parts.
+        assert!(work.other > 0, "{work:?}");
+        assert_eq!((work.file_history, work.extensions), (0, 0));
+        assert_eq!(work.total, work.conversations + work.other);
     }
 
     #[test]
@@ -981,26 +1001,36 @@ mod tests {
         assert_eq!(overview.days, 7);
         assert_eq!(overview.flagged, 1);
         let perso = &overview.profiles[0];
-        assert_eq!((perso.share.as_str(), perso.weight), ("", 0.0));
-        assert!(perso.projects.is_empty() && perso.reread.is_empty());
+        assert_eq!((perso.share, perso.weight), (None, 0.0));
+        assert!(perso.projects.is_empty() && perso.reread.is_none());
 
         let work = &overview.profiles[1];
-        assert_eq!(work.share, "100%");
+        assert_eq!(work.share, Some(1.0));
         assert_eq!(work.flagged, 1);
         assert_eq!(work.projects.len(), 2);
         assert_eq!(work.projects[0].state, "covered");
-        assert!(work.projects[0].why.contains("locked rule"), "{work:?}");
+        let reason = work.projects[0].reason.as_ref().unwrap();
+        assert_eq!(
+            (reason.kind, reason.source),
+            ("locked", Some("config.toml"))
+        );
+        assert!(
+            reason.rule.as_deref().unwrap().contains("git_remote"),
+            "{work:?}"
+        );
+        assert!(work.projects[0].share > work.projects[1].share);
         assert!(!work.projects[0].flagged);
         assert_eq!(work.projects[1].state, "elsewhere");
-        assert_eq!(work.projects[1].note, "would use perso");
+        assert_eq!(work.projects[1].profile.as_deref(), Some("perso"));
         assert!(work.projects[1].flagged);
 
-        assert_eq!(work.talks[0].title, "Payment retries");
-        assert_eq!(work.talks[0].context, "450k");
+        assert_eq!(work.talks[0].title.as_deref(), Some("Payment retries"));
+        assert_eq!(work.talks[0].context, 450_000);
         assert!(work.talks[0].heavy);
-        assert_eq!(work.talks[1].title, "Untitled (bbbbbbbb)");
+        assert_eq!(work.talks[1].title, None);
         assert!(!work.talks[1].heavy);
-        assert!(work.reread.starts_with("About "), "{work:?}");
+        let reread = work.reread.unwrap();
+        assert!(reread > 0.0 && reread <= 1.0, "{work:?}");
     }
 
     // The Trash is only known on macOS for now.
@@ -1035,11 +1065,16 @@ mod tests {
         assert_eq!(listed.more, 0);
         assert_eq!(listed.items.len(), 2);
         let big = &listed.items[0];
-        assert_eq!(big.title, "Fix the login");
-        assert_eq!(big.detail, "~/app, 3 days ago");
-        assert!(big.size.ends_with("KB") && !big.in_use, "{big:?}");
+        assert_eq!(big.title.as_deref(), Some("Fix the login"));
+        assert_eq!(big.folder.as_deref(), Some("~/app"));
+        // Three days, give or take the seconds the test takes.
+        assert!(
+            (3 * 86_400..3 * 86_400 + 60).contains(&big.idle_secs),
+            "{big:?}"
+        );
+        assert!(big.size >= 200_000 && !big.in_use, "{big:?}");
         let small = &listed.items[1];
-        assert_eq!(small.title, "Untitled (99999999)");
+        assert_eq!(small.title, None);
         assert!(small.in_use);
 
         fs::create_dir_all(env.home.join(".Trash")).unwrap();
@@ -1063,12 +1098,10 @@ mod tests {
     fn retention_is_shown_and_set_per_profile() {
         let (_temp, env) = world();
         let before = overview(&env).unwrap();
-        assert_eq!(before.profiles[1].keeps, "30 days");
         assert_eq!(before.profiles[1].keeps_days, Some(30));
 
         set_retention(&env, "work", 120).unwrap();
         let after = overview(&env).unwrap();
-        assert_eq!(after.profiles[1].keeps, "120 days");
         assert_eq!(after.profiles[1].keeps_days, Some(120));
         // The other profile keeps its own value.
         assert_eq!(after.profiles[0].keeps_days, Some(30));
@@ -1080,7 +1113,7 @@ mod tests {
         fs::write(env.profiles_dir().join("work/settings.json"), "{ nope").unwrap();
         let broken = overview(&env).unwrap();
         assert_eq!(broken.profiles[1].keeps_days, None);
-        assert!(broken.profiles[1].keeps.starts_with("unknown"));
+        assert!(broken.profiles[1].keeps_error.is_some());
     }
 
     #[test]
