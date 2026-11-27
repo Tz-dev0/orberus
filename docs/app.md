@@ -25,9 +25,10 @@ Opening the app again from the Finder or Spotlight shows the window.
 - **Usage** (folded): for each profile, its account's 5-hour and weekly
   limits, as Claude shows them: how much is used, when it starts over, and a
   bar where full is the limit. These are not live numbers: they are the last
-  ones Claude Code reported for that account, with their age, rounded to a
-  whole percent, so approximate to about one percent when fresh; "Show 5-hour and weekly limits" turns the
-  reporting on for a profile (see [`orberus limits`](commands.md#limits)).
+  ones noted for that account, by Claude Desktop while it runs or by Claude
+  Code after an answer in a terminal, with their age and who noted them,
+  rounded to a whole percent, so approximate to about one percent when fresh; "Show 5-hour and weekly limits" or "Add Claude Code" turns Claude Code's
+  reports on for a profile (see [`orberus limits`](commands.md#limits)).
   Click a profile to see its heaviest projects of the last 7 days, each
   checked against today's rules, and the conversations that send the most
   tokens with each answer. Folded, the line says how many projects deserve a
@@ -81,7 +82,8 @@ command line.
   files (Terminal, and others such as Ghostty, WezTerm or kitty). Opening
   Claude Code was tested with Terminal only. An app that does not accept a
   script file, such as Alacritty, is not listed.
-- Claude Desktop is not handled.
-- The app is in English only.
+- Claude Desktop accounts are not handled. The app only reads the plan usage
+  Claude Desktop notes, for the limits in "Usage".
+- Error messages are in English, whatever the language of the window.
 - It is not signed with an Apple developer certificate. See
   [installation.md](installation.md#why-curl-and-not-the-browser).

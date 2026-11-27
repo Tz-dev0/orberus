@@ -1053,10 +1053,11 @@ function limitLine(name: string, label: string, kind: string, window: LimitWindo
   if (window.used >= 90) line.classList.add("limit-high");
   else if (window.used >= 70) line.classList.add("limit-near");
   const used = percent(window.used / 100);
-  const fact =
-    window.resetsIn === null
-      ? t("limitFresh", { used })
-      : t("limitFact", { used, when: until(window.resetsIn) });
+  // Claude Desktop gives the number without its reset time: then the
+  // number stands alone.
+  let fact = used;
+  if (window.resetsIn !== null) fact = t("limitFact", { used, when: until(window.resetsIn) });
+  else if (window.startedOver) fact = t("limitFresh", { used });
   const bar = el("span", "bar");
   const fill = el("span", "bar-fill");
   fill.style.width = `${(window.used > 0 ? Math.max(window.used, 2) : 0).toFixed(1)}%`;
@@ -1071,33 +1072,43 @@ function limitLine(name: string, label: string, kind: string, window: LimitWindo
 function limitsBlock(name: string): HTMLElement | null {
   const found = limits.get(name);
   if (!found || found.state === "unknown") return null;
-  const block = keyed(el("div", "limits"), `limits:${name}:${found.state}`);
-  if (found.state === "off") {
-    const show = el("button", "limits-action", t("limitsShow"));
-    show.title = t("limitsShowHint");
-    onClick(show, async () => {
-      await api.setLimits(name, true);
+  const known = found.fiveHour !== null || found.sevenDay !== null;
+  const block = keyed(el("div", "limits"), `limits:${name}:${found.state}:${known}`);
+  // Turns Claude Code's reports on or off for this profile.
+  const toggle = (label: string, hint: string, on: boolean): HTMLButtonElement => {
+    const button = el("button", "limits-action", label);
+    button.title = hint;
+    onClick(button, async () => {
+      await api.setLimits(name, on);
     });
-    block.append(show);
+    return button;
+  };
+  if (!known && found.state === "off") {
+    block.append(toggle(t("limitsShow"), t("limitsShowHint"), true));
     return block;
   }
   block.title = t("limitsHint");
   if (found.fiveHour) block.append(limitLine(name, t("limit5h"), "5h", found.fiveHour));
   if (found.sevenDay) block.append(limitLine(name, t("limitWeek"), "week", found.sevenDay));
   const foot = el("div", "limits-foot");
+  // Product names, the same in every language.
+  const source = found.source === "desktop" ? "Claude Desktop" : "Claude Code";
   foot.append(
     el(
       "span",
       "limits-note",
-      found.ageSecs === null ? t("limitsWaiting") : t("limitsUpdated", { when: ago(found.ageSecs) }),
+      found.ageSecs === null
+        ? t("limitsWaiting")
+        : t("limitsUpdated", { when: ago(found.ageSecs), source }),
     ),
   );
-  const hide = el("button", "limits-action", t("limitsHide"));
-  hide.title = t("limitsHideHint");
-  onClick(hide, async () => {
-    await api.setLimits(name, false);
-  });
-  foot.append(hide);
+  // Claude Desktop alone already gives numbers, for the account it is
+  // logged in to; Claude Code adds the reset times, and the other accounts.
+  foot.append(
+    found.state === "on"
+      ? toggle(t("limitsHide"), t("limitsHideHint"), false)
+      : toggle(t("limitsShowToo"), t("limitsShowHint"), true),
+  );
   block.append(foot);
   return block;
 }
