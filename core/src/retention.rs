@@ -10,14 +10,12 @@
 //! from 1 up is accepted here. Only the user-level file of the profile is
 //! read here; a project or managed settings file can still override it.
 
-use std::fs;
-use std::path::PathBuf;
+use anyhow::{bail, Result};
+use serde_json::Value;
 
-use anyhow::{bail, Context, Result};
-use serde_json::{Map, Value};
-
-use crate::config::{self, Config};
+use crate::config::Config;
 use crate::paths::Env;
+use crate::settings;
 
 const KEY: &str = "cleanupPeriodDays";
 /// What Claude Code uses when the setting is absent.
@@ -55,33 +53,9 @@ pub fn days_text(days: u64) -> String {
     }
 }
 
-/// The profile's own settings file: `settings.json` in its config folder.
-fn settings_file(env: &Env, config: &Config, name: &str) -> Result<PathBuf> {
-    let dir = match config::profile_dir(env, config, name)? {
-        Some(dir) => dir,
-        None => crate::tool::CLAUDE.native_dir(env),
-    };
-    Ok(dir.join("settings.json"))
-}
-
-/// Reads the file as a JSON object. `None` when the file does not exist.
-fn read_settings(file: &PathBuf) -> Result<Option<Map<String, Value>>> {
-    let text = match fs::read_to_string(file) {
-        Ok(text) => text,
-        // No file yet is normal for a profile that was never started.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error).with_context(|| format!("cannot read {}", file.display())),
-    };
-    match serde_json::from_str(&text) {
-        Ok(Value::Object(settings)) => Ok(Some(settings)),
-        Ok(_) => bail!("{} is not a JSON object", file.display()),
-        Err(error) => bail!("{} is not valid JSON: {error}", file.display()),
-    }
-}
-
 pub fn read(env: &Env, config: &Config, name: &str) -> Result<Retention> {
-    let file = settings_file(env, config, name)?;
-    let settings = match read_settings(&file) {
+    let file = settings::file(env, config, name)?;
+    let settings = match settings::read(&file) {
         Ok(Some(settings)) => settings,
         Ok(None) => return Ok(Retention::Default),
         // A broken file is shown, not fatal: the other profiles still list.
@@ -103,21 +77,12 @@ pub fn set(env: &Env, config: &Config, name: &str, days: u64) -> Result<()> {
     if days < 1 {
         bail!("Claude Code refuses 0: the shortest it accepts is 1 day");
     }
-    let file = settings_file(env, config, name)?;
+    let file = settings::file(env, config, name)?;
     // A file we cannot understand is never overwritten: `?` stops here.
-    let mut settings = read_settings(&file)?.unwrap_or_default();
+    let mut settings = settings::read(&file)?.unwrap_or_default();
     settings.insert(KEY.to_string(), Value::from(days));
 
-    let mut text = serde_json::to_string_pretty(&Value::Object(settings))?;
-    text.push('\n');
-    if let Some(dir) = file.parent() {
-        fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
-    }
-    // Written next to the file, then moved over it: a crash in the middle
-    // leaves the old settings whole instead of half a file.
-    let draft = file.with_extension("json.orberus-tmp");
-    fs::write(&draft, text).with_context(|| format!("cannot write {}", draft.display()))?;
-    fs::rename(&draft, &file).with_context(|| format!("cannot write {}", file.display()))?;
+    settings::write(&file, settings)?;
     Ok(())
 }
 
@@ -125,6 +90,7 @@ pub fn set(env: &Env, config: &Config, name: &str, days: u64) -> Result<()> {
 mod tests {
     use super::*;
     use crate::config::Profile;
+    use std::fs;
 
     fn world() -> (tempfile::TempDir, Env, Config) {
         let temp = tempfile::tempdir().unwrap();

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use orberus_core::config;
+use orberus_core::limits;
 use orberus_core::paths::Env;
 use orberus_core::purge;
 use orberus_core::uninstall::{self, Binary};
@@ -84,6 +85,12 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
         return Ok(0);
     }
 
+    if let Some(loaded) = &loaded {
+        // Before the program goes: a status line left behind would name it.
+        for name in limits::disable_all(env, &loaded.config) {
+            ui.success(&format!("Status line removed from profile '{name}'"));
+        }
+    }
     if uninstall::remove_shim(env)? {
         ui.success("Shim removed");
     }

@@ -173,6 +173,26 @@ export interface Overview {
   terminal: string | null;
 }
 
+/** One limit of an account, as it stands now. */
+export interface LimitWindow {
+  /** From 0 to 100. */
+  used: number;
+  /** Seconds until it starts over; null when it already has. */
+  resetsIn: number | null;
+}
+
+/** The 5-hour and weekly limits of one profile's account: the last numbers
+ *  Claude Code reported, not a live reading. */
+export interface Limits {
+  name: string;
+  /** Whether Claude Code reports them to Orberus for this profile. */
+  state: "on" | "off" | "unknown";
+  fiveHour: LimitWindow | null;
+  sevenDay: LimitWindow | null;
+  /** How old the numbers are, in seconds; null when there are none. */
+  ageSecs: number | null;
+}
+
 /** A terminal app installed on this Mac that can run a script file. */
 export interface Terminal {
   name: string;
@@ -187,6 +207,11 @@ export interface Api {
   /** Which projects and conversations used each profile lately. Reads the
    *  conversation files, so it is slower than `overview`. */
   usage(): Promise<UsageOverview>;
+  /** The limits Claude Code last reported for each profile. Fast. */
+  limits(): Promise<Limits[]>;
+  /** Turns that reporting on or off: adds or removes a status line in the
+   *  profile's Claude Code settings. */
+  setLimits(name: string, on: boolean): Promise<void>;
   setDefault(name: string): Promise<void>;
   addProfile(name: string, reuseLogin: boolean): Promise<void>;
   /** Takes the profile and its own rules out of the config. Its Claude Code
@@ -225,6 +250,8 @@ const tauri: Api = {
   storage: () => invoke<StorageOverview>("storage"),
   usage: () => invoke<UsageOverview>("usage"),
   setDefault: (name) => invoke("set_default", { name }),
+  limits: () => invoke<Limits[]>("limits"),
+  setLimits: (name, on) => invoke("set_limits", { name, on }),
   addProfile: (name, reuseLogin) => invoke("add_profile", { name, reuseLogin }),
   pickRuleFolder: (title) => invoke<RuleDraft | null>("pick_rule_folder", { title }),
   addRule: (choice, profile, locked) =>
@@ -302,6 +329,10 @@ function preview(): Api {
       { path: "~/clients/acme", gitRemote: null, profile: "work", locked: false, source: "config.toml", index: 0 },
     ],
   };
+  const limitSample: Record<string, Omit<Limits, "name">> = {
+    perso: { state: "on", fiveHour: { used: 3, resetsIn: 4 * 3600 + 300 }, sevenDay: { used: 11, resetsIn: 4 * 86_400 + 300 }, ageSecs: 190 },
+    work: { state: "on", fiveHour: { used: 78, resetsIn: 40 * 60 }, sevenDay: { used: 93, resetsIn: 86_400 + 7200 }, ageSecs: 3 * 3600 },
+  };
   return {
     overview: async () => structuredClone(state),
     storage: async () => {
@@ -368,6 +399,13 @@ function preview(): Api {
       const idle = { weight: 0, share: null, projects: [], moreProjects: 0, talks: [], flagged: 0, reread: null };
       const profiles = state.profiles.map(({ name }) => ({ name, ...(sample[name] ?? idle) }));
       return { profiles, days: 7, flagged: profiles.reduce((sum, profile) => sum + profile.flagged, 0) };
+    },
+    limits: async () =>
+      state.profiles.map(({ name }) => ({ name, ...(limitSample[name] ?? { state: "off" as const, fiveHour: null, sevenDay: null, ageSecs: null }) })),
+    setLimits: async (name, on) => {
+      limitSample[name] = on
+        ? { state: "on", fiveHour: null, sevenDay: null, ageSecs: null }
+        : { state: "off", fiveHour: null, sevenDay: null, ageSecs: null };
     },
     setDefault: async (name) => {
       for (const profile of state.profiles) profile.isDefault = profile.name === name;

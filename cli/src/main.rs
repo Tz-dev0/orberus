@@ -20,6 +20,7 @@ use orberus_core::tool;
 use commands::clean::clean;
 use commands::disk::disk_usage;
 use commands::doctor::doctor;
+use commands::limits::{limits_command, statusline, Switch};
 use commands::profiles::{add, list, pin, remove, set_default};
 use commands::retention::retention_command;
 use commands::rules::{rule_add, rule_list, rule_remove};
@@ -119,6 +120,17 @@ enum Command {
         #[arg(long, short)]
         yes: bool,
     },
+    /// Show each account's 5-hour and weekly limits, or turn them on or off
+    Limits {
+        /// `on` or `off` for one profile. Without it, the limits are listed
+        #[arg(value_enum)]
+        switch: Option<Switch>,
+        /// Name of the profile. Asked when left out
+        profile: Option<String>,
+    },
+    /// The status line Claude Code runs to report the limits
+    #[command(hide = true)]
+    Statusline,
     /// Show or set how long each profile keeps its conversations
     Retention {
         /// Name of the profile to change. Without it, all are listed
@@ -256,6 +268,8 @@ fn cli() -> Result<i32> {
             all,
             yes,
         } => clean(&ui, &env, profile, sessions, all, yes),
+        Command::Limits { switch, profile } => limits_command(&ui, &env, switch, profile),
+        Command::Statusline => statusline(),
         Command::Retention { name, days } => retention_command(&ui, &env, name, days),
         Command::Default { name } => set_default(&ui, &env, name),
         Command::Use { name } => pin(&ui, &env, name),
