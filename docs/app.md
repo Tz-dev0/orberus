@@ -21,14 +21,18 @@ Opening the app again from the Finder or Spotlight shows the window.
   A second ring marks the default profile.
 - **Rules**: every rule, with the profile it leads to, and whether it comes
   from your config or from team rules.
-- **Usage** (folded): each profile's part of the last 7 days. Click a profile
+- **Usage** (folded): each profile's part of the last 7 days, where a full
+  bar is the usage of all profiles together. With a single profile in use
+  there is nothing to compare, so it shows its number of projects instead. Click a profile
   to see its heaviest projects, each checked against today's rules, and the
   conversations that send the most tokens with each answer. Folded, the line
   says how many projects deserve a look. It is the same estimate as
   [`orberus usage`](commands.md#usage), and it changes nothing.
 - **Conversations kept** (folded): how long each profile keeps its
   conversations.
-- **Storage** (folded): the disk space of each profile.
+- **Storage** (folded): the disk space of each profile. Each bar is that
+  profile's folder, cut by what fills it: conversations, file history, plugins
+  and skills, other.
 - **Terminal** (folded): the app that "Open…" starts Claude Code in.
 
 ## What you can do

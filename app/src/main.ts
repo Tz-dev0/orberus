@@ -839,8 +839,48 @@ function storageDetail(size: StorageOverview["profiles"][number]): string {
     .join(", ");
 }
 
-/** A line that unfolds to one line per profile: a bar to scale, then the
- *  size. Folded, it shows the sum. */
+/** What a profile's folder holds, in the order the bar draws it. */
+const PARTS = [
+  ["conversations", "legendConversations"],
+  ["fileHistory", "legendFileHistory"],
+  ["extensions", "legendExtensions"],
+  ["other", "legendOther"],
+] as const;
+
+/** The whole bar is one profile's folder, cut by what fills it. It says
+ *  nothing about a limit, and does not compare profiles: the size beside
+ *  it does. */
+function partsBar(size: StorageOverview["profiles"][number]): HTMLElement {
+  const bar = el("span", "bar bar-parts");
+  if (size.total <= 0) return bar;
+  // A part with anything at all keeps a visible sliver; the widths are
+  // then brought back to a total of 100.
+  const raw = PARTS.map(([part]) => (size[part] > 0 ? Math.max(size[part] / size.total, 0.02) : 0));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  PARTS.forEach(([part, label], index) => {
+    if (raw[index] === 0) return;
+    const piece = el("span", `bar-fill bar-part part-${index}`);
+    piece.style.width = `${((raw[index] / sum) * 100).toFixed(1)}%`;
+    piece.dataset.bar = `size:${size.name}:${part}`;
+    piece.title = `${t(label)}: ${bytes(size[part])}`;
+    bar.append(piece);
+  });
+  return bar;
+}
+
+/** Which shade of the bar is what. */
+function partsLegend(): HTMLElement {
+  const legend = el("li", "legend");
+  PARTS.forEach(([, label], index) => {
+    const entry = el("span", "legend-entry");
+    entry.append(el("span", `legend-dot part-${index}`), t(label));
+    legend.append(entry);
+  });
+  return legend;
+}
+
+/** A line that unfolds to one line per profile: a bar cut by content, then
+ *  the size. Folded, it shows the sum. */
 function storageSection(measured: StorageOverview, overview: Overview): HTMLElement {
   const sizes = measured.profiles.filter((size) => hues.has(size.name));
   const section = el("section", "storage-section");
@@ -860,8 +900,6 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
   if (!storageOpen) return section;
 
   const list = el("ul", "storage");
-  // The biggest profile fills the bar; the others are drawn against it.
-  const biggest = Math.max(...sizes.map((size) => size.total), 1);
   for (const size of sizes) {
     const item = keyed(el("li", "storage-item"), `size:${size.name}`);
     item.style.setProperty("--hue", hue(size.name));
@@ -878,22 +916,16 @@ function storageSection(measured: StorageOverview, overview: Overview): HTMLElem
       render(overview);
       void loadConversations(overview);
     });
-    const bar = el("span", "bar");
-    const fill = el("span", "bar-fill");
-    // A profile with anything at all keeps a visible sliver.
-    const share = size.total > 0 ? Math.max(size.total / biggest, 0.02) : 0;
-    fill.style.width = `${(share * 100).toFixed(1)}%`;
-    fill.dataset.bar = `size:${size.name}`;
-    bar.append(fill);
     row.append(
       el("span", "storage-name", size.name),
-      bar,
+      partsBar(size),
       el("span", "storage-size", size.total > 0 ? bytes(size.total) : t("empty")),
     );
     item.append(row);
     if (picked) item.append(conversationList(size.name, overview));
     list.append(item);
   }
+  if (sizes.some((size) => size.total > 0)) list.append(partsLegend());
   section.append(list);
   return section;
 }
@@ -966,6 +998,8 @@ function usageDetail(used: Usage): HTMLElement {
   for (const project of used.projects) {
     const row = keyed(el("li", "talk used"), `project:${used.name}:${project.folder}`);
     row.title = `${project.folder}\n${projectWhy(project, used.name)}`;
+    // The line is tinted up to the project's part of this profile's usage.
+    row.style.setProperty("--part", `${(project.share * 100).toFixed(1)}%`);
     row.append(el("span", "used-share", percent(project.share)), el("span", "used-folder", project.folder));
     const note = projectNote(project);
     if (note) {
@@ -1026,7 +1060,9 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
   if (!usageOpen) return section;
 
   const list = el("ul", "storage");
-  const heaviest = Math.max(...profiles.map((used) => used.weight), 1e-9);
+  // A part of the whole only means something when there is more than one
+  // part: with a single profile in use, the bar would always be full.
+  const compared = profiles.filter((used) => used.weight > 0).length > 1;
   for (const used of profiles) {
     const item = keyed(el("li", "storage-item"), `used:${used.name}`);
     item.style.setProperty("--hue", hue(used.name));
@@ -1042,17 +1078,23 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
       usagePicked = picked ? null : used.name;
       render(overview);
     });
-    const bar = el("span", "bar");
-    const fill = el("span", "bar-fill");
-    const share = used.weight > 0 ? Math.max(used.weight / heaviest, 0.02) : 0;
-    fill.style.width = `${(share * 100).toFixed(1)}%`;
-    fill.dataset.bar = `used:${used.name}`;
-    bar.append(fill);
-    row.append(
-      el("span", "storage-name", used.name),
-      bar,
-      el("span", "storage-size", used.share === null ? t("idle") : percent(used.share)),
-    );
+    row.append(el("span", "storage-name", used.name));
+    if (compared) {
+      // The bar is the number beside it: this profile's part of the usage
+      // of all profiles, on a scale where the full bar is all of it.
+      const bar = el("span", "bar");
+      const fill = el("span", "bar-fill");
+      const share = used.share ?? 0;
+      fill.style.width = `${(share > 0 ? Math.max(share, 0.02) * 100 : 0).toFixed(1)}%`;
+      fill.dataset.bar = `used:${used.name}`;
+      bar.append(fill);
+      bar.title = t("shareHint", { n: read.days });
+      row.append(bar, el("span", "storage-size", used.share === null ? t("idle") : percent(used.share)));
+    } else {
+      const projects = used.projects.length + used.moreProjects;
+      const fact = used.share === null ? t("idle") : count(projects, "projectsOne", "projectsMany");
+      row.append(el("span", "storage-fact", fact));
+    }
     item.append(row);
     if (picked) item.append(usageDetail(used));
     list.append(item);

@@ -919,7 +919,8 @@ h2 {
   white-space: nowrap;
 }
 
-/* The bars share one scale, so the profiles can be compared at a glance. */
+/* A full bar is always a whole: a profile's folder in "Storage", the usage
+   of all profiles in "Usage". */
 .bar {
   flex: 1;
   height: 5px;
@@ -935,6 +936,61 @@ h2 {
   background: linear-gradient(90deg, color-mix(in srgb, var(--hue) 70%, transparent), var(--hue));
   /* Grows from its last width: from nothing when the section unfolds. */
   transition: width 0.55s var(--ease);
+}
+
+/* A bar cut by content: one hue, lighter for each next part. */
+.bar-parts {
+  display: flex;
+  gap: 1px;
+}
+
+.bar-part {
+  flex: none;
+  border-radius: 0;
+  background: var(--hue);
+}
+
+.part-1 {
+  opacity: 0.62;
+}
+
+.part-2 {
+  opacity: 0.4;
+}
+
+.part-3 {
+  opacity: 0.22;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 4px 8px 2px 72px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.legend-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--muted);
+}
+
+/* With a single profile in use there is nothing to compare: a plain fact
+   takes the place of the bar. */
+.storage-fact {
+  flex: 1;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* A profile's storage line is a button that unfolds its conversations. */
@@ -1052,7 +1108,17 @@ h2 {
 
 /* ------------------------------------------------------------------- usage */
 
-/* A project of a profile: its share, where it is, what the rules say. */
+/* A project of a profile: its share, where it is, what the rules say. The
+   line is tinted up to that share, like a data bar in a table. */
+.used {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--hue) 16%, transparent) var(--part, 0%),
+    transparent var(--part, 0%)
+  );
+}
+
+
 .used-share {
   flex: none;
   width: 30px;
