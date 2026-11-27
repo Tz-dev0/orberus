@@ -1,24 +1,16 @@
-[package]
-name = "orberus"
+# The repository is a workspace of two crates:
+#   core/  everything Orberus knows and does, without any interface
+#   cli/   the `orberus` command (and the `claude` shim), built on the core
+# The menu bar app in app/ is built on the same core. It is kept out of this
+# workspace: it has its own Cargo.lock and target folder, so Tauri's many
+# dependencies never slow down or weigh on the build of the command.
+[workspace]
+members = ["core", "cli"]
+exclude = ["app/src-tauri"]
+resolver = "2"
+
+# Written once, shared by both crates (`version.workspace = true`).
+[workspace.package]
 version = "0.1.3"
 edition = "2021"
-description = "Automatic account profiles for Claude Code: the right account for each folder"
 license = "MIT"
-
-[[bin]]
-name = "orberus"
-path = "src/main.rs"
-
-[dependencies]
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
-serde = { version = "1", features = ["derive"] }
-# Reads the account name from Claude Code's .claude.json, for `orberus list`
-# and the menu bar app. Never used on the shim path.
-# `preserve_order` keeps the keys of a settings.json in their order when
-# we rewrite it. It only turns on `indexmap`, which `toml` already brings.
-serde_json = { version = "1", features = ["preserve_order"] }
-toml = "0.8"
-
-[dev-dependencies]
-tempfile = "3"

@@ -81,7 +81,7 @@ profile is shown as `not logged in`.
 ## One tool today
 
 Orberus manages Claude Code only. Inside, what names a tool is kept in one
-table (`src/tool.rs`): the command people type (`claude`), the variable that
+table (`core/src/tool.rs`): the command people type (`claude`), the variable that
 points it to a config folder (`CLAUDE_CONFIG_DIR`) and the folder it uses by
 default (`~/.claude`). The shim looks at the name it was started under and
 finds its tool in that table.

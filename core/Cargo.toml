@@ -1,0 +1,19 @@
+[package]
+name = "orberus-core"
+description = "The core of Orberus: profiles, rules, and which account a folder gets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+# Reads the account name from Claude Code's .claude.json, for `orberus list`
+# and the menu bar app. Never used on the shim path.
+# `preserve_order` keeps the keys of a settings.json in their order when
+# we rewrite it. It only turns on `indexmap`, which `toml` already brings.
+serde_json = { version = "1", features = ["preserve_order"] }
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,20 @@
+[package]
+name = "orberus"
+description = "Automatic account profiles for Claude Code: the right account for each folder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# One binary. Started under the name `claude` (the link made by
+# `orberus setup`), it acts as the shim.
+[[bin]]
+name = "orberus"
+path = "src/main.rs"
+
+[dependencies]
+orberus-core = { path = "../core" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
