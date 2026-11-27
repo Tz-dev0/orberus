@@ -131,6 +131,16 @@ async fn usage() -> Result<data::UsageOverview, String> {
 }
 
 #[tauri::command]
+fn limits() -> Result<Vec<data::LimitsView>, String> {
+    run(data::limits)
+}
+
+#[tauri::command]
+fn set_limits(name: String, on: bool) -> Result<(), String> {
+    run(|env| data::set_limits(env, &name, on))
+}
+
+#[tauri::command]
 fn remove_profile(name: String, purge: bool) -> Result<(), String> {
     run(|env| data::remove_profile(env, &name, purge))
 }
@@ -393,6 +403,8 @@ fn main() {
             trash_conversation,
             storage,
             usage,
+            limits,
+            set_limits,
             pick_rule_folder,
             add_rule,
             remove_rule,

@@ -10,6 +10,8 @@ import {
   type Reason,
   type UsageProject,
   type Conversations,
+  type Limits,
+  type LimitWindow,
   type Rule,
   type RuleDraft,
   type StorageOverview,
@@ -17,7 +19,7 @@ import {
   type Usage,
   type UsageOverview,
 } from "./api";
-import { ago, bytes, count, days, language, percent, t, tokens } from "./i18n";
+import { ago, bytes, count, days, language, percent, t, tokens, until } from "./i18n";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 // In the app the window itself is the frosted panel. In a browser there is
@@ -1041,6 +1043,65 @@ function usageDetail(used: Usage): HTMLElement {
   return list;
 }
 
+// The limits Claude Code last reported for each profile, by profile name.
+let limits = new Map<string, Limits>();
+
+/** One limit, as Claude shows it: its name, how much is used and when it
+ *  starts over, then a bar where full is the limit itself. */
+function limitLine(name: string, label: string, kind: string, window: LimitWindow): HTMLElement {
+  const line = el("div", "limit");
+  if (window.used >= 90) line.classList.add("limit-high");
+  else if (window.used >= 70) line.classList.add("limit-near");
+  const used = percent(window.used / 100);
+  const fact =
+    window.resetsIn === null
+      ? t("limitFresh", { used })
+      : t("limitFact", { used, when: until(window.resetsIn) });
+  const bar = el("span", "bar");
+  const fill = el("span", "bar-fill");
+  fill.style.width = `${(window.used > 0 ? Math.max(window.used, 2) : 0).toFixed(1)}%`;
+  fill.dataset.bar = `limit:${name}:${kind}`;
+  bar.append(fill);
+  line.append(el("span", "limit-name", label), el("span", "limit-fact", fact), bar);
+  return line;
+}
+
+/** Under a profile in "Usage": its account's 5-hour and weekly limits, or
+ *  the way to get them. Nothing when its settings cannot be read. */
+function limitsBlock(name: string): HTMLElement | null {
+  const found = limits.get(name);
+  if (!found || found.state === "unknown") return null;
+  const block = keyed(el("div", "limits"), `limits:${name}:${found.state}`);
+  if (found.state === "off") {
+    const show = el("button", "limits-action", t("limitsShow"));
+    show.title = t("limitsShowHint");
+    onClick(show, async () => {
+      await api.setLimits(name, true);
+    });
+    block.append(show);
+    return block;
+  }
+  block.title = t("limitsHint");
+  if (found.fiveHour) block.append(limitLine(name, t("limit5h"), "5h", found.fiveHour));
+  if (found.sevenDay) block.append(limitLine(name, t("limitWeek"), "week", found.sevenDay));
+  const foot = el("div", "limits-foot");
+  foot.append(
+    el(
+      "span",
+      "limits-note",
+      found.ageSecs === null ? t("limitsWaiting") : t("limitsUpdated", { when: ago(found.ageSecs) }),
+    ),
+  );
+  const hide = el("button", "limits-action", t("limitsHide"));
+  hide.title = t("limitsHideHint");
+  onClick(hide, async () => {
+    await api.setLimits(name, false);
+  });
+  foot.append(hide);
+  block.append(foot);
+  return block;
+}
+
 /** A line that unfolds to one line per profile: its part of the usage of
  *  the last days. Folded, it says how many projects deserve a look. */
 function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
@@ -1084,23 +1145,19 @@ function usageSection(read: UsageOverview, overview: Overview): HTMLElement {
       render(overview);
     });
     row.append(el("span", "storage-name", used.name));
-    if (compared) {
-      // The bar is the number beside it: this profile's part of the usage
-      // of all profiles, on a scale where the full bar is all of it.
-      const bar = el("span", "bar");
-      const fill = el("span", "bar-fill");
-      const share = used.share ?? 0;
-      fill.style.width = `${(share > 0 ? Math.max(share, 0.02) * 100 : 0).toFixed(1)}%`;
-      fill.dataset.bar = `used:${used.name}`;
-      bar.append(fill);
-      bar.title = t("shareHint", { n: read.days });
-      row.append(bar, el("span", "storage-size", used.share === null ? t("idle") : percent(used.share)));
-    } else {
-      const projects = used.projects.length + used.moreProjects;
-      const fact = used.share === null ? t("idle") : count(projects, "projectsOne", "projectsMany");
-      row.append(el("span", "storage-fact", fact));
+    // No bar here: the bars of this section are the account's limits,
+    // below. The profile's part of all usage is a number, and only when
+    // there is more than one profile to compare.
+    const projects = used.projects.length + used.moreProjects;
+    let fact = used.share === null ? t("idle") : count(projects, "projectsOne", "projectsMany");
+    if (compared && used.share !== null) {
+      fact = t("shareFact", { share: percent(used.share), projects: fact });
+      row.title = `${t("shareHint", { n: read.days })}\n${row.title}`;
     }
+    row.append(el("span", "storage-fact", fact));
     item.append(row);
+    const block = limitsBlock(used.name);
+    if (block) item.append(block);
     if (picked) item.append(usageDetail(used));
     list.append(item);
   }
@@ -1308,6 +1365,15 @@ async function refresh(): Promise<void> {
     return;
   }
   render(overview);
+  // The limits are a few small files: read before the slow measures.
+  try {
+    const read = await api.limits();
+    const changed = JSON.stringify(read) !== JSON.stringify([...limits.values()]);
+    limits = new Map(read.map((found) => [found.name, found]));
+    if (changed && !adding && !removing && !ruleDraft) render(overview);
+  } catch {
+    // Keep the last reading.
+  }
   // Measuring reads whole folders: the list above does not wait for it.
   try {
     const measured = await api.storage();

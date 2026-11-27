@@ -4,6 +4,7 @@
 pub(crate) mod clean;
 pub(crate) mod disk;
 pub(crate) mod doctor;
+pub(crate) mod limits;
 pub(crate) mod profiles;
 pub(crate) mod retention;
 pub(crate) mod rules;

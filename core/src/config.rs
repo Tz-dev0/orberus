@@ -221,9 +221,12 @@ pub fn add_profile(
 /// edited from here either; `claude` refuses to start where one still needs
 /// the profile.
 pub fn remove_profile(env: &Env, config: &mut Config, name: &str) -> Result<usize> {
-    if config.profiles.remove(name).is_none() {
+    if !config.profiles.contains_key(name) {
         bail!("unknown profile '{name}'");
     }
+    // While the profile is still known: its folder is found through it.
+    crate::limits::forget(env, config, name);
+    config.profiles.remove(name);
     let before = config.rules.len();
     // `retain` keeps the elements for which the closure answers true.
     config.rules.retain(|rule| rule.profile != name);

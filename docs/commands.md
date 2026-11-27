@@ -316,6 +316,40 @@ claude.ai or on another computer, and conversations already deleted (see
 of these files is internal to Claude Code and may change; lines that cannot be
 read are skipped.
 
+## limits
+
+```sh
+orberus limits                 # the 5-hour and weekly limits of each account
+orberus limits on work         # have Claude Code report those of a profile
+orberus limits off work
+```
+
+```text
+┌─────────┬────────┬────────┬────────┬────────┬──────────────┐
+│ Profile │ 5-hour │ Resets │ Weekly │ Resets │ Updated      │
+├─────────┼────────┼────────┼────────┼────────┼──────────────┤
+│ perso   │        │        │        │        │ off          │
+│ work    │ 3%     │ in 4h  │ 11%    │ in 4d  │ under 1m ago │
+└─────────┴────────┴────────┴────────┴────────┴──────────────┘
+  The last numbers Claude Code showed for each account, not a live reading.
+```
+
+The numbers come from Claude Code itself. It hands them to its
+[status line](https://code.claude.com/docs/en/statusline), for accounts with a
+subscription, after the first answer of a session. `orberus limits on` makes
+`orberus statusline` the status line of the profile, in its `settings.json`:
+each time Claude Code runs it, the limits are noted in
+`~/.orberus/limits/<profile>.json`, and a line like `work · 5h 3% · week 11%`
+shows under the prompt.
+
+- They are the last numbers Claude Code reported, with their age. A profile
+  you have not used for a while shows old numbers; a limit whose reset time
+  has passed reads 0%.
+- A status line of your own is kept: it stays the one shown, and
+  `orberus limits off` puts your settings back as they were.
+- Orberus never asks Anthropic for these numbers and never reads your login.
+- `orberus uninstall` and `orberus remove` take the status line out again.
+
 ## disk
 
 ```sh

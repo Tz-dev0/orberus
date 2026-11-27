@@ -126,6 +126,7 @@ Rules, the config files and team rules are described in
 | `orberus rule add`, `list`, `remove` | Manage the rules |
 | `orberus usage [name]` | Which projects used each account, checked against your rules; `-c` for the heaviest conversations |
 | `orberus disk` | Disk space of each profile. Deletes nothing |
+| `orberus limits [on\|off] [name]` | The 5-hour and weekly limits of each account, as Claude Code reports them |
 | `orberus retention [name] [days]` | How long each profile keeps its conversations |
 | `orberus clean [name]` | Biggest conversations of a profile; move some to the Trash |
 | `orberus remove [name]` | Remove a profile and your rules that point to it |

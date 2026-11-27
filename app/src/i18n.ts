@@ -122,7 +122,20 @@ const en = {
   usageClick: "Click to see its projects and conversations",
   idle: "Idle",
   shareHint: "Its part of the usage of all profiles over the last {n} days",
+  shareFact: "{share} · {projects}",
   projectsOne: "1 project",
+  limit5h: "5-hour limit",
+  limitWeek: "Weekly limit",
+  limitFact: "{used} · resets {when}",
+  limitFresh: "{used} · started over",
+  limitsUpdated: "Updated {when}",
+  limitsHint: "The last numbers Claude Code showed for this account, not a live reading",
+  limitsWaiting: "Limits appear after the next answer in Claude Code",
+  limitsShow: "Show 5-hour and weekly limits",
+  limitsShowHint:
+    "Adds a status line to this profile's Claude Code settings: Claude Code then reports this account's limits here.\nA status line of your own is kept",
+  limitsHide: "Turn off",
+  limitsHideHint: "Removes the status line from this profile's Claude Code settings",
   projectsMany: "{n} projects",
   noActivity: "No conversation in this period.",
   projectsHeading: "Projects, against today's rules",
@@ -288,7 +301,20 @@ const fr: Record<Key, string> = {
   usageClick: "Cliquer pour voir ses projets et conversations",
   idle: "Inactif",
   shareHint: "Sa part de l'usage de tous les profils sur les {n} derniers jours",
+  shareFact: "{share} · {projects}",
   projectsOne: "1 projet",
+  limit5h: "Limite de 5 h",
+  limitWeek: "Limite hebdomadaire",
+  limitFact: "{used} · remise à zéro {when}",
+  limitFresh: "{used} · repartie de zéro",
+  limitsUpdated: "Mis à jour {when}",
+  limitsHint: "Les derniers chiffres que Claude Code a affichés pour ce compte, pas une mesure en direct",
+  limitsWaiting: "Les limites apparaîtront après la prochaine réponse dans Claude Code",
+  limitsShow: "Afficher les limites de 5 h et hebdomadaire",
+  limitsShowHint:
+    "Ajoute une ligne d'état aux réglages Claude Code de ce profil : Claude Code indique alors ici les limites de ce compte.\nVotre propre ligne d'état est conservée",
+  limitsHide: "Désactiver",
+  limitsHideHint: "Retire la ligne d'état des réglages Claude Code de ce profil",
   projectsMany: "{n} projets",
   noActivity: "Aucune conversation sur cette période.",
   projectsHeading: "Projets, selon les règles d'aujourd'hui",
@@ -424,6 +450,14 @@ export function ago(seconds: number): string {
   if (seconds < 3600) return format.format(-Math.floor(seconds / 60), "minute");
   if (seconds < 86_400) return format.format(-Math.floor(seconds / 3600), "hour");
   return format.format(-Math.floor(seconds / 86_400), "day");
+}
+
+/** In how long, from a number of seconds: "in 4 hours", "dans 4 heures". */
+export function until(seconds: number): string {
+  const format = new Intl.RelativeTimeFormat(language, { numeric: "always" });
+  if (seconds < 3600) return format.format(Math.max(1, Math.floor(seconds / 60)), "minute");
+  if (seconds < 86_400) return format.format(Math.floor(seconds / 3600), "hour");
+  return format.format(Math.floor(seconds / 86_400), "day");
 }
 
 /** How long conversations are kept: "30 days", "1 year". */

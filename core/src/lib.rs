@@ -12,19 +12,21 @@
 //! - Which account a folder gets, and starting the tool with it:
 //!   [`resolve`], [`git`], [`tool`], [`launch`].
 //! - Reading Claude Code's own files: [`view`] (who is logged in),
-//!   [`sessions`], [`usage`], [`disk`], [`retention`].
+//!   [`sessions`], [`usage`], [`disk`], [`retention`], [`limits`].
 //! - Removing things: [`purge`], [`uninstall`].
 
 pub mod config;
 pub mod disk;
 pub mod git;
 pub mod launch;
+pub mod limits;
 pub mod paths;
 pub mod purge;
 pub mod resolve;
 pub mod retention;
 pub mod rules;
 pub mod sessions;
+mod settings;
 pub mod tool;
 pub mod uninstall;
 pub mod usage;

@@ -18,6 +18,7 @@ use serde::Serialize;
 
 use orberus_core::config::{self, RuleSource};
 use orberus_core::disk;
+use orberus_core::limits::{self, Capture};
 use orberus_core::paths::Env;
 use orberus_core::purge;
 use orberus_core::resolve::Reason;
@@ -576,6 +577,89 @@ pub fn remove_profile(env: &Env, name: &str, purge: bool) -> Result<()> {
 
 /// Sets how long a profile keeps its conversations, like
 /// `orberus retention <profile> <days>`.
+/// One limit of an account, as it stands now.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowView {
+    /// From 0 to 100.
+    pub used: f64,
+    /// Seconds until it starts over; `None` when it already has since the
+    /// numbers were reported (`used` is then 0).
+    pub resets_in: Option<u64>,
+}
+
+/// The 5-hour and weekly limits of one profile's account.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitsView {
+    pub name: String,
+    /// "on" when Claude Code reports them to us, "off" when it does not,
+    /// "unknown" when the profile's settings cannot be read.
+    pub state: &'static str,
+    pub five_hour: Option<WindowView>,
+    pub seven_day: Option<WindowView>,
+    /// How old the numbers are, in seconds. `None` when there are none.
+    pub age_secs: Option<u64>,
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or(0)
+}
+
+/// The last limits Claude Code reported for each profile.
+pub fn limits(env: &Env) -> Result<Vec<LimitsView>> {
+    limits_at(env, unix_now())
+}
+
+/// The same at a given moment, so a test can choose it.
+fn limits_at(env: &Env, now: u64) -> Result<Vec<LimitsView>> {
+    let config = config::load(env)?.config;
+    let mut views = Vec::new();
+    for name in config.profiles.keys() {
+        let state = match limits::capture(env, &config, name)? {
+            Capture::On => "on",
+            Capture::Off => "off",
+            Capture::Unknown(_) => "unknown",
+        };
+        let noted = limits::read(env, name);
+        let view = |window: Option<&limits::Window>| {
+            window.map(|window| {
+                let reading = window.reading(now);
+                WindowView {
+                    used: reading.used,
+                    resets_in: reading.resets_in,
+                }
+            })
+        };
+        views.push(LimitsView {
+            name: name.clone(),
+            state,
+            five_hour: view(noted.as_ref().and_then(|l| l.five_hour.as_ref())),
+            seven_day: view(noted.as_ref().and_then(|l| l.seven_day.as_ref())),
+            age_secs: noted.as_ref().map(|l| now.saturating_sub(l.seen_at)),
+        });
+    }
+    Ok(views)
+}
+
+/// Turns the reporting of a profile's limits on or off: adds or removes
+/// our status line in its Claude Code settings.
+pub fn set_limits(env: &Env, name: &str, on: bool) -> Result<()> {
+    let config = config::load(env)?.config;
+    if !config.profiles.contains_key(name) {
+        bail!("unknown profile '{name}'");
+    }
+    if on {
+        let program = limits::program(env)?;
+        limits::enable(env, &config, name, &program)
+    } else {
+        limits::disable(env, &config, name)
+    }
+}
+
 pub fn set_retention(env: &Env, name: &str, days: u64) -> Result<()> {
     let config = config::load(env)?.config;
     if !config.profiles.contains_key(name) {
@@ -823,6 +907,35 @@ mod tests {
         });
         config::save(&env, &config).unwrap();
         (temp, env)
+    }
+
+    #[test]
+    fn limits_show_what_claude_code_reported() {
+        let (_temp, env) = world();
+        let input = r#"{"rate_limits":{
+            "five_hour":{"used_percentage":40,"resets_at":2000},
+            "seven_day":{"used_percentage":11.4,"resets_at":90000}}}"#;
+        limits::record(&env, "work", input, 1000).unwrap();
+        let config = config::load(&env).unwrap().config;
+        limits::enable(&env, &config, "work", Path::new("/bin/orberus")).unwrap();
+
+        // Later than the 5-hour reset, earlier than the weekly one.
+        let views = limits_at(&env, 2500).unwrap();
+        let perso = &views[0];
+        assert_eq!(perso.state, "off");
+        assert!(perso.five_hour.is_none() && perso.age_secs.is_none());
+
+        let work = &views[1];
+        assert_eq!(work.state, "on");
+        assert_eq!(work.age_secs, Some(1500));
+        let five = work.five_hour.as_ref().unwrap();
+        assert_eq!((five.used, five.resets_in), (0.0, None));
+        let week = work.seven_day.as_ref().unwrap();
+        assert_eq!((week.used, week.resets_in), (11.4, Some(87_500)));
+
+        set_limits(&env, "work", false).unwrap();
+        assert_eq!(limits_at(&env, 2500).unwrap()[1].state, "off");
+        assert!(set_limits(&env, "nobody", true).is_err());
     }
 
     #[test]
