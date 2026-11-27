@@ -9,7 +9,7 @@ use orberus_core::purge;
 use orberus_core::resolve::{self, REPO_FILE};
 use orberus_core::retention;
 use orberus_core::tool;
-use orberus_core::view::{location, short_path};
+use orberus_core::view::{location, plan, short_path};
 
 use crate::commands::retention::ask_retention;
 use crate::commands::{account_cell, confirmed, pick_profile};
@@ -129,6 +129,7 @@ fn profiles_table(ui: &Ui, env: &Env, loaded: &Loaded) -> Result<()> {
         rows.push(vec![
             Cell::styled(name, if is_here { Style::Green } else { Style::Plain }),
             account_cell(env, config, name),
+            Cell::new(plan(env, config, name).unwrap_or_default()),
             Cell::new(location(env, config, name)?),
             Cell::new(if rules == 0 {
                 String::new()
@@ -143,6 +144,7 @@ fn profiles_table(ui: &Ui, env: &Env, loaded: &Loaded) -> Result<()> {
         &[
             "Profile",
             "Account",
+            "Plan",
             "Config folder",
             "Rules",
             "Default",

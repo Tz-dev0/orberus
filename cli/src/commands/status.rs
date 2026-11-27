@@ -6,7 +6,7 @@ use orberus_core::launch;
 use orberus_core::paths::Env;
 use orberus_core::resolve;
 use orberus_core::tool;
-use orberus_core::view::{account, location, short_path};
+use orberus_core::view::{account, location, plan, short_path};
 
 use crate::ui::{Style, Ui};
 use crate::Cli;
@@ -51,7 +51,11 @@ fn status_block(ui: &Ui, env: &Env, loaded: &Loaded, explicit: Option<&str>) -> 
             (
                 "Account",
                 match account(env, &loaded.config, &found.profile) {
-                    Some(email) => email,
+                    // The subscription, when known, follows the address.
+                    Some(email) => match plan(env, &loaded.config, &found.profile) {
+                        Some(plan) => format!("{email} ({plan})"),
+                        None => email,
+                    },
                     None => ui.paint("not logged in", Style::Yellow),
                 },
             ),

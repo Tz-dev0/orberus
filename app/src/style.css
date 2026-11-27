@@ -392,8 +392,27 @@ h1 {
   flex-direction: column;
 }
 
+.name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .name {
   font-weight: 600;
+}
+
+/* The account's subscription: a quiet outline in the profile's color. */
+.plan {
+  flex: none;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--hue) 70%, var(--text));
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
 }
 
 .account {

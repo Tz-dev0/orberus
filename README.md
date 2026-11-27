@@ -101,7 +101,7 @@ The first of these that applies wins:
 ```text
 $ orberus status
   Profile  work
-  Account  me@acme.example
+  Account  me@acme.example (Team)
   Why      locked rule git_remote = "github.com/acme/*" in config.toml
   Config   ~/.orberus/profiles/work
   Claude   /opt/homebrew/bin/claude
@@ -143,12 +143,12 @@ The examples below are shortened.
 
 ```text
 $ orberus list
-┌─────────┬─────────────────┬──────────────────────────────────┬───────┬─────────┬──────┐
-│ Profile │ Account         │ Config folder                    │ Rules │ Default │ Here │
-├─────────┼─────────────────┼──────────────────────────────────┼───────┼─────────┼──────┤
-│ perso   │ me@example.com  │ ~/.claude (Claude Code default)  │       │ ●       │ ✓    │
-│ work    │ me@acme.example │ ~/.orberus/profiles/work │ 1     │         │      │
-└─────────┴─────────────────┴──────────────────────────────────┴───────┴─────────┴──────┘
+┌─────────┬─────────────────┬────────┬─────────────────────────────────┬───────┬─────────┬──────┐
+│ Profile │ Account         │ Plan   │ Config folder                   │ Rules │ Default │ Here │
+├─────────┼─────────────────┼────────┼─────────────────────────────────┼───────┼─────────┼──────┤
+│ perso   │ me@example.com  │ Max 5x │ ~/.claude (Claude Code default) │       │ ●       │ ✓    │
+│ work    │ me@acme.example │ Team   │ ~/.orberus/profiles/work        │ 1     │         │      │
+└─────────┴─────────────────┴────────┴─────────────────────────────────┴───────┴─────────┴──────┘
   Default: used when no rule applies.   Here: used in this folder.
 ```
 

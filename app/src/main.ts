@@ -233,10 +233,15 @@ function profileRow(profile: Profile, overview: Overview): HTMLElement {
   const open = el("button", "profile-open");
   open.append(el("span", "seal", profile.name.slice(0, 1).toUpperCase()));
   const who = el("span", "who");
-  who.append(
-    el("span", "name", profile.name),
-    el("span", "account", profile.account ?? t("notSignedIn")),
-  );
+  const title = el("span", "name-line");
+  title.append(el("span", "name", profile.name));
+  if (profile.plan) {
+    // The account's subscription: a product name, the same in every language.
+    const plan = el("span", "plan", profile.plan);
+    plan.title = t("planHint", { plan: profile.plan });
+    title.append(plan);
+  }
+  who.append(title, el("span", "account", profile.account ?? t("notSignedIn")));
   // The "…" says a question comes first: which project folder.
   open.append(who, el("span", "go", profile.account ? t("open") : t("signIn")));
   open.title = profile.account ? t("openHint", { account: profile.account }) : t("signInHint");

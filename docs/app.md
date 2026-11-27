@@ -17,7 +17,8 @@ Opening the app again from the Finder or Spotlight shows the window.
 ## What it shows
 
 - **Profiles**: each profile with a coloured dot, filled when an account is
-  logged in and hollow when the profile is empty, and the account's address.
+  logged in and hollow when the profile is empty, the account's address, and a badge
+  with its subscription (`Max 5x`, `Team`…) when Claude Code recorded it.
   A second ring marks the default profile.
 - **Rules**: every rule, with the profile it leads to, and whether it comes
   from your config or from team rules.
