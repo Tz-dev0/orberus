@@ -136,9 +136,9 @@ open in the background, and lets you switch each one off.
   [editors.md](editors.md).
 - **Claude Desktop**: switching it to a profile relies on how the app is
   built, not on a documented feature. A switch closes the app and opens it
-  again, so what runs in it stops. Opening it on a second data folder and
-  closing the other one were tried; signing in there was not. See
-  [desktop.md](desktop.md#what-was-tried).
+  again, so what runs in it stops. A switch away from a Claude Desktop in
+  daily use, and back, was tried; signing in on a second data folder was
+  not. See [desktop.md](desktop.md#what-was-tried).
 - **macOS only** for now. `clean` and `remove --purge` rely on the macOS Trash
   and keychain.
 - **`setup` writes the `PATH` line for zsh and bash only.** With another

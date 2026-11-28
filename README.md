@@ -43,8 +43,8 @@ logos belong to their owners and only say what Orberus works with.
   its account too. Nothing of it is in the releases yet.
 - **Claude Desktop**: Orberus reads the plan usage it notes, for the limits.
   Switching it from one profile's account to another is a first version, so
-  its tile stays dashed: opening it on a profile's own data and closing the
-  other one work, signing in there was not tried yet. See
+  its tile stays dashed: switching away from a Claude Desktop in daily use,
+  and back, works; signing in on a second data folder was not tried yet. See
   [docs/desktop.md](docs/desktop.md).
 - **Windows**: the command builds and passes its tests there, but it was
   never tried in front of a real Claude Code. Not supported yet.

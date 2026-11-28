@@ -222,7 +222,7 @@ const en = {
   desktopOpen: "Open",
   desktopOpenHint: "Opens Claude Desktop on this profile's account",
   desktopSwitch: "Switch",
-  desktopSwitchHint: "Opens Claude Desktop on this profile's account, then closes the one that is open",
+  desktopSwitchHint: "Closes Claude Desktop, then opens it again on this profile's account",
   desktopGo: "Close and switch",
   desktopShow: "Show",
   desktopShowHint: "Brings Claude Desktop to the front",
@@ -235,7 +235,7 @@ const en = {
   desktopOwnHint:
     "A data folder for this profile only, with its own sign-in. On it, the Code tab uses this profile's Claude Code folder.\n{data}",
   desktopNewHint: "First time: sign in there with this profile's account.",
-  desktopNote: "One Claude Desktop at a time: a switch opens it on the other account, then closes the one that was open.",
+  desktopNote: "One Claude Desktop at a time: a switch closes it, then opens it again on the other account.",
   desktopStray: "Claude Desktop is open on no profile: a switch closes it too.",
 
   // Terminal
@@ -492,7 +492,7 @@ const fr: Record<Key, string> = {
   desktopOpen: "Ouvrir",
   desktopOpenHint: "Ouvre Claude Desktop sur le compte de ce profil",
   desktopSwitch: "Basculer",
-  desktopSwitchHint: "Ouvre Claude Desktop sur le compte de ce profil, puis ferme celui qui est ouvert",
+  desktopSwitchHint: "Ferme Claude Desktop, puis le rouvre sur le compte de ce profil",
   desktopGo: "Fermer et basculer",
   desktopShow: "Afficher",
   desktopShowHint: "Ramène Claude Desktop au premier plan",
@@ -505,7 +505,7 @@ const fr: Record<Key, string> = {
   desktopOwnHint:
     "Un dossier de données pour ce profil seulement, avec sa propre connexion. Sur ce profil, l'onglet Code utilise son dossier Claude Code.\n{data}",
   desktopNewHint: "Première fois : connectez-vous-y avec le compte de ce profil.",
-  desktopNote: "Un seul Claude Desktop à la fois : une bascule l'ouvre sur l'autre compte, puis ferme celui qui était ouvert.",
+  desktopNote: "Un seul Claude Desktop à la fois : une bascule le ferme, puis le rouvre sur l'autre compte.",
   desktopStray: "Claude Desktop est ouvert sur aucun profil : une bascule le ferme aussi.",
 
   terminal: "Terminal",

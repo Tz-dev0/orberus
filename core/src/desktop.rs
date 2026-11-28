@@ -31,11 +31,15 @@
 //!   the same switch, Claude Desktop ran twice. So before starting it on a
 //!   profile we look for a copy that already runs on that folder, and bring
 //!   it to the front instead.
-//! - **Two copies on two folders run side by side.** A switch relies on it
-//!   for a moment: the new one is started first, and the others are asked
-//!   to quit after. The other order would fail when the command is typed in
-//!   a terminal inside Claude Desktop: closing the app ends that terminal,
-//!   and this program with it, before the new one was started.
+//! - **Two copies on two folders run side by side**, each with its own icon
+//!   in the Dock. A switch does not want that: the one that is open is
+//!   asked to quit, and Claude Desktop is started on the other folder once
+//!   it is gone, so one runs at any moment. One case needs the other order:
+//!   a switch asked from inside the Claude Desktop that has to close (typed
+//!   in its terminal, or run by a Claude Code session of its Code tab).
+//!   Closing the app ends that terminal, and this program with it, before
+//!   anything was started. There, the new one is started first and two run
+//!   for a moment ([`inside`]).
 //! - **macOS can ask an app to quit, by its number**, the way its Quit menu
 //!   does, without the permission to "control" it. An idle copy was gone
 //!   one second later. The app may also ask the user something first: it
@@ -53,6 +57,7 @@
 //! Nothing here is on the shim's path: `claude` in a terminal never looks
 //! at any of this.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -290,6 +295,56 @@ pub fn running(app: &App) -> Result<Vec<Running>> {
     Ok(running_in(&listing()?, &app.executable))
 }
 
+/// True when the program numbered `from` was started by one of `pids`,
+/// directly or through other programs. `table` is what `ps` printed: one
+/// program per line, its number, then the number of the one that started it.
+fn started_by(table: &str, from: u32, pids: &[u32]) -> bool {
+    let parent: HashMap<u32, u32> = table
+        .lines()
+        .filter_map(|line| {
+            let mut numbers = line.split_whitespace();
+            // `?` inside a closure that returns an `Option`: a line that is
+            // not two numbers is skipped.
+            Some((numbers.next()?.parse().ok()?, numbers.next()?.parse().ok()?))
+        })
+        .collect();
+    let mut at = from;
+    // Programs start and stop while `ps` reads them, so nothing promises
+    // that the table has no loop: the walk up is bounded.
+    for _ in 0..64 {
+        let Some(&up) = parent.get(&at) else {
+            return false;
+        };
+        if pids.contains(&up) {
+            return true;
+        }
+        at = up;
+    }
+    false
+}
+
+/// True when this very program runs inside one of those Claude Desktops:
+/// typed in its terminal, or run by a Claude Code session of its Code tab.
+/// Such a Claude Desktop cannot be closed first: this program would end
+/// with it.
+///
+/// When `ps` cannot tell, the answer is yes. The order chosen for "inside"
+/// works everywhere; it only shows two Claude Desktops for a moment.
+fn inside(pids: &[u32]) -> bool {
+    if pids.is_empty() {
+        return false;
+    }
+    let table = Command::new("ps").args(["-axo", "pid=,ppid="]).output();
+    match table {
+        Ok(output) if output.status.success() => started_by(
+            &String::from_utf8_lossy(&output.stdout),
+            std::process::id(),
+            pids,
+        ),
+        _ => true,
+    }
+}
+
 /// Where a profile's Claude Desktop stands.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum State {
@@ -415,6 +470,16 @@ fn still_running(app: &App, pids: &[u32]) -> Vec<u32> {
     left
 }
 
+/// Asks those Claude Desktops to quit and waits for them. True when they
+/// are all gone, and at once when there is none.
+fn close(app: &App, pids: &[u32]) -> Result<bool> {
+    for pid in pids {
+        // "No such app" is fine: that one went away by itself.
+        quit(*pid)?;
+    }
+    Ok(still_running(app, pids).is_empty())
+}
+
 /// Waits for the copy on that data folder to be listed, a few seconds at
 /// most, and returns its number.
 fn started(app: &App, data: Option<&Path>) -> Option<u32> {
@@ -495,14 +560,16 @@ pub struct Switched {
 /// Rust lets us build at compile time (`Mutex::new` is a `const fn`).
 static SWITCHING: Mutex<()> = Mutex::new(());
 
-/// Puts Claude Desktop on a profile: starts it on the profile's data folder
-/// (or brings it to the front when it already runs there), then asks every
-/// other Claude Desktop to quit, so that one is left.
+/// Puts Claude Desktop on a profile, and leaves one Claude Desktop open.
 ///
-/// The new one first, the others after: the top of this file says why.
-/// Called from inside a Claude Desktop that is about to close, this
-/// program may be ended while it waits for the others to be gone. By then
-/// the new one runs and the others were asked: nothing is left half-done.
+/// When it already runs on the profile, it is brought to the front and the
+/// others are asked to quit. Otherwise the others are asked to quit first,
+/// and Claude Desktop is started on the profile's data folder once they
+/// are gone: one runs at any moment, with one icon in the Dock. Asked from
+/// [`inside`] a Claude Desktop that has to close, the order is the other
+/// one, new first: the top of this file says why. This program may then be
+/// ended while it waits for the others to be gone. By then the new one
+/// runs and the others were asked: nothing is left half-done.
 pub fn switch(env: &Env, config: &Config, name: &str) -> Result<Switched> {
     let data = data_dir(env, config, name)?;
     let Some(app) = app(env) else {
@@ -528,21 +595,49 @@ pub fn switch(env: &Env, config: &Config, name: &str) -> Result<Switched> {
         .collect();
 
     let in_front = match mine {
-        Some(pid) => show(pid)?,
+        // Already on this profile: nothing to start, so no order to choose.
+        Some(pid) => {
+            let shown = show(pid)?;
+            if !close(&app, &others)? {
+                bail!(
+                    "Claude Desktop is on profile '{name}', but the other one did not \
+                     quit: it may be asking you something. Answer it, or quit it yourself"
+                );
+            }
+            shown
+        }
         None => {
+            // Whatever can fail without touching Claude Desktop fails here,
+            // before anything is closed.
             if let Some(dir) = &data {
                 create_private(dir).with_context(|| format!("cannot create {}", dir.display()))?;
             }
             let code = config::profile_dir(env, config, name)?;
-            let status = launcher(&app, data.as_deref(), code.as_deref())
-                .status()
-                .context("cannot run `open`")?;
-            if !status.success() {
-                bail!("macOS could not open {}", app.bundle.display());
+            let mut open = launcher(&app, data.as_deref(), code.as_deref());
+
+            let close_first = !others.is_empty() && !inside(&others);
+            if close_first && !close(&app, &others)? {
+                bail!(
+                    "Claude Desktop did not quit: it may be asking you something. \
+                     Answer it, then switch again. Nothing was opened on profile '{name}'"
+                );
             }
-            // Nothing is closed before the new one is seen running: an app
-            // that failed to start must not cost the one that was open.
-            let Some(pid) = started(&app, data.as_deref()) else {
+            let opened = open.status().context("cannot run `open`")?.success();
+            // Not `started(…)` when `open` failed: there is nothing to wait for.
+            let pid = if opened {
+                started(&app, data.as_deref())
+            } else {
+                None
+            };
+            let Some(pid) = pid else {
+                if close_first {
+                    bail!(
+                        "Claude Desktop was closed, but it did not start on profile \
+                         '{name}': switch again, or open Claude Desktop yourself"
+                    );
+                }
+                // New first: an app that failed to start must not cost the
+                // one that was open.
                 bail!(
                     "Claude Desktop did not start on profile '{name}': \
                      nothing else was closed"
@@ -552,20 +647,16 @@ pub fn switch(env: &Env, config: &Config, name: &str) -> Result<Switched> {
             // behind the other windows. Bringing it forward is a courtesy:
             // it is running either way.
             let _ = show(pid);
+            if !close_first && !close(&app, &others)? {
+                bail!(
+                    "Claude Desktop is on profile '{name}', but the one that was open \
+                     did not quit: it may be asking you something. Answer it, or quit \
+                     it yourself"
+                );
+            }
             true
         }
     };
-
-    for pid in &others {
-        // "No such app" is fine: that one went away by itself.
-        quit(*pid)?;
-    }
-    if !still_running(&app, &others).is_empty() {
-        bail!(
-            "Claude Desktop is on profile '{name}', but the one that was open did not \
-             quit: it may be asking you something. Answer it, or quit it yourself"
-        );
-    }
     // Saying "brought to the front" when macOS did not do it would send
     // the user looking for a window that did not move.
     if !in_front {
@@ -829,6 +920,30 @@ mod tests {
         config.profiles.remove("perso");
         assert_eq!(owner(&env, &config, &alone[0]), None);
         assert_eq!(in_the_way(&env, &config, "work", &alone).unwrap(), [None]);
+    }
+
+    #[test]
+    fn a_program_knows_when_it_runs_inside_a_claude_desktop() {
+        // Number, then the number of the program that started it. 400 is a
+        // Claude Desktop with a shell (410) and a command in it (420); 900
+        // is a terminal of its own with a command (910).
+        let table =
+            "    1     0\n  400     1\n  410   400\n  420   410\n  900     1\n  910   900\n";
+        assert!(started_by(table, 410, &[400]));
+        assert!(started_by(table, 420, &[400]));
+        assert!(started_by(table, 420, &[777, 400]));
+        // Started from another terminal, or from the menu bar app.
+        assert!(!started_by(table, 910, &[400]));
+        assert!(!started_by(table, 420, &[900]));
+        // A program `ps` did not list, and nothing to be inside of.
+        assert!(!started_by(table, 4242, &[400]));
+        assert!(!started_by(table, 420, &[]));
+        // A table that loops is not walked forever.
+        assert!(!started_by("5 6\n6 5\n", 5, &[400]));
+        // The real table: every program descends from the first one, and
+        // with nothing to be inside of the answer needs no table.
+        assert!(inside(&[1]));
+        assert!(!inside(&[]));
     }
 
     #[test]

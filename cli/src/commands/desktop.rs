@@ -66,8 +66,8 @@ fn list(ui: &Ui, env: &Env, config: &Config) -> Result<i32> {
         ui.warning("Claude Desktop is open on no profile: a switch closes it too.");
     }
     println!("Switch with: {}", ui.command("orberus desktop <profile>"));
-    ui.detail("One Claude Desktop at a time: a switch opens it on that profile's account,");
-    ui.detail("then closes the one that was open. Each profile keeps its own sign-in.");
+    ui.detail("One Claude Desktop at a time: a switch closes it, then opens it again on");
+    ui.detail("that profile's account. Each profile keeps its own sign-in.");
     Ok(0)
 }
 
