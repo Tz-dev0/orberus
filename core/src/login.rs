@@ -3,6 +3,8 @@
 //! macOS starts, at login, every program described by a file in
 //! `~/Library/LaunchAgents`. Ours is one small file that names the app's
 //! program: writing it turns the option on, deleting it turns it off.
+//! It is on by default: the app writes the file when it starts, unless the
+//! user turned the option off.
 //! Nothing is asked of `launchctl`, which would start a second copy of the
 //! app on the spot; the file is read at the next login.
 //!
@@ -91,6 +93,41 @@ pub fn disable(env: &Env) -> Result<bool> {
     }
 }
 
+/// Where "the user turned it off" is remembered, among the app's own
+/// notes. Without it, the next start of the app would turn it on again.
+fn declined_note(env: &Env) -> PathBuf {
+    env.root.join("run").join(".login-off")
+}
+
+/// The user's choice, from the switch in the app: on or off, and
+/// remembered either way.
+pub fn set(env: &Env, program: &Path, on: bool) -> Result<()> {
+    let note = declined_note(env);
+    if on {
+        enable(env, program)?;
+        // The note may not be there: nothing to say about that.
+        let _ = fs::remove_file(&note);
+    } else {
+        disable(env)?;
+        if let Some(dir) = note.parent() {
+            fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+        }
+        fs::write(&note, "").with_context(|| format!("cannot write {}", note.display()))?;
+    }
+    Ok(())
+}
+
+/// Called when the app starts: opening at login is on unless the user
+/// turned it off. Returns true when it was just turned on. Also puts the
+/// file right after the app was moved to another folder.
+pub fn by_default(env: &Env, program: &Path) -> Result<bool> {
+    if declined_note(env).exists() || enabled(env, program) {
+        return Ok(false);
+    }
+    enable(env, program)?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,6 +168,39 @@ mod tests {
 
         assert!(disable(&env).unwrap());
         assert!(!file(&env).exists());
+    }
+
+    #[test]
+    fn it_is_on_by_default_until_the_user_turns_it_off() {
+        let (_temp, env) = world();
+        let program = env
+            .home
+            .join("Applications/Orberus.app/Contents/MacOS/orberus-app");
+        fs::create_dir_all(program.parent().unwrap()).unwrap();
+        fs::write(&program, "").unwrap();
+
+        // First start of the app: on, without being asked.
+        assert!(by_default(&env, &program).unwrap());
+        assert!(enabled(&env, &program));
+        // Nothing more to do at the next start.
+        assert!(!by_default(&env, &program).unwrap());
+
+        // Turned off by the user: it stays off, start after start.
+        set(&env, &program, false).unwrap();
+        assert!(!enabled(&env, &program));
+        assert!(!by_default(&env, &program).unwrap());
+        assert!(!file(&env).exists());
+
+        // Turned on again, then the app is moved: the file follows it.
+        set(&env, &program, true).unwrap();
+        let moved = env
+            .home
+            .join("Tools/Orberus.app/Contents/MacOS/orberus-app");
+        fs::create_dir_all(moved.parent().unwrap()).unwrap();
+        fs::write(&moved, "").unwrap();
+        assert!(!enabled(&env, &moved));
+        assert!(by_default(&env, &moved).unwrap());
+        assert!(enabled(&env, &moved));
     }
 
     #[test]

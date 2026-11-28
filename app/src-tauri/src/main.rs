@@ -441,6 +441,12 @@ fn main() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            // On by default: the app comes back at the next login unless
+            // the user turned that off in the window.
+            if let Ok(env) = Env::from_process() {
+                data::open_at_login_by_default(&env);
+            }
+
             // Right click on the icon: a one-line menu to quit.
             let quit = MenuItem::with_id(app, "quit", "Quit Orberus", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;

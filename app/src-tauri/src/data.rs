@@ -707,14 +707,20 @@ fn folder_note(env: &Env, name: &str) -> PathBuf {
     run_dir(env).join(format!("{name}.folder"))
 }
 
-/// Makes macOS open the app when the user logs in, or stops it. The app
-/// that is asked is the one that will be opened: its own program.
+/// The switch in the window: makes macOS open the app when the user logs
+/// in, or stops it. The app that is asked is the one that will be opened:
+/// its own program.
 pub fn set_open_at_login(env: &Env, on: bool) -> Result<()> {
-    if on {
-        let me = std::env::current_exe().context("cannot tell where the app is")?;
-        login::enable(env, &me)
-    } else {
-        login::disable(env).map(|_| ())
+    let me = std::env::current_exe().context("cannot tell where the app is")?;
+    login::set(env, &me, on)
+}
+
+/// At the start of the app: opening at login is on unless the user turned
+/// it off. A copy built to be tried (outside an `.app`) is refused by the
+/// core, which is fine: there is nobody to tell.
+pub fn open_at_login_by_default(env: &Env) {
+    if let Ok(me) = std::env::current_exe() {
+        let _ = login::by_default(env, &me);
     }
 }
 
