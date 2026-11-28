@@ -68,7 +68,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 
 use crate::config::{self, Config};
-use crate::paths::Env;
+use crate::paths::{create_private_dir, Env};
 use crate::uninstall::app_folders;
 
 /// What Claude Desktop calls itself in its Info.plist.
@@ -496,23 +496,6 @@ fn started(app: &App, data: Option<&Path>) -> Option<u32> {
     None
 }
 
-/// Creates a data folder that only its owner can open, as Claude Desktop
-/// does for its own.
-fn create_private(dir: &Path) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(dir)
-    }
-    #[cfg(not(unix))]
-    {
-        fs::create_dir_all(dir)
-    }
-}
-
 /// The profile a running copy is on: the one whose data folder it runs on.
 /// `None` for a copy on a folder that is no profile's, such as the Claude
 /// Desktop opened from the Dock when no profile reuses `~/.claude`.
@@ -613,7 +596,8 @@ pub fn switch(env: &Env, config: &Config, name: &str) -> Result<Switched> {
             // Whatever can fail without touching Claude Desktop fails here,
             // before anything is closed.
             if let Some(dir) = &data {
-                create_private(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+                create_private_dir(dir)
+                    .with_context(|| format!("cannot create {}", dir.display()))?;
             }
             let code = config::profile_dir(env, config, name)?;
             let mut open = launcher(&app, data.as_deref(), code.as_deref());

@@ -62,6 +62,16 @@ impl World {
             .unwrap()
     }
 
+    fn fake_codex(&self) {
+        let binary = self.home.join("real-bin/codex");
+        fs::write(
+            &binary,
+            "#!/bin/sh\n[ -z \"${CODEX_API_KEY:-}${CODEX_ACCESS_TOKEN:-}\" ] || exit 42\nprintf 'home=%s\nclaude_session=%s\n' \"${CODEX_HOME:-unset}\" \"${ORBERUS_SESSION:-unset}\"\nfor arg do printf 'arg=<%s>\n' \"$arg\"; done\n",
+        )
+        .unwrap();
+        fs::set_permissions(binary, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
     fn ok(&self, cwd: &Path, args: &[&str]) -> String {
         let output = self.orberus(cwd, args);
         assert!(
@@ -156,6 +166,148 @@ impl World {
 
 fn text(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+#[test]
+fn codex_run_uses_the_shared_rules_and_its_own_profile_directories() {
+    let world = World::new();
+    let home = &world.home;
+    world.fake_codex();
+    world.ok(home, &["add", "personal", "--native"]);
+    world.ok(home, &["add", "work", "--dir", "~/work-claude"]);
+    world.ok(
+        home,
+        &[
+            "rule",
+            "add",
+            "--git-remote",
+            "github.com/acme/*",
+            "--profile",
+            "work",
+            "--locked",
+        ],
+    );
+    let work_repo = world.repo("code/work", "git@github.com:acme/app.git");
+    let work_codex = world.root.join("codex/work");
+    let personal_codex = world.root.join("codex/personal");
+
+    let output = world
+        .command(Path::new(ORBERUS), &work_repo)
+        .args([
+            "run",
+            "--tool",
+            "codex",
+            "--",
+            "--profile",
+            "fast",
+            "hello world",
+        ])
+        .env("CODEX_HOME", home.join(".codex"))
+        .env("CODEX_API_KEY", "ambient-key")
+        .env("CODEX_ACCESS_TOKEN", "ambient-token")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{:?}", output);
+    assert_eq!(
+        text(&output),
+        format!(
+            "home={}\nclaude_session=unset\narg=<--profile>\narg=<fast>\narg=<hello world>\n",
+            work_codex.display()
+        )
+    );
+
+    let output = world.ok(home, &["run", "--tool", "codex", "--", "login", "status"]);
+    assert_eq!(
+        output,
+        format!(
+            "home={}\nclaude_session=unset\narg=<login>\narg=<status>\n",
+            personal_codex.display()
+        )
+    );
+    assert_eq!(
+        fs::metadata(&work_codex).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    assert!(personal_codex.is_dir());
+    assert!(!home.join(".codex").exists());
+    assert!(!world.root.join("bin/codex").exists());
+
+    let output = world.orberus(
+        &work_repo,
+        &[
+            "run",
+            "--tool",
+            "codex",
+            "--profile",
+            "personal",
+            "--",
+            "login",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert!(text(&output).is_empty(), "codex must not start");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("locked to profile 'work'"));
+
+    let output = world.ok(&work_repo, &["run", "--", "--resume"]);
+    assert_eq!(
+        output,
+        format!(
+            "dir={}\nsession=work\nargs=--resume\n",
+            home.join("work-claude").display()
+        )
+    );
+}
+
+#[test]
+fn codex_run_without_a_profile_keeps_the_existing_codex_home() {
+    let world = World::new();
+    world.fake_codex();
+    let existing = world.home.join("existing-codex");
+    let output = world
+        .command(Path::new(ORBERUS), &world.home)
+        .args(["run", "--tool", "codex", "--", "--version"])
+        .env("CODEX_HOME", &existing)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{:?}", output);
+    assert_eq!(
+        text(&output),
+        format!(
+            "home={}\nclaude_session=unset\narg=<--version>\n",
+            existing.display()
+        )
+    );
+    assert!(!world.root.join("codex").exists());
+}
+
+#[test]
+fn codex_run_uses_the_configured_binary_and_keeps_case_variants_separate() {
+    let world = World::new();
+    world.fake_codex();
+    let binary = world.home.join("real-bin/codex-custom");
+    fs::rename(world.home.join("real-bin/codex"), &binary).unwrap();
+    fs::create_dir_all(&world.root).unwrap();
+    fs::write(
+        world.root.join("config.toml"),
+        "codex_bin = '~/real-bin/codex-custom'\n[profiles.work]\n[profiles.Work]\n",
+    )
+    .unwrap();
+
+    for (name, folder) in [("work", "work"), ("Work", "~work")] {
+        let output = world
+            .command(Path::new(ORBERUS), &world.home)
+            .args(["run", "--tool", "codex", "-p", name])
+            .env("ORBERUS_HOME", ".orberus")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{:?}", output);
+        let expected = world.root.join("codex").join(folder);
+        assert!(expected.is_dir());
+        assert_eq!(
+            text(&output),
+            format!("home={}\nclaude_session=unset\n", expected.display())
+        );
+    }
 }
 
 #[test]

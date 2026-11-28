@@ -20,6 +20,9 @@ pub struct Config {
     /// Path of the real `claude` binary. Found in PATH when not set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_bin: Option<String>,
+    /// Path of the real `codex` binary. Found in PATH when not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_bin: Option<String>,
     /// Hides the one-line notice the shim prints in a terminal.
     #[serde(default, skip_serializing_if = "is_false")]
     pub quiet: bool,

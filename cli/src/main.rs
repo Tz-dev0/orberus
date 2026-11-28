@@ -12,7 +12,7 @@ use std::ffi::OsString;
 use std::process::ExitCode;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use orberus_core::config;
 use orberus_core::paths::Env;
@@ -56,6 +56,12 @@ struct Cli {
     // `Option`: with no subcommand we show an overview instead of an error.
     #[command(subcommand)]
     command: Option<Command>,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum RunTool {
+    Claude,
+    Codex,
 }
 
 #[derive(Subcommand)]
@@ -160,11 +166,14 @@ enum Command {
         #[arg(long, short)]
         profile: Option<String>,
     },
-    /// Start Claude Code, optionally forcing a profile
+    /// Start Claude Code or Codex CLI, optionally choosing a profile
     Run {
+        /// Tool to start
+        #[arg(long, value_enum, default_value = "claude")]
+        tool: RunTool,
         #[arg(long, short)]
         profile: Option<String>,
-        /// Arguments passed to claude, after `--`
+        /// Arguments passed to the selected tool, after `--`
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
@@ -311,9 +320,17 @@ fn cli() -> Result<i32> {
         Command::Default { name } => set_default(&ui, &env, name),
         Command::Use { name } => pin(&ui, &env, name),
         Command::Status { profile } => status(&ui, &env, profile),
-        Command::Run { profile, args } => {
+        Command::Run {
+            tool,
+            profile,
+            args,
+        } => {
+            let tool = match tool {
+                RunTool::Claude => &tool::CLAUDE,
+                RunTool::Codex => &tool::CODEX,
+            };
             let loaded = config::load(&env)?;
-            run_tool(&tool::CLAUDE, &env, &loaded, profile, args)
+            run_tool(tool, &env, &loaded, profile, args)
         }
         Command::Rule { command } => match command {
             RuleCommand::Add {

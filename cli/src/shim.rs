@@ -112,7 +112,7 @@ fn start(
     let Some(found) = resolve::resolve(env, loaded, &cwd, explicit.as_deref())? else {
         return launch::launch(tool, &real, Target::Passthrough, args);
     };
-    let dir = config::profile_dir(env, &loaded.config, &found.profile)?;
+    let dir = tool.profile_dir(env, &loaded.config, &found.profile)?;
     if !loaded.config.quiet && std::io::stderr().is_terminal() {
         let notice = format!("orberus: {} ({})", found.profile, found.reason.describe());
         eprintln!("{}", ui::paint_stderr(&notice, Style::Dim));

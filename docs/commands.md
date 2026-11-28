@@ -330,11 +330,12 @@ Pins the current folder, and everything below it, to a profile. It writes a
 ## run
 
 ```sh
-orberus run [--profile <name>] [-- <arguments for claude>]
+orberus run [--tool claude|codex] [--profile <name>] [-- <tool arguments>]
 ```
 
-Starts Claude Code. With `--profile`, it forces that profile, unless a locked
-rule covers the folder. Typing `claude` does the same as `orberus run`.
+Starts Claude Code by default. With `--profile`, it picks that profile unless
+a locked rule covers the folder. With the Claude shim installed, typing
+`claude` uses the same folder rules.
 
 ```sh
 orberus run --profile work              # typically to /login the first time
@@ -342,6 +343,34 @@ orberus run --profile work -- --resume  # what follows -- goes to claude
 ```
 
 `ORBERUS_PROFILE=work claude` is the same explicit choice, for scripts.
+
+### Codex CLI
+
+Install Codex CLI and run these commands from the project folder.
+
+```sh
+orberus run --tool codex --profile work -- login  # sign in once for work
+orberus run --tool codex -- login status         # check the selected profile
+orberus run --tool codex                         # use the folder's rules
+```
+
+Orberus selects the profile from the shell's current directory. Change to
+the project folder before launching so the rules see that folder. Arguments
+after `--`, including Codex's own `--profile` and `--cd`, go directly to Codex.
+If no Orberus profile applies, Codex uses its usual environment.
+
+For a selected profile, Orberus sets `CODEX_HOME` to a private directory
+under `~/.orberus/codex/`. Codex uses this directory for its settings and to
+scope its saved login.
+Claude's `--native` and `--dir` options apply to Claude Code. A managed Codex
+launch drops inherited `CODEX_API_KEY` and `CODEX_ACCESS_TOKEN` so these
+process-level credentials cannot replace the profile's login. Sign in and
+out using Codex's `login` and `logout` commands through the same profile.
+
+Orberus finds `codex` on `PATH`. To select a specific binary, set the
+optional `codex_bin` path in `~/.orberus/config.toml`. `orberus remove` keeps
+the profile's Codex directory, including when purging its Claude data.
+`orberus uninstall --purge` removes the Orberus data directory as a whole.
 
 ## rule
 
