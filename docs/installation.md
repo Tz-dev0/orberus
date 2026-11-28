@@ -70,6 +70,10 @@ open "/Applications/Orberus.app"
 
 The app is not signed either, so the same remark about `curl` applies.
 
+From then on the app opens by itself each time you log in, and macOS may tell
+you a background item was added. To stop that, turn off "Start Orberus with
+my Mac" at the bottom of its window. See [app.md](app.md#opening-it).
+
 ## Update
 
 Run the install commands again. For the app, quit it first (right-click its
@@ -85,8 +89,9 @@ orberus uninstall
 
 It removes the shim, the `PATH` line that `setup` added to your shell config,
 the setting that `orberus ide on` wrote in your editors, `orberus` itself and
-the menu bar app (moved to the Trash), after showing you the list and asking. Open a new terminal afterwards: `claude` is the real
-Claude Code again.
+the menu bar app (moved to the Trash, with the file that opens it when you
+log in), after showing you the list and asking. Open a new terminal
+afterwards: `claude` is the real Claude Code again.
 
 Your profiles are kept in `~/.orberus`: the config, the rules and the
 Claude Code folder of each profile, with its login and history. To delete
