@@ -1359,8 +1359,23 @@ function menuSwitch(label: string, hint: string, on: boolean, action: () => Prom
   return item;
 }
 
+// The version to update to, once GitHub has answered; null when this one
+// is the latest, or when nothing is known.
+let newVersion: string | null = null;
+
+/** The line that says a later release exists. It opens the page that
+ *  explains the update: the app does not replace itself. */
+function updateItem(version: string): HTMLElement {
+  const item = keyed(el("button", "menu-item menu-update"), "update");
+  item.title = t("updateHint", { version });
+  item.append(el("span", "", t("updateAvailable", { version })), el("span", "update-badge", t("updateNew")));
+  onClick(item, () => api.openUpdatePage());
+  return item;
+}
+
 function menu(overview: Overview | null): HTMLElement {
   const footer = el("footer");
+  if (newVersion) footer.append(updateItem(newVersion));
   if (overview) {
     const on = overview.openAtLogin;
     footer.append(menuSwitch(t("openAtLogin"), t("openAtLoginHint"), on, () => api.setOpenAtLogin(!on)));
@@ -1517,6 +1532,18 @@ async function refresh(): Promise<void> {
     // Keep the last list.
   }
   // Measuring reads whole folders: the list above does not wait for it.
+  // Meanwhile, is there a newer release? Not awaited: the answer can take
+  // seconds on a slow network, and the measures do not depend on it.
+  void api
+    .update()
+    .then((version) => {
+      if (version === newVersion) return;
+      newVersion = version;
+      if (!adding && !removing && !ruleDraft) render(overview);
+    })
+    .catch(() => {
+      // No answer is not worth a message.
+    });
   try {
     const measured = await api.storage();
     const changed = JSON.stringify(measured) !== JSON.stringify(storage);

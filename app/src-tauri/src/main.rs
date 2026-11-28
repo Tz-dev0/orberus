@@ -281,6 +281,19 @@ fn set_open_at_login(on: bool) -> Result<(), String> {
     run(|env| data::set_open_at_login(env, on))
 }
 
+/// `async`: the answer may come from GitHub, which takes a moment.
+#[tauri::command]
+async fn update() -> Result<Option<String>, String> {
+    run(|env| Ok(data::update(env)))
+}
+
+/// Opens the page that says how to update, in the browser. The address is
+/// ours: the page never gets to choose what is opened.
+#[tauri::command]
+fn open_update_page() -> Result<(), String> {
+    open(&[orberus_core::update::HOW_TO.as_ref()]).map_err(|error| format!("{error:#}"))
+}
+
 /// Opens `config.toml` in the default text editor.
 #[tauri::command]
 fn open_config() -> Result<(), String> {
@@ -429,6 +442,8 @@ fn main() {
             editors,
             set_editor,
             set_open_at_login,
+            update,
+            open_update_page,
             open_claude,
             open_config,
             set_quit_label,

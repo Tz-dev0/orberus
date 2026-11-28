@@ -25,6 +25,18 @@ whether the app is open or not, and quitting it turns nothing off.
 On a Mac with a notch, macOS can hide the icon when the menu bar is full.
 Opening the app again from the Finder or Spotlight shows the window.
 
+## Updates
+
+Once a day, the app looks on GitHub for a release later than itself. When
+there is one, a line "Update to Orberus 0.2.0…" appears at the bottom of the
+window; it opens [the page that says how to update](installation.md#update).
+The app does not replace itself, and the command is updated the same way.
+
+That check is the only time the app uses the network: one request to
+`github.com`, for the address of the latest release of this repository.
+Nothing about you or your profiles is in it. Without network there is simply
+no line. The `claude` shim never does this: it makes no network request.
+
 ## What it shows
 
 - **Profiles**: each profile with a coloured dot, filled when an account is
@@ -68,6 +80,7 @@ Opening the app again from the Finder or Spotlight shows the window.
 | Change how long conversations are kept | Unfold "Conversations kept": 30 days, 90 days, 1 year, or a number of days |
 | Move big conversations to the Trash | Unfold "Storage", click a profile, then the bin icon of a conversation and "Move to Trash" |
 | Pick the account by folder in an editor | Unfold "Editors" and click "Turn on" next to it: the same as [`orberus ide on`](editors.md) for that editor. "Turn off" undoes it. Reload the editor's window afterwards |
+| Update | When "Update to Orberus …" shows at the bottom of the window, click it: it opens the page that says how |
 | Stop the app from opening when you log in | Turn off "Start Orberus with my Mac" at the bottom of the window. Click it again to turn it back on |
 | Choose the terminal app | Unfold "Terminal" and click one. "System default" is the app macOS opens `.command` files with, usually Terminal |
 | Open the config file | ⌘, |

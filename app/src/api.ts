@@ -264,6 +264,10 @@ export interface Api {
   editors(): Promise<Editor[]>;
   /** Sends an editor's extension through Orberus, or back. */
   setEditor(settings: string, on: boolean): Promise<void>;
+  /** The version to update to, or null. GitHub is asked at most once a day. */
+  update(): Promise<string | null>;
+  /** Opens the page that says how to update. */
+  openUpdatePage(): Promise<void>;
   /** Opens the app when the user logs in, or stops doing so. */
   setOpenAtLogin(on: boolean): Promise<void>;
   openConfig(): Promise<void>;
@@ -303,6 +307,8 @@ const tauri: Api = {
   editors: () => invoke<Editor[]>("editors"),
   setEditor: (settings, on) => invoke("set_editor", { settings, on }),
   setOpenAtLogin: (on) => invoke("set_open_at_login", { on }),
+  update: () => invoke<string | null>("update"),
+  openUpdatePage: () => invoke("open_update_page"),
   openConfig: () => invoke("open_config"),
   fit: (height) => invoke("fit", { height }),
   hide: () => invoke("hide"),
@@ -565,6 +571,9 @@ function preview(): Api {
     setOpenAtLogin: async (on) => {
       state.openAtLogin = on;
     },
+    // No notice in the preview, unless asked for: `?update` in the address.
+    update: async () => (new URLSearchParams(location.search).has("update") ? "0.2.0" : null),
+    openUpdatePage: async () => {},
     setQuitLabel: async () => {},
     openConfig: async () => {},
     fit: async () => {},
