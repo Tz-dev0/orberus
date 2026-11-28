@@ -22,13 +22,14 @@ def platforms(theme):
         dict(text="#f2f2f3", muted="#9a9aa0", line="#3a3a3f", panel="#1f1f22", faint="#6e6e74")
     W, H = 840, 244
     out = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" '
-           'aria-label="Works today: Claude Code, on macOS. Coming next: Codex, Claude Desktop profiles, Windows.">' % (W, H, W, H),
+           'aria-label="Works today: Claude Code and Claude Desktop (account switch, first version), on macOS. Coming next: Codex, Windows.">' % (W, H, W, H),
            '<rect x="0.5" y="0.5" width="%d" height="%d" rx="14" fill="%s" stroke="%s"/>' % (W - 1, H - 1, c["panel"], c["line"]),
            '<g font-family="%s">' % SANS]
-    today_x, next_x = 130, 400
+    # Two columns of tiles work today, one is to come.
+    today_x, today2_x, next_x = 112, 340, 608
     out.append('<text x="%d" y="38" font-size="13" font-weight="600" fill="%s">Works today</text>' % (today_x, c["muted"]))
     out.append('<text x="%d" y="38" font-size="13" font-weight="600" fill="%s">Coming next</text>' % (next_x, c["muted"]))
-    out.append('<line x1="%d" y1="24" x2="%d" y2="%d" stroke="%s" stroke-dasharray="2 5" stroke-linecap="round"/>' % (next_x - 28, next_x - 28, H - 24, c["line"]))
+    out.append('<line x1="%d" y1="24" x2="%d" y2="%d" stroke="%s" stroke-dasharray="2 5" stroke-linecap="round"/>' % (next_x - 24, next_x - 24, H - 24, c["line"]))
 
     # Works today: the logo on a solid tile. Coming: a dashed, empty tile
     # with the logo dimmed, the way the app draws a profile nobody is
@@ -48,10 +49,10 @@ def platforms(theme):
 
     rows = [
         ("Tools", 88, [(today_x, "claude", True, "Claude Code", "accounts chosen by folder"),
-                       (next_x, "openai", False, "Codex", "same profiles and rules"),
-                       (next_x + 215, "claude", False, "Claude Desktop", "an account per profile")]),
+                       (today2_x, "claude", True, "Claude Desktop", "account switch, first version"),
+                       (next_x, "openai", False, "Codex", "same profiles and rules")]),
         ("Systems", 178, [(today_x, "apple", True, "macOS", "Apple Silicon and Intel"),
-                          (next_x, "windows", False, "Windows", "the command already builds there")]),
+                          (next_x, "windows", False, "Windows", "the command builds there")]),
     ]
     for label, y, items in rows:
         out.append('<text x="32" y="%d" font-size="14" font-weight="600" fill="%s">%s</text>' % (y + 5, c["text"], label))

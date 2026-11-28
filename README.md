@@ -31,21 +31,23 @@ and a locked rule refuses the wrong one.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/platforms-dark.svg">
-    <img src="docs/images/platforms-light.svg" width="840" alt="Works today: Claude Code, on macOS (Apple Silicon and Intel). Coming next: Codex, Claude Desktop profiles, and Windows.">
+    <img src="docs/images/platforms-light.svg" width="840" alt="Works today: Claude Code and Claude Desktop (account switch, first version), on macOS (Apple Silicon and Intel). Coming next: Codex and Windows.">
   </picture>
 </p>
 
 A solid tile works today; a dashed one is planned, with no date yet. The
 logos belong to their owners and only say what Orberus works with.
 
-- **Claude Code on macOS** is what Orberus handles now.
+- **Claude Code on macOS** is what Orberus was made for: the account is
+  picked by the folder you start `claude` in.
+- **Claude Desktop**: `orberus desktop` and the menu bar app switch it from
+  one profile's account to another, by closing it and opening it again on
+  that profile's own data. This is a first version: switching away from a
+  Claude Desktop in daily use, and back, works; signing in on a second data
+  folder was not tried yet. Orberus also reads the plan usage Claude Desktop
+  notes, for the limits. See [docs/desktop.md](docs/desktop.md).
 - **Codex** is the next tool: the same profiles and the same rules would pick
   its account too. Nothing of it is in the releases yet.
-- **Claude Desktop**: Orberus reads the plan usage it notes, for the limits.
-  Switching it from one profile's account to another is a first version, so
-  its tile stays dashed: switching away from a Claude Desktop in daily use,
-  and back, works; signing in on a second data folder was not tried yet. See
-  [docs/desktop.md](docs/desktop.md).
 - **Windows**: the command builds and passes its tests there, but it was
   never tried in front of a real Claude Code. Not supported yet.
 
