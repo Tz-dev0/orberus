@@ -210,6 +210,25 @@ const en = {
   editorTurnOff: "Turn off",
   editorTurnOffHint: "Removes that setting from this editor's settings file",
   editorsNote: "Reload the editor's window after a change.",
+  desktop: "Claude Desktop",
+  desktopHint:
+    "Claude Desktop holds one account at a time. Here each profile has its own Claude Desktop, signed in on its own, so two accounts can stay open side by side.\nThis is not a feature of Claude Desktop itself: Orberus starts the app on a separate data folder for each profile",
+  desktopIdle: "One per profile",
+  desktopOpenOne: "1 open",
+  desktopOpenMany: "{n} open",
+  desktopStateOpen: "open",
+  desktopStateNew: "not opened yet",
+  desktopOpen: "Open",
+  desktopOpenHint: "Starts this profile's Claude Desktop",
+  desktopShow: "Show",
+  desktopShowHint: "Brings this profile's Claude Desktop to the front",
+  desktopOpening: "Opening…",
+  desktopUsualHint: "Claude Desktop as it already is on this Mac, with its usual sign-in.\n{data}",
+  desktopCopyHint:
+    "A Claude Desktop for this profile only, with its own sign-in. Its Code tab uses this profile's Claude Code folder.\n{data}",
+  desktopNewHint:
+    "First time: sign in there with this profile's account. If you sign in through your browser, quit the other Claude Desktop windows first.",
+  desktopNote: "All are named “Claude” in the Dock: pick the right one here.",
 
   // Terminal
   terminal: "Terminal",
@@ -453,6 +472,25 @@ const fr: Record<Key, string> = {
   editorTurnOff: "Désactiver",
   editorTurnOffHint: "Retire ce réglage du fichier de réglages de cet éditeur",
   editorsNote: "Rechargez la fenêtre de l'éditeur après un changement.",
+  desktop: "Claude Desktop",
+  desktopHint:
+    "Claude Desktop ne garde qu'un compte à la fois. Ici chaque profil a son propre Claude Desktop, connecté de son côté : deux comptes peuvent rester ouverts côte à côte.\nCe n'est pas une fonction de Claude Desktop : Orberus lance l'app sur un dossier de données séparé pour chaque profil",
+  desktopIdle: "Un par profil",
+  desktopOpenOne: "1 ouvert",
+  desktopOpenMany: "{n} ouverts",
+  desktopStateOpen: "ouvert",
+  desktopStateNew: "jamais ouvert",
+  desktopOpen: "Ouvrir",
+  desktopOpenHint: "Lance le Claude Desktop de ce profil",
+  desktopShow: "Afficher",
+  desktopShowHint: "Ramène le Claude Desktop de ce profil au premier plan",
+  desktopOpening: "Ouverture…",
+  desktopUsualHint: "Claude Desktop tel qu'il est déjà sur ce Mac, avec sa connexion habituelle.\n{data}",
+  desktopCopyHint:
+    "Un Claude Desktop pour ce profil seulement, avec sa propre connexion. Son onglet Code utilise le dossier Claude Code de ce profil.\n{data}",
+  desktopNewHint:
+    "Première fois : connectez-vous-y avec le compte de ce profil. Si vous passez par le navigateur, quittez d'abord les autres fenêtres Claude Desktop.",
+  desktopNote: "Tous s'appellent « Claude » dans le Dock : choisissez le bon ici.",
 
   terminal: "Terminal",
   terminalHint: "L'app dans laquelle le bouton « Ouvrir… » d'un profil lance Claude Code",

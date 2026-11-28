@@ -3,8 +3,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use orberus_core::config;
+use orberus_core::desktop;
 use orberus_core::ide::{self, State};
 use orberus_core::limits;
 use orberus_core::login;
@@ -35,6 +36,15 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
     // Checked before anything is printed, so a refusal comes first.
     if purge {
         uninstall::data_folder(env)?;
+        // A Claude Desktop that is open would keep writing in a folder
+        // that is about to go.
+        let open = desktop::open_copies(env)?;
+        if !open.is_empty() {
+            bail!(
+                "Claude Desktop is open on profile {}: quit it, then try again",
+                open.join(", ")
+            );
+        }
     }
 
     // Say what will happen before asking.
@@ -86,7 +96,11 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
                 short_path(env, dir)
             ));
         }
-        ui.detail("~/.claude is not touched. This cannot be undone");
+        // The first folder is Claude Desktop's own, which is not ours.
+        if desktop::data_dirs(env).len() > 1 {
+            ui.warning("the data and sign-in of each profile's own Claude Desktop go with it");
+        }
+        ui.detail("~/.claude and Claude Desktop's own data are not touched. This cannot be undone");
     } else {
         ui.detail(&format!(
             "kept: your profiles and rules, in {} (to delete them too: --purge)",

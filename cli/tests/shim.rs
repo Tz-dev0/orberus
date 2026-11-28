@@ -539,6 +539,52 @@ fn uninstall_removes_the_shim_and_the_path_line_but_keeps_the_profiles() {
 }
 
 #[test]
+fn each_profile_has_its_claude_desktop_and_a_purge_deletes_its_data() {
+    let world = World::new();
+    let home = world.home.clone();
+    assert!(world.ok(&home, &["desktop"]).contains("No profile yet"));
+    world.ok(&home, &["add", "perso", "--native"]);
+    world.ok(&home, &["add", "work"]);
+
+    // This world's Applications folder has no Claude Desktop: the profiles
+    // are listed all the same, and opening one says why it cannot.
+    let listed = world.ok(&home, &["desktop"]);
+    assert!(
+        listed.contains("~/Library/Application Support/Claude (Claude Desktop's own)"),
+        "{listed}"
+    );
+    assert!(listed.contains("~/.orberus/desktop/work"), "{listed}");
+    assert!(listed.contains("not opened yet"), "{listed}");
+    let error = refused(&world, &home, &["desktop", "work"]);
+    assert!(error.contains("Claude Desktop was not found"), "{error}");
+    let error = refused(&world, &home, &["desktop", "nobody"]);
+    assert!(error.contains("unknown profile"), "{error}");
+    assert!(!world.root.join("desktop").exists(), "nothing is created");
+
+    // As after a first opening: each copy has its data folder.
+    let data = world.root.join("desktop/work");
+    fs::create_dir_all(&data).unwrap();
+    fs::write(data.join("Cookies"), "").unwrap();
+    let usual = home.join("Library/Application Support/Claude");
+    fs::create_dir_all(&usual).unwrap();
+    assert!(world.ok(&home, &["desktop"]).contains("closed"));
+
+    // Removing the profile keeps that data, as it keeps its Claude Code
+    // folder: a profile of the same name finds both again.
+    world.ok(&home, &["remove", "work", "--yes"]);
+    assert!(data.join("Cookies").is_file());
+    world.ok(&home, &["add", "work"]);
+
+    let done = world.ok(&home, &["remove", "work", "--purge", "--yes"]);
+    assert!(
+        done.contains("deleted the data of its Claude Desktop"),
+        "{done}"
+    );
+    assert!(!data.exists(), "the copy's data must be deleted");
+    assert!(usual.is_dir(), "Claude Desktop's own data is never ours");
+}
+
+#[test]
 fn uninstall_purge_deletes_the_profiles_but_never_the_native_folder() {
     let world = World::new();
     let home = world.home.clone();

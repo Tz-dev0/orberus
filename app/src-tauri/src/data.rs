@@ -17,6 +17,7 @@ use anyhow::{bail, Context, Result};
 use serde::Serialize;
 
 use orberus_core::config::{self, RuleSource};
+use orberus_core::desktop::{self, Running};
 use orberus_core::disk;
 use orberus_core::ide::{self, State};
 use orberus_core::limits::{self, Capture, Source};
@@ -841,6 +842,68 @@ pub fn set_editor(env: &Env, settings: &str, on: bool) -> Result<()> {
     Ok(())
 }
 
+/// One profile's Claude Desktop, for the "Claude Desktop" section.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopView {
+    pub profile: String,
+    /// `open`: its copy is running. `closed`: it was opened before. `new`:
+    /// never opened, so nobody signed in there yet.
+    pub state: &'static str,
+    /// True for the profile that reuses `~/.claude`: it has Claude Desktop
+    /// as it already was on this Mac, not a copy of its own.
+    pub usual: bool,
+    /// Where that Claude Desktop keeps its data, shortened to read.
+    pub data: String,
+}
+
+/// Every profile's Claude Desktop and where it stands. Empty when Claude
+/// Desktop is not installed: the page then has no section for it.
+pub fn desktop(env: &Env) -> Result<Vec<DesktopView>> {
+    let Some(app) = desktop::app(env) else {
+        return Ok(Vec::new());
+    };
+    // A list that cannot be read only costs the "open" marks.
+    desktop_views(env, &desktop::running(&app).unwrap_or_default())
+}
+
+/// The same, given the copies of Claude Desktop that are running.
+fn desktop_views(env: &Env, copies: &[Running]) -> Result<Vec<DesktopView>> {
+    let config = config::load(env)?.config;
+    config
+        .profiles
+        .keys()
+        .map(|name| {
+            let state = match desktop::state(env, &config, name, copies)? {
+                desktop::State::Open(_) => "open",
+                desktop::State::Closed => "closed",
+                desktop::State::New => "new",
+            };
+            let data = desktop::data_dir(env, &config, name)?;
+            Ok(DesktopView {
+                profile: name.clone(),
+                state,
+                usual: data.is_none(),
+                data: view::short_path(
+                    env,
+                    &data.unwrap_or_else(|| desktop::default_data_dir(env)),
+                ),
+            })
+        })
+        .collect()
+}
+
+/// Opens Claude Desktop on a profile, like `orberus desktop <profile>`:
+/// its copy is started, or brought to the front when it already runs.
+/// Returns `started` or `shown`.
+pub fn open_desktop(env: &Env, profile: &str) -> Result<&'static str> {
+    let config = config::load(env)?.config;
+    Ok(match desktop::open(env, &config, profile)? {
+        desktop::Opened::Started => "started",
+        desktop::Opened::Shown => "shown",
+    })
+}
+
 /// Where the chosen terminal app is remembered. The name starts with a dot,
 /// which no profile name can, so it never clashes with a profile's files.
 fn terminal_note(env: &Env) -> PathBuf {
@@ -1090,7 +1153,7 @@ mod tests {
             r#"{"oauthAccount": {"emailAddress": "me@acme.test", "organizationUuid": "acme"}}"#,
         )
         .unwrap();
-        let history = orberus_core::desktop::history_file(&env);
+        let history = orberus_core::desktop_usage::history_file(&env);
         fs::create_dir_all(history.parent().unwrap()).unwrap();
         fs::write(
             &history,
@@ -1513,6 +1576,33 @@ mod tests {
         assert!(write_launcher(&env, "work", &project).is_err());
         assert!(write_launcher(&env, "nobody", &env.home).is_err());
         assert!(write_launcher(&env, "work; rm -rf ~", &env.home).is_err());
+    }
+
+    #[test]
+    fn each_profile_has_its_claude_desktop_and_the_native_one_keeps_the_usual() {
+        let (_temp, env) = world();
+        // Opened once: its data folder is there.
+        fs::create_dir_all(env.root.join("desktop/work")).unwrap();
+
+        let found = desktop_views(&env, &[]).unwrap();
+        let seen: Vec<(&str, &str, bool, &str)> = found
+            .iter()
+            .map(|copy| {
+                (
+                    copy.profile.as_str(),
+                    copy.state,
+                    copy.usual,
+                    copy.data.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            seen,
+            [
+                ("perso", "new", true, "~/Library/Application Support/Claude"),
+                ("work", "closed", false, "~/.orberus/desktop/work"),
+            ]
+        );
     }
 
     #[cfg(unix)]

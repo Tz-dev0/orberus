@@ -2,6 +2,7 @@
 //! they share: asking for a missing argument and a few table cells.
 
 pub(crate) mod clean;
+pub(crate) mod desktop;
 pub(crate) mod disk;
 pub(crate) mod doctor;
 pub(crate) mod ide;

@@ -1,5 +1,6 @@
-//! Deleting what a profile leaves on the machine: its Claude Code folder
-//! and, on macOS, its login in the keychain.
+//! Deleting what a profile leaves on the machine: its Claude Code folder,
+//! on macOS its login in the keychain, and the data of its own copy of
+//! Claude Desktop when it had one.
 //!
 //! This is the one place that destroys data, and only on request
 //! (`orberus remove --purge`, or the checkbox in the menu bar app). It is
@@ -24,6 +25,9 @@ pub struct Purged {
     pub login: bool,
     /// How many of the user's rules went with the profile.
     pub rules: usize,
+    /// True when the profile had its own Claude Desktop, whose data folder
+    /// (and so its sign-in there) was deleted.
+    pub desktop: bool,
 }
 
 /// The folder a purge of this profile would delete, or why it must not be.
@@ -103,13 +107,16 @@ pub fn forget_login(dir: &Path) -> Result<bool> {
     }
 }
 
-/// Removes a profile and everything it left: its login in the keychain, its
-/// Claude Code folder, then its entry and rules in the config.
+/// Removes a profile and everything it left: the data of its Claude
+/// Desktop, its login in the keychain, its Claude Code folder, then its
+/// entry and rules in the config.
 ///
 /// The order matters: if a step fails, the ones after it have not run, and
-/// the profile is still in the config to try again.
+/// the profile is still in the config to try again. Claude Desktop comes
+/// first because it is the step that can refuse: a copy that is open.
 pub fn purge_profile(env: &Env, config: &mut Config, name: &str) -> Result<Purged> {
     let folder = folder(env, config, name)?;
+    let desktop = crate::desktop::forget(env, config, name)?;
     let login = forget_login(&folder)?;
     if folder.exists() {
         fs::remove_dir_all(&folder)
@@ -120,5 +127,6 @@ pub fn purge_profile(env: &Env, config: &mut Config, name: &str) -> Result<Purge
         folder,
         login,
         rules,
+        desktop,
     })
 }
