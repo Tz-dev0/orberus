@@ -75,10 +75,11 @@ impl RunTool {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Install a tool shim and put it in your PATH
+    /// Install the Claude shim and the Codex shim when Codex is available
     Setup {
-        #[arg(long, value_enum, default_value = "claude")]
-        tool: RunTool,
+        /// Install the shim for only this tool
+        #[arg(long, value_enum)]
+        tool: Option<RunTool>,
     },
     /// Create a profile (one profile = one Claude account)
     Add {
@@ -306,7 +307,7 @@ fn cli() -> Result<i32> {
         return overview(&ui, &env);
     };
     match command {
-        Command::Setup { tool } => setup(&ui, &env, tool.tool()),
+        Command::Setup { tool } => setup(&ui, &env, tool.map(RunTool::tool)),
         Command::Add {
             name,
             native,

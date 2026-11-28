@@ -281,15 +281,35 @@ fn codex_run_without_a_profile_keeps_the_existing_codex_home() {
 }
 
 #[test]
-fn codex_shim_is_opt_in_and_uses_the_requested_directory() {
+fn setup_detects_codex_when_available_and_accepts_a_targeted_tool() {
+    let world = World::new();
+    let codex = world.root.join("bin/codex");
+    let claude = world.root.join("bin/claude");
+    world.ok(&world.home, &["setup"]);
+    assert!(claude.is_symlink());
+    assert!(!codex.is_symlink());
+    assert!(refused(&world, &world.home, &["setup", "--tool", "codex"])
+        .contains("cannot find the real `codex`"));
+
+    world.fake_codex();
+    world.ok(&world.home, &["setup", "--tool", "claude"]);
+    assert!(!codex.is_symlink());
+    world.ok(&world.home, &["setup"]);
+    assert!(claude.is_symlink());
+    assert!(codex.is_symlink());
+    world.ok(&world.home, &["setup"]);
+    assert!(codex.is_symlink());
+}
+
+#[test]
+fn codex_shim_uses_the_requested_directory() {
     let world = World::new();
     let home = &world.home;
     world.fake_codex();
-    world.ok(home, &["setup"]);
     let shim = world.root.join("bin/codex");
-    assert!(!shim.exists());
     world.ok(home, &["setup", "--tool", "codex"]);
     assert!(shim.is_symlink());
+    assert!(!world.root.join("bin/claude").is_symlink());
     world.ok(home, &["add", "personal"]);
     world.ok(home, &["add", "work"]);
     assert!(world
@@ -361,6 +381,9 @@ fn setup_and_uninstall_leave_an_unrelated_codex_in_the_shim_directory() {
     assert!(
         refused(&world, &world.home, &["setup", "--tool", "codex"]).contains("refusing to replace")
     );
+    let automatic = world.ok(&world.home, &["setup"]);
+    assert!(automatic.contains("refusing to replace"), "{automatic}");
+    assert!(world.root.join("bin/claude").is_symlink());
     world.ok(&world.home, &["uninstall", "--yes"]);
     assert_eq!(fs::read_to_string(shim).unwrap(), "not an Orberus shim");
 }
@@ -378,6 +401,8 @@ fn codex_run_uses_the_configured_binary_and_keeps_case_variants_separate() {
     )
     .unwrap();
 
+    world.ok(&world.home, &["setup"]);
+    assert!(world.root.join("bin/codex").is_symlink());
     for (name, folder) in [("work", "work"), ("Work", "~work")] {
         let output = world
             .command(Path::new(ORBERUS), &world.home)

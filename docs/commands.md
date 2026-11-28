@@ -22,18 +22,19 @@ The outputs below are shortened examples.
 orberus setup [--tool claude|codex]
 ```
 
-Installs the `claude` shim in `~/.orberus/bin` and offers to add that
-folder to your `PATH` (zsh and bash). Safe to run again, for instance after
-an update.
+Installs the `claude` shim and adds the `codex` shim when the real Codex CLI
+is available. The shims live in `~/.orberus/bin`. Setup offers to add that
+folder to your `PATH` (zsh and bash). Safe to run again after an update.
 
 It also installs the wrapper that editor extensions can start,
 `~/.orberus/ide/claude-wrapper`. Nothing uses it until you run
 [`orberus ide on`](#ide).
 
-Run `orberus setup --tool codex` to install the Codex CLI shim. It needs an
-existing Codex CLI binary. Once the shim folder is first in `PATH`, typing
-`codex` applies the same rules as `orberus run --tool codex`. Use
-`orberus doctor --tool codex` to check the installation.
+Use `--tool claude` or `--tool codex` to install only the selected shim.
+`--tool codex` reports an error if it cannot find a Codex CLI binary. Once
+the shim folder is first in `PATH`, typing `codex` applies the same rules
+as `orberus run --tool codex`. Use `orberus doctor --tool codex` to check its
+installation.
 
 ## ide
 
@@ -361,7 +362,7 @@ orberus run --tool codex -- login status         # check the selected profile
 orberus run --tool codex                         # use the folder's rules
 ```
 
-With `orberus setup --tool codex`, you can also type `codex` in the project
+With the Codex shim installed, you can also type `codex` in the project
 folder. `ORBERUS_PROFILE=work codex` selects an Orberus profile explicitly,
 subject to locked rules. Codex's own `--profile` remains a Codex argument.
 

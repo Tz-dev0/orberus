@@ -47,7 +47,8 @@ logos belong to their owners and only say what Orberus works with.
   folder was not tried yet. Orberus also reads the plan usage Claude Desktop
   notes, for the limits. See [docs/desktop.md](docs/desktop.md).
 - **Codex CLI**: `orberus run --tool codex` applies the same folder rules.
-  Run `orberus setup --tool codex` to apply them when typing `codex` directly.
+  `orberus setup` detects Codex CLI and installs its shim so typing `codex`
+  applies the same rules.
   See [Codex CLI commands](docs/commands.md#codex-cli).
 - **Windows**: the command builds and passes its tests there, but it was
   never tried in front of a real Claude Code. Not supported yet.
@@ -156,7 +157,7 @@ Rules, the config files and team rules are described in
 | Command | What it does |
 |---|---|
 | `orberus` | Profile used in this folder, then the list of commands |
-| `orberus setup [--tool codex]` | Add the `claude` or `codex` shim to your `PATH` |
+| `orberus setup [--tool claude\|codex]` | Install the Claude shim and detect Codex, or install a single shim |
 | `orberus pause`, `orberus resume` | Stop picking accounts for a while, without uninstalling |
 | `orberus ide [on\|off] [editor]` | Send the Claude Code extension of VS Code, Cursor and the like through Orberus |
 | `orberus desktop [name]` | Switch Claude Desktop to a profile's account: it closes, and opens again on that account |
