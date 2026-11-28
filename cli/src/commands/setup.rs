@@ -1,15 +1,15 @@
-//! `orberus setup`: the `claude` link, the editors' wrapper and the `PATH`
-//! line.
+//! `orberus setup`: tool shims, the Claude Code editor wrapper and the `PATH` line.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use orberus_core::ide;
 use orberus_core::paths::Env;
 use orberus_core::shell;
 use orberus_core::tool;
 use orberus_core::view::short_path;
+use orberus_core::{config, launch, uninstall};
 
 use crate::ui::Ui;
 
@@ -66,13 +66,8 @@ pub(crate) fn install_link(link: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
-    let bin = env.bin_dir();
+fn install_shim(env: &Env, tool: &tool::Tool) -> Result<PathBuf> {
     fs::create_dir_all(env.profiles_dir())?;
-
-    // One shim today. With a second tool, this block runs once per entry
-    // of `tool::ALL`.
-    let tool = &tool::CLAUDE;
     let link = tool.shim_path(env);
     install_link(&link)?;
     // The wrapper is installed with it, so that turning it on in an editor
@@ -80,9 +75,62 @@ pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
     if tool.extension.is_some() {
         install_link(&tool.wrapper_path(env))?;
     }
+    Ok(link)
+}
 
-    ui.success(&format!("Shim installed: {}", short_path(env, &link)));
-    setup_path(ui, env, &bin)?;
+fn install_codex(env: &Env, required: bool) -> Result<Option<PathBuf>> {
+    if !cfg!(unix) {
+        if required {
+            bail!("the Codex shim requires Unix symlinks; use orberus run --tool codex instead");
+        }
+        return Ok(None);
+    }
+    let tool = &tool::CODEX;
+    let config = config::load(env)?.config;
+    if let Err(error) = launch::find_real(env, &config, tool) {
+        if required || config.codex_bin.is_some() {
+            return Err(error);
+        }
+        return Ok(None);
+    }
+    let link = tool.shim_path(env);
+    match link.symlink_metadata() {
+        Ok(_) if uninstall::shim(env, tool).is_none() => {
+            bail!(
+                "refusing to replace {}: it is not an Orberus shim",
+                link.display()
+            );
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error).with_context(|| format!("cannot inspect {}", link.display()))
+        }
+    }
+    install_shim(env, tool).map(Some)
+}
+
+pub(crate) fn setup(ui: &Ui, env: &Env, requested: Option<&tool::Tool>) -> Result<i32> {
+    let claude = requested != Some(&tool::CODEX);
+    if claude {
+        let link = install_shim(env, &tool::CLAUDE)?;
+        ui.success(&format!("Shim installed: {}", short_path(env, &link)));
+    }
+    let mut codex = false;
+    if requested != Some(&tool::CLAUDE) {
+        match install_codex(env, requested.is_some()) {
+            Ok(Some(link)) => {
+                ui.success(&format!("Shim installed: {}", short_path(env, &link)));
+                codex = true;
+            }
+            Ok(None) => {}
+            Err(error) if requested.is_none() => {
+                ui.warning(&format!("Codex setup skipped: {error:#}"))
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    setup_path(ui, env, &env.bin_dir())?;
 
     println!();
     ui.title("Next steps");
@@ -94,13 +142,21 @@ pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
         ),
     ];
     // Only for someone who has such an editor, and has not done it yet.
-    if !ide::skipping(env, tool).is_empty() {
+    if claude && !ide::skipping(env, &tool::CLAUDE).is_empty() {
         steps.push((
             "orberus ide on",
             "use it in VS Code, Cursor and the like too",
         ));
     }
-    steps.push(("orberus doctor", "check the installation"));
+    if claude {
+        steps.push(("orberus doctor", "check the Claude installation"));
+    }
+    if codex {
+        steps.push((
+            "orberus doctor --tool codex",
+            "check the Codex installation",
+        ));
+    }
     ui.commands(&steps);
     Ok(0)
 }

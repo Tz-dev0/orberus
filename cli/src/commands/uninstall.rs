@@ -51,8 +51,13 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
 
     // Say what will happen before asking.
     ui.title("This removes");
-    if uninstall::shim(env).is_some() {
-        ui.detail("the claude shim: `claude` is the real Claude Code again");
+    for tool in tool::ALL {
+        if uninstall::shim(env, tool).is_some() {
+            ui.detail(&format!(
+                "the {} shim: `{}` starts {} directly again",
+                tool.command, tool.command, tool.name
+            ));
+        }
     }
     if uninstall::shell_files_have_our_line(env) {
         ui.detail("the PATH line that setup added to your shell config");
@@ -131,8 +136,10 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
             ui.success(&format!("Status line removed from profile '{name}'"));
         }
     }
-    if uninstall::remove_shim(env)? {
-        ui.success("Shim removed");
+    for tool in tool::ALL {
+        if uninstall::remove_shim(env, tool)? {
+            ui.success(&format!("Shim removed: {}", tool.command));
+        }
     }
     // The editors first, the wrapper after: an editor must never be left
     // pointing to a file that is gone.

@@ -46,8 +46,10 @@ logos belong to their owners and only say what Orberus works with.
   Claude Desktop in daily use, and back, works; signing in on a second data
   folder was not tried yet. Orberus also reads the plan usage Claude Desktop
   notes, for the limits. See [docs/desktop.md](docs/desktop.md).
-- **Codex CLI**: `orberus run --tool codex` applies the same folder rules
-  and gives each profile its own Codex home. See [Codex CLI commands](docs/commands.md#codex-cli).
+- **Codex CLI**: `orberus run --tool codex` applies the same folder rules.
+  `orberus setup` detects Codex CLI and installs its shim so typing `codex`
+  applies the same rules.
+  See [Codex CLI commands](docs/commands.md#codex-cli).
 - **Windows**: the command builds and passes its tests there, but it was
   never tried in front of a real Claude Code. Not supported yet.
 
@@ -155,7 +157,7 @@ Rules, the config files and team rules are described in
 | Command | What it does |
 |---|---|
 | `orberus` | Profile used in this folder, then the list of commands |
-| `orberus setup` | Install the `claude` shim and put it in your `PATH` |
+| `orberus setup [--tool claude\|codex]` | Install the Claude shim and detect Codex, or install a single shim |
 | `orberus pause`, `orberus resume` | Stop picking accounts for a while, without uninstalling |
 | `orberus ide [on\|off] [editor]` | Send the Claude Code extension of VS Code, Cursor and the like through Orberus |
 | `orberus desktop [name]` | Switch Claude Desktop to a profile's account: it closes, and opens again on that account |
@@ -172,7 +174,7 @@ Rules, the config files and team rules are described in
 | `orberus retention [name] [days]` | How long each profile keeps its conversations |
 | `orberus clean [name]` | Biggest conversations of a profile; move some to the Trash |
 | `orberus remove [name]` | Remove a profile and your rules that point to it |
-| `orberus doctor` | Check the installation |
+| `orberus doctor [--tool codex]` | Check the Claude or Codex installation |
 | `orberus uninstall` | Remove Orberus from this Mac. Profiles are kept unless you add `--purge` |
 
 Every command, with its options and an example of its output, is in

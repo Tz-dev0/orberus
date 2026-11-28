@@ -48,12 +48,26 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
+fn current_binary() -> Option<PathBuf> {
+    std::env::current_exe().ok()?.canonicalize().ok()
+}
+
+fn is_shim(path: &Path, current: Option<&Path>) -> bool {
+    current.is_some_and(|current| path.canonicalize().is_ok_and(|target| target == current))
+        // An installed link can still point to an older copy of Orberus.
+        || path.read_link().is_ok_and(|target| {
+            matches!(target.file_name().and_then(|name| name.to_str()), Some("orberus" | "orberus.exe"))
+        })
+}
+
+pub(crate) fn is_orberus_link(path: &Path) -> bool {
+    path.is_symlink() && is_shim(path, current_binary().as_deref())
+}
+
 /// Every binary of the tool found in PATH, in order, with a flag telling
 /// whether it is this program (the shim) rather than the real one.
 pub fn in_path(tool: &Tool) -> Vec<(PathBuf, bool)> {
-    let me = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.canonicalize().ok());
+    let me = current_binary();
     let Some(path) = std::env::var_os("PATH") else {
         return Vec::new();
     };
@@ -62,7 +76,7 @@ pub fn in_path(tool: &Tool) -> Vec<(PathBuf, bool)> {
         for name in tool.executables() {
             let candidate = dir.join(name);
             if is_executable(&candidate) {
-                let is_shim = me.is_some() && candidate.canonicalize().ok() == me;
+                let is_shim = is_shim(&candidate, me.as_deref());
                 found.push((candidate, is_shim));
             }
         }
@@ -78,6 +92,14 @@ pub fn find_real(env: &Env, config: &Config, tool: &Tool) -> Result<PathBuf> {
                 "{} points to {}, which is not an executable file",
                 tool.bin_setting(),
                 path.display()
+            );
+        }
+        if is_shim(&path, current_binary().as_deref()) {
+            bail!(
+                "{} points to the Orberus shim at {}; use the real {} binary",
+                tool.bin_setting(),
+                path.display(),
+                tool.name
             );
         }
         return Ok(path);

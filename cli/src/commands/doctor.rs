@@ -8,12 +8,13 @@ use orberus_core::paths::Env;
 use orberus_core::pause;
 use orberus_core::retention::{self, Retention};
 use orberus_core::tool;
+use orberus_core::uninstall;
 use orberus_core::view::short_path;
 
 use crate::commands::setup::path_missing_in;
 use crate::ui::Ui;
 
-pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
+pub(crate) fn doctor(ui: &Ui, env: &Env, tool: &tool::Tool) -> Result<i32> {
     let mut failures = 0;
     let mut check = |ok: bool, label: &str, hint: &str| {
         if ok {
@@ -36,17 +37,24 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
     }
     let loaded = loaded.unwrap_or_default();
 
-    let tool = &tool::CLAUDE;
-    let shim = tool.shim_path(env);
-    check(shim.exists(), "shim is installed", "run: orberus setup");
+    let setup = if tool == &tool::CLAUDE {
+        "orberus setup"
+    } else {
+        "orberus setup --tool codex"
+    };
+    check(
+        uninstall::shim(env, tool).is_some_and(|shim| shim.exists()),
+        &format!("{} shim is installed", tool.command),
+        &format!("run: {setup}"),
+    );
 
     let found = launch::in_path(tool);
     let first_is_shim = found.first().is_some_and(|(_, is_shim)| *is_shim);
     check(
         first_is_shim,
-        "`claude` in your PATH is the shim",
+        &format!("`{}` in your PATH is the shim", tool.command),
         &format!(
-            "put {} first in your PATH (orberus setup can do it), then open a new terminal",
+            "put {} first in your PATH ({setup} can do it), then open a new terminal",
             short_path(env, &env.bin_dir())
         ),
     );
@@ -59,7 +67,7 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         missing.is_empty(),
         "apps and scripts get the shim too",
         &format!(
-            "no PATH line for the shim in {}: run orberus setup",
+            "no PATH line for the shim in {}: run {setup}",
             names.join(" and ")
         ),
     );
@@ -67,22 +75,23 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
     let real = launch::find_real(env, &loaded.config, tool);
     check(
         real.is_ok(),
-        "real Claude Code is found",
-        "install Claude Code or set claude_bin in config.toml",
+        &format!("real {} is found", tool.name),
+        &format!(
+            "install {} or set {} in config.toml",
+            tool.name,
+            tool.bin_setting()
+        ),
     );
     if let Ok(real) = &real {
         ui.detail(&short_path(env, real));
     }
 
     // An editor told to start the wrapper would start nothing without it.
-    let editors: Vec<(String, State)> = ide::editors(env)
-        .into_iter()
-        .map(|editor| {
-            let state = ide::state(env, tool, &editor);
-            (editor.name, state)
-        })
-        .collect();
-    if editors.iter().any(|(_, state)| *state == State::On) {
+    if tool.extension.is_some()
+        && ide::editors(env)
+            .iter()
+            .any(|editor| ide::state(env, tool, editor) == State::On)
+    {
         check(
             tool.wrapper_path(env).exists(),
             "the wrapper your editors start is installed",
@@ -109,39 +118,51 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         "see: orberus rule list",
     );
 
-    let outside = std::env::var_os(tool.config_env).is_some()
-        && std::env::var_os(launch::SESSION_ENV).is_none();
-    check(
-        !outside,
-        &format!("{} is not set by something else", tool.config_env),
-        "remove it from your shell config: orberus sets it for each launch",
-    );
+    if tool == &tool::CLAUDE {
+        let outside = std::env::var_os(tool.config_env).is_some()
+            && std::env::var_os(launch::SESSION_ENV).is_none();
+        check(
+            !outside,
+            &format!("{} is not set by something else", tool.config_env),
+            "remove it from your shell config: orberus sets it for each launch",
+        );
+    }
 
     // Not a failure: a choice of the user, but one that is easy to forget.
     if pause::is_paused(env) {
-        ui.warning("Orberus is paused: claude starts as if it was not installed");
+        ui.warning(&format!(
+            "Orberus is paused: {} starts as if it was not installed",
+            tool.command
+        ));
         ui.detail("to pick the account by folder again: orberus resume");
     }
 
     // Not a failure: the extension works, but with its own idea of the
     // account. Only for an editor where the extension is installed.
-    let skipping: Vec<String> = ide::skipping(env, tool)
-        .into_iter()
-        .map(|editor| editor.name)
-        .collect();
-    if !skipping.is_empty() {
-        ui.warning(&format!(
-            "the {} extension skips Orberus in {}",
-            tool.name,
-            skipping.join(", ")
-        ));
-        ui.detail(
-            "it starts its own copy of Claude Code; to pick the account by folder there too: orberus ide on",
-        );
+    if tool.extension.is_some() {
+        let skipping: Vec<String> = ide::skipping(env, tool)
+            .into_iter()
+            .map(|editor| editor.name)
+            .collect();
+        if !skipping.is_empty() {
+            ui.warning(&format!(
+                "the {} extension skips Orberus in {}",
+                tool.name,
+                skipping.join(", ")
+            ));
+            ui.detail(
+                "it starts its own copy of Claude Code; to pick the account by folder there too: orberus ide on",
+            );
+        }
     }
 
     // Not a failure: a warning about what Claude Code will delete by itself.
-    for name in loaded.config.profiles.keys() {
+    for name in loaded
+        .config
+        .profiles
+        .keys()
+        .filter(|_| tool == &tool::CLAUDE)
+    {
         match retention::read(env, &loaded.config, name) {
             Ok(Retention::Days(_)) | Err(_) => {}
             Ok(kept) => {

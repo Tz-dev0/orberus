@@ -12,8 +12,8 @@ pub(crate) fn pause_command(ui: &Ui, env: &Env) -> Result<i32> {
     } else {
         ui.success("Orberus was already paused");
     }
-    ui.detail("claude now starts as if Orberus was not installed: no account is picked,");
-    ui.detail("and no rule applies, locked ones included. In your editors too.");
+    ui.detail("Installed shims start their tools directly. No profile rules apply, including locked rules.");
+    ui.detail("This also applies to Claude Code in editors configured with orberus ide on.");
     println!(
         "To pick the account by folder again: {}",
         ui.command("orberus resume")

@@ -21,7 +21,8 @@ use crate::tool;
 
 /// The comment `setup` writes above its `PATH` line. `uninstall` looks for
 /// the same text, which is why it lives in one place.
-pub const PATH_COMMENT: &str = "# orberus: the claude shim must come before the real claude";
+pub const PATH_COMMENT: &str = "# orberus: put the shims before the tools they launch";
+const OLD_PATH_COMMENT: &str = "# orberus: the claude shim must come before the real claude";
 
 /// Where the menu bar app is looked for, instead of the usual Applications
 /// folders. Used by tests, so that they never see the real ones.
@@ -60,7 +61,8 @@ fn strip_path_lines(text: &str, lines: &[String]) -> Option<String> {
     let mut changed = false;
     for line in text.lines() {
         let trimmed = line.trim();
-        let ours = trimmed == PATH_COMMENT || lines.iter().any(|ours| ours == trimmed);
+        let comment = matches!(trimmed, PATH_COMMENT | OLD_PATH_COMMENT);
+        let ours = comment || lines.iter().any(|ours| ours == trimmed);
         if !ours {
             kept.push(line);
             continue;
@@ -68,7 +70,7 @@ fn strip_path_lines(text: &str, lines: &[String]) -> Option<String> {
         changed = true;
         // `last` looks at the previous kept line without removing it;
         // `pop` then drops it when it was the blank line above our comment.
-        if trimmed == PATH_COMMENT && kept.last().is_some_and(|last| last.trim().is_empty()) {
+        if comment && kept.last().is_some_and(|last| last.trim().is_empty()) {
             kept.pop();
         }
     }
@@ -128,16 +130,21 @@ pub fn shell_files_have_our_line(env: &Env) -> bool {
 }
 
 /// The shim, when it is installed.
-pub fn shim(env: &Env) -> Option<PathBuf> {
-    let shim = tool::CLAUDE.shim_path(env);
+pub fn shim(env: &Env, tool: &tool::Tool) -> Option<PathBuf> {
+    let shim = tool.shim_path(env);
     // `symlink_metadata` does not follow the link: a shim whose target is
     // gone still counts as installed.
-    shim.symlink_metadata().is_ok().then_some(shim)
+    let installed = if tool == &tool::CODEX {
+        crate::launch::is_orberus_link(&shim)
+    } else {
+        shim.symlink_metadata().is_ok()
+    };
+    installed.then_some(shim)
 }
 
 /// Removes the shim. Returns false when there was none.
-pub fn remove_shim(env: &Env) -> Result<bool> {
-    let Some(shim) = shim(env) else {
+pub fn remove_shim(env: &Env, tool: &tool::Tool) -> Result<bool> {
+    let Some(shim) = shim(env, tool) else {
         return Ok(false);
     };
     fs::remove_file(&shim).with_context(|| format!("cannot remove {}", shim.display()))?;

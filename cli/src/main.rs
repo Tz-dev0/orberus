@@ -64,10 +64,23 @@ enum RunTool {
     Codex,
 }
 
+impl RunTool {
+    fn tool(self) -> &'static tool::Tool {
+        match self {
+            Self::Claude => &tool::CLAUDE,
+            Self::Codex => &tool::CODEX,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Command {
-    /// Install the `claude` shim and put it in your PATH
-    Setup,
+    /// Install the Claude shim and the Codex shim when Codex is available
+    Setup {
+        /// Install the shim for only this tool
+        #[arg(long, value_enum)]
+        tool: Option<RunTool>,
+    },
     /// Create a profile (one profile = one Claude account)
     Add {
         /// Name of the profile. Asked when left out
@@ -209,7 +222,10 @@ enum Command {
     /// Pick the account by folder again, after `orberus pause`
     Resume,
     /// Check that everything is wired correctly
-    Doctor,
+    Doctor {
+        #[arg(long, value_enum, default_value = "claude")]
+        tool: RunTool,
+    },
     /// Remove Orberus from this Mac. Profiles are kept unless you ask
     Uninstall {
         /// Also delete every profile: config, rules, Claude Code folders
@@ -291,7 +307,7 @@ fn cli() -> Result<i32> {
         return overview(&ui, &env);
     };
     match command {
-        Command::Setup => setup(&ui, &env),
+        Command::Setup { tool } => setup(&ui, &env, tool.map(RunTool::tool)),
         Command::Add {
             name,
             native,
@@ -324,12 +340,8 @@ fn cli() -> Result<i32> {
             profile,
             args,
         } => {
-            let tool = match tool {
-                RunTool::Claude => &tool::CLAUDE,
-                RunTool::Codex => &tool::CODEX,
-            };
             let loaded = config::load(&env)?;
-            run_tool(tool, &env, &loaded, profile, args)
+            run_tool(tool.tool(), &env, &loaded, profile, args)
         }
         Command::Rule { command } => match command {
             RuleCommand::Add {
@@ -345,7 +357,7 @@ fn cli() -> Result<i32> {
         Command::Desktop { name, yes } => desktop_command(&ui, &env, name, yes),
         Command::Pause => pause_command(&ui, &env),
         Command::Resume => resume_command(&ui, &env),
-        Command::Doctor => doctor(&ui, &env),
+        Command::Doctor { tool } => doctor(&ui, &env, tool.tool()),
         Command::Uninstall { purge, yes } => uninstall_command(&ui, &env, purge, yes),
     }
 }

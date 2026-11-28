@@ -19,16 +19,22 @@ The outputs below are shortened examples.
 ## setup
 
 ```sh
-orberus setup
+orberus setup [--tool claude|codex]
 ```
 
-Installs the `claude` shim in `~/.orberus/bin` and offers to add that
-folder to your `PATH` (zsh and bash). Safe to run again, for instance after
-an update.
+Installs the `claude` shim and adds the `codex` shim when the real Codex CLI
+is available. The shims live in `~/.orberus/bin`. Setup offers to add that
+folder to your `PATH` (zsh and bash). Safe to run again after an update.
 
 It also installs the wrapper that editor extensions can start,
 `~/.orberus/ide/claude-wrapper`. Nothing uses it until you run
 [`orberus ide on`](#ide).
+
+Use `--tool claude` or `--tool codex` to install only the selected shim.
+`--tool codex` reports an error if it cannot find a Codex CLI binary. Once
+the shim folder is first in `PATH`, typing `codex` applies the same rules
+as `orberus run --tool codex`. Use `orberus doctor --tool codex` to check its
+installation.
 
 ## ide
 
@@ -138,20 +144,19 @@ orberus pause
 orberus resume
 ```
 
-`pause` stops Orberus without uninstalling it: until `resume`, `claude`
-starts as if Orberus was not installed. No account is picked, and no rule
-applies, locked ones included. The same goes for the editors sent through
-Orberus with `orberus ide on`.
+`pause` stops account selection until `resume`. Installed shims launch their
+tools directly and skip rules, including locked rules. The same applies to
+editors configured with `orberus ide on`.
 
 ```text
 $ orberus pause
 ✓ Orberus is paused
-  claude now starts as if Orberus was not installed: no account is picked,
-  and no rule applies, locked ones included. In your editors too.
+  Installed shims start their tools directly. No profile rules apply, including locked rules.
+  This also applies to Claude Code in editors configured with orberus ide on.
 To pick the account by folder again: orberus resume
 ```
 
-So that a pause is not forgotten, `claude` says it each time it starts in a
+Each installed shim reports the pause when it starts in a
 terminal (`orberus: paused, no account is picked`), and `orberus status`,
 `orberus doctor` and the menu bar app say it too. `orberus run --profile x`
 still starts Claude Code with the profile you name. Quitting the menu bar
@@ -161,14 +166,15 @@ does.
 ## doctor
 
 ```sh
-orberus doctor
+orberus doctor [--tool claude|codex]
 ```
 
-Checks the installation and says how to fix what is wrong. It changes nothing.
+Checks the Claude Code installation by default. Pass `--tool codex` to
+check the Codex shim and its underlying binary.
 
 ```text
 ✓ config files are valid
-✓ shim is installed
+✓ claude shim is installed
 ✓ `claude` in your PATH is the shim
 ✓ real Claude Code is found
   /opt/homebrew/bin/claude
@@ -198,7 +204,7 @@ asks.
 ```text
 $ orberus uninstall
 This removes
-  the claude shim: `claude` is the real Claude Code again
+  the claude shim: `claude` starts Claude Code directly again
   the PATH line that setup added to your shell config
   the setting that sends VS Code's Claude Code extension through Orberus
   orberus itself: ~/.orberus/bin/orberus
@@ -210,7 +216,7 @@ Uninstall Orberus? [y/N]
 
 What it removes:
 
-- the `claude` shim, so `claude` is the real Claude Code again;
+- installed `claude` and `codex` shims, so the commands start their tools directly;
 - the `PATH` line that `setup` wrote in `~/.zshrc`, `~/.zprofile`,
   `~/.bash_profile` or `~/.bashrc`. A line you wrote yourself in another way is left alone, and
   you are told about it;
@@ -356,10 +362,15 @@ orberus run --tool codex -- login status         # check the selected profile
 orberus run --tool codex                         # use the folder's rules
 ```
 
-Orberus selects the profile from the shell's current directory. Change to
-the project folder before launching so the rules see that folder. Arguments
-after `--`, including Codex's own `--profile` and `--cd`, go directly to Codex.
-If no Orberus profile applies, Codex uses its usual environment.
+With the Codex shim installed, you can also type `codex` in the project
+folder. `ORBERUS_PROFILE=work codex` selects an Orberus profile explicitly,
+subject to locked rules. Codex's own `--profile` remains a Codex argument.
+
+Both entry points select a profile from the shell's current directory or
+the directory passed to Codex with `-C` or `--cd`. For example,
+`codex exec --cd ~/projects/client 'Run the tests'` applies that project's
+rules. Orberus forwards the original arguments to Codex. If no Orberus
+profile applies, Codex uses its usual environment.
 
 For a selected profile, Orberus sets `CODEX_HOME` to a private directory
 under `~/.orberus/codex/`. Codex uses this directory for its settings and to

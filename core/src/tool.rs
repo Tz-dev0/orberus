@@ -2,8 +2,8 @@
 //!
 //! Everything that names a tool goes through here: the command people type,
 //! the variable that tells the tool where its config folder is, and the
-//! folder it uses when that variable is not set. Claude Code supports a
-//! shim and an editor wrapper. Codex CLI is available through `orberus run`.
+//! folder it uses when that variable is not set. Both tools support a shim,
+//! and Claude Code also supports an editor wrapper.
 //!
 //! A tool can be started in two ways, and Orberus stands in front of both.
 //! People and most editors run its command, which finds the shim first in
@@ -80,8 +80,8 @@ pub const CODEX: Tool = Tool {
     extension: None,
 };
 
-/// Tools that support being invoked as a shim. Codex is opt-in through `run`.
-pub const ALL: &[&Tool] = &[&CLAUDE];
+/// Tools that support being invoked as a shim.
+pub const ALL: &[&Tool] = &[&CLAUDE, &CODEX];
 
 /// The tool this program was started as, if any: `claude` (or `claude.exe`)
 /// means "act as the shim of Claude Code". Any other name, `orberus` first
@@ -97,7 +97,9 @@ pub fn for_command(invoked: &OsStr) -> Option<&'static Tool> {
 pub fn for_wrapper(invoked: &OsStr) -> Option<&'static Tool> {
     let stem = Path::new(invoked).file_stem()?.to_str()?;
     let command = stem.strip_suffix(WRAPPER_SUFFIX)?;
-    ALL.iter().copied().find(|tool| tool.command == command)
+    ALL.iter()
+        .copied()
+        .find(|tool| tool.command == command && tool.extension.is_some())
 }
 
 /// What follows a tool's command in the name of its wrapper.
@@ -212,7 +214,6 @@ mod tests {
         assert_eq!(for_command(OsStr::new("/usr/local/bin/orberus")), None);
         // Close to a tool's name is not the tool.
         assert_eq!(for_command(OsStr::new("claude-wrapper")), None);
-        assert_eq!(for_command(OsStr::new("codex")), None);
         assert_eq!(for_command(OsStr::new("")), None);
     }
 
@@ -236,9 +237,8 @@ mod tests {
     fn every_tool_has_its_own_command_and_variable() {
         // Two tools sharing a command would install the same shim; sharing
         // a variable would send both to the same config folder.
-        let tools = [&CLAUDE, &CODEX];
-        for (index, tool) in tools.iter().enumerate() {
-            for other in &tools[index + 1..] {
+        for (index, tool) in ALL.iter().enumerate() {
+            for other in &ALL[index + 1..] {
                 assert_ne!(tool.id, other.id);
                 assert_ne!(tool.command, other.command);
                 assert_ne!(tool.config_env, other.config_env);
