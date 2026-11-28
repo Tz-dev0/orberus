@@ -1,14 +1,19 @@
-//! Claude Desktop, one copy per profile.
+//! Claude Desktop, on one profile at a time.
 //!
 //! Claude Desktop keeps everything about the account it is signed in to in
 //! one data folder, `~/Library/Application Support/Claude`. Its help page
 //! says how to hold two accounts of different addresses: log out, log in.
 //! It is built on Electron, though, and takes Chromium's `--user-data-dir`
-//! switch, which starts it on another data folder: a second copy, signed in
-//! on its own, next to the first. This is not a documented feature of
-//! Claude Desktop. It is what the tools that run two of them do.
+//! switch, which starts it on another data folder, with the sign-in that is
+//! kept there. So each profile has a data folder, and switching account is
+//! closing Claude Desktop and opening it again on the other profile's
+//! folder ([`switch`]). This is not a documented feature of Claude Desktop.
 //!
-//! A profile's copy is started this way:
+//! From outside the app, nothing can change the account of a Claude Desktop
+//! that is open, short of modifying the app or handling its session
+//! cookies. This tool does neither.
+//!
+//! Claude Desktop is started on a profile this way:
 //!
 //! ```text
 //! open -n -a Claude.app --env CLAUDE_CONFIG_DIR=<the profile's Claude Code folder>
@@ -16,24 +21,34 @@
 //! ```
 //!
 //! The profile that reuses `~/.claude` gets Claude Desktop as it is: no
-//! switch, no variable, its usual data folder. Nothing changes for the copy
-//! people already have.
+//! switch, no variable, its usual data folder. Nothing changes for the
+//! Claude Desktop people already have.
 //!
 //! Tried on 2026-11-28 with Claude Desktop 7.37095.0, on an empty data
-//! folder, never signed in. Three findings shape this file:
+//! folder, never signed in. These findings shape this file:
 //!
 //! - **Nothing stops two copies on one data folder.** Started twice with
-//!   the same switch, Claude Desktop ran twice. So before starting a copy we
-//!   look for one that already runs on that folder, and bring it to the
-//!   front instead ([`open`]).
+//!   the same switch, Claude Desktop ran twice. So before starting it on a
+//!   profile we look for a copy that already runs on that folder, and bring
+//!   it to the front instead.
+//! - **Two copies on two folders run side by side.** A switch relies on it
+//!   for a moment: the new one is started first, and the others are asked
+//!   to quit after. The other order would fail when the command is typed in
+//!   a terminal inside Claude Desktop: closing the app ends that terminal,
+//!   and this program with it, before the new one was started.
+//! - **macOS can ask an app to quit, by its number**, the way its Quit menu
+//!   does, without the permission to "control" it. An idle copy was gone
+//!   one second later. The app may also ask the user something first: it
+//!   is never forced.
 //! - **`open` hands its whole environment to the app.** Started from a
-//!   terminal inside a Claude Code session, the copy would inherit that
-//!   session's variables. It is started with a short, fixed environment.
+//!   terminal inside a Claude Code session, Claude Desktop would inherit
+//!   that session's variables. It is started with a short, fixed
+//!   environment.
 //! - **The Code tab follows `CLAUDE_CONFIG_DIR`** (read in the app's code,
-//!   which reads the variable where it would use `~/.claude`). A profile's
-//!   copy is given the profile's own Claude Code folder, so its Code tab
-//!   does not write in `~/.claude`, which belongs to another account. Not
-//!   seen with a signed-in copy yet.
+//!   which reads the variable where it would use `~/.claude`). On a
+//!   profile, Claude Desktop is given the profile's own Claude Code folder,
+//!   so its Code tab does not write in `~/.claude`, which belongs to
+//!   another account. Not seen with a signed-in copy yet.
 //!
 //! Nothing here is on the shim's path: `claude` in a terminal never looks
 //! at any of this.
@@ -357,6 +372,49 @@ function run(argv) {
     Ok(String::from_utf8_lossy(&output.stdout).trim() == "shown")
 }
 
+/// Asks macOS to quit one running app, by its number, as its Quit menu
+/// does: the app closes its windows and saves what it must, and may ask the
+/// user something first. Nothing is forced. Returns false when macOS knows
+/// no app by that number, or would not ask.
+///
+/// Like [`show`], this calls AppKit and sends the app no message of ours,
+/// so macOS asks for no permission.
+fn quit(pid: u32) -> Result<bool> {
+    const SCRIPT: &str = r#"ObjC.import("AppKit");
+function run(argv) {
+  var app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(parseInt(argv[0], 10));
+  if (app.isNil()) return "gone";
+  return app.terminate ? "asked" : "refused";
+}"#;
+    let output = Command::new("/usr/bin/osascript")
+        .args(["-l", "JavaScript", "-e", SCRIPT])
+        .arg(pid.to_string())
+        .output()
+        .context("cannot run `osascript`")?;
+    Ok(String::from_utf8_lossy(&output.stdout).trim() == "asked")
+}
+
+/// How long a copy that was asked to quit is waited for: 10 seconds, in
+/// steps of 200 ms. An idle one took one second.
+const QUIT_STEPS: u32 = 50;
+
+/// Waits for those copies to be gone, and returns the ones that are still
+/// running when the wait is over. A list that cannot be read counts as
+/// "still running": saying "closed" without knowing would be a guess.
+fn still_running(app: &App, pids: &[u32]) -> Vec<u32> {
+    let mut left = pids.to_vec();
+    for _ in 0..QUIT_STEPS {
+        if left.is_empty() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(200));
+        if let Ok(copies) = running(app) {
+            left.retain(|pid| copies.iter().any(|copy| copy.pid == *pid));
+        }
+    }
+    left
+}
+
 /// Waits for the copy on that data folder to be listed, a few seconds at
 /// most, and returns its number.
 fn started(app: &App, data: Option<&Path>) -> Option<u32> {
@@ -387,27 +445,65 @@ fn create_private(dir: &Path) -> std::io::Result<()> {
     }
 }
 
-/// What [`open`] did.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Opened {
-    /// A copy was started for the profile.
-    Started,
-    /// The profile's copy was already running: it was brought to the front.
-    Shown,
+/// The profile a running copy is on: the one whose data folder it runs on.
+/// `None` for a copy on a folder that is no profile's, such as the Claude
+/// Desktop opened from the Dock when no profile reuses `~/.claude`.
+pub fn owner(env: &Env, config: &Config, copy: &Running) -> Option<String> {
+    config
+        .profiles
+        .keys()
+        .find(|name| data_dir(env, config, name).is_ok_and(|data| copy.uses(data.as_deref())))
+        .cloned()
 }
 
-/// One opening at a time in this program. Between "no copy runs on this
+/// What a switch to that profile closes, among the copies that are
+/// running: every Claude Desktop on another data folder. For each, the
+/// profile it is on, or `None`. Empty when nothing has to close.
+///
+/// This is what to tell the user before a switch: what runs in a Claude
+/// Desktop that closes stops with it.
+pub fn in_the_way(
+    env: &Env,
+    config: &Config,
+    name: &str,
+    copies: &[Running],
+) -> Result<Vec<Option<String>>> {
+    let data = data_dir(env, config, name)?;
+    Ok(copies
+        .iter()
+        .filter(|copy| !copy.uses(data.as_deref()))
+        .map(|copy| owner(env, config, copy))
+        .collect())
+}
+
+/// What [`switch`] did.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Switched {
+    /// True when Claude Desktop was started on the profile; false when it
+    /// was already running there and was only brought to the front.
+    pub started: bool,
+    /// How many other Claude Desktops were closed.
+    pub closed: usize,
+}
+
+/// One switch at a time in this program. Between "nothing runs on this
 /// folder" and the new copy being listed, a second call would start a
 /// second copy on the same folder. The menu bar app can be asked twice in a
-/// row: the second call waits here, then finds the copy the first started.
+/// row: the second call waits here, then finds what the first one did.
 ///
 /// A `static` with a `Mutex` inside: one lock for the whole program, which
 /// Rust lets us build at compile time (`Mutex::new` is a `const fn`).
-static OPENING: Mutex<()> = Mutex::new(());
+static SWITCHING: Mutex<()> = Mutex::new(());
 
-/// Opens Claude Desktop on a profile: brings the profile's copy to the
-/// front when it runs, starts it otherwise.
-pub fn open(env: &Env, config: &Config, name: &str) -> Result<Opened> {
+/// Puts Claude Desktop on a profile: starts it on the profile's data folder
+/// (or brings it to the front when it already runs there), then asks every
+/// other Claude Desktop to quit, so that one is left.
+///
+/// The new one first, the others after: the top of this file says why.
+/// Called from inside a Claude Desktop that is about to close, this
+/// program may be ended while it waits for the others to be gone. By then
+/// the new one runs and the others were asked: nothing is left half-done.
+pub fn switch(env: &Env, config: &Config, name: &str) -> Result<Switched> {
     let data = data_dir(env, config, name)?;
     let Some(app) = app(env) else {
         bail!("{}", not_found(env));
@@ -415,40 +511,73 @@ pub fn open(env: &Env, config: &Config, name: &str) -> Result<Opened> {
     // The lock is "poisoned" when a call panicked while holding it. It
     // guards no data, so there is nothing left half-written: carry on.
     // `_one_at_a_time` keeps it until this function returns.
-    let _one_at_a_time = OPENING
+    let _one_at_a_time = SWITCHING
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     // An error here stops everything: starting a copy without knowing
     // whether one already runs could put two on the same data folder.
     let copies = running(&app)?;
-    if let Some(copy) = copies.iter().find(|copy| copy.uses(data.as_deref())) {
-        // Saying "brought to the front" when macOS did not do it would send
-        // the user looking for a window that did not move.
-        if !show(copy.pid)? {
-            bail!(
-                "Claude Desktop is open on profile '{name}', but macOS did not bring it \
-                 to the front: pick its window yourself"
-            );
+    let mine = copies
+        .iter()
+        .find(|copy| copy.uses(data.as_deref()))
+        .map(|copy| copy.pid);
+    let others: Vec<u32> = copies
+        .iter()
+        .filter(|copy| !copy.uses(data.as_deref()))
+        .map(|copy| copy.pid)
+        .collect();
+
+    let in_front = match mine {
+        Some(pid) => show(pid)?,
+        None => {
+            if let Some(dir) = &data {
+                create_private(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+            }
+            let code = config::profile_dir(env, config, name)?;
+            let status = launcher(&app, data.as_deref(), code.as_deref())
+                .status()
+                .context("cannot run `open`")?;
+            if !status.success() {
+                bail!("macOS could not open {}", app.bundle.display());
+            }
+            // Nothing is closed before the new one is seen running: an app
+            // that failed to start must not cost the one that was open.
+            let Some(pid) = started(&app, data.as_deref()) else {
+                bail!(
+                    "Claude Desktop did not start on profile '{name}': \
+                     nothing else was closed"
+                );
+            };
+            // Started from a program that is not in front, it may stay
+            // behind the other windows. Bringing it forward is a courtesy:
+            // it is running either way.
+            let _ = show(pid);
+            true
         }
-        return Ok(Opened::Shown);
+    };
+
+    for pid in &others {
+        // "No such app" is fine: that one went away by itself.
+        quit(*pid)?;
     }
-    if let Some(dir) = &data {
-        create_private(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    if !still_running(&app, &others).is_empty() {
+        bail!(
+            "Claude Desktop is on profile '{name}', but the one that was open did not \
+             quit: it may be asking you something. Answer it, or quit it yourself"
+        );
     }
-    let code = config::profile_dir(env, config, name)?;
-    let status = launcher(&app, data.as_deref(), code.as_deref())
-        .status()
-        .context("cannot run `open`")?;
-    if !status.success() {
-        bail!("macOS could not open {}", app.bundle.display());
+    // Saying "brought to the front" when macOS did not do it would send
+    // the user looking for a window that did not move.
+    if !in_front {
+        bail!(
+            "Claude Desktop is on profile '{name}', but macOS did not bring it \
+             to the front: pick its window yourself"
+        );
     }
-    // A copy started from a program that is not in front may stay behind
-    // the other windows. Bringing it forward is a courtesy: it is running
-    // either way, so a failure here is not one of `open`.
-    if let Some(pid) = started(&app, data.as_deref()) {
-        let _ = show(pid);
-    }
-    Ok(Opened::Started)
+    Ok(Switched {
+        started: mine.is_none(),
+        closed: others.len(),
+    })
 }
 
 /// The sentence for a Mac without Claude Desktop.
@@ -654,6 +783,52 @@ mod tests {
             state_of("perso", &format!("  41 {EXECUTABLE}\n")),
             State::Open(41)
         );
+    }
+
+    #[test]
+    fn a_switch_closes_every_other_claude_desktop_and_says_whose() {
+        let (_temp, env, mut config) = world();
+        config
+            .profiles
+            .insert("client".to_string(), Profile::default());
+        let on = |name: &str| env.root.join("desktop").join(name).display().to_string();
+        let listing = format!(
+            "  41 {EXECUTABLE}\n  42 {EXECUTABLE} --user-data-dir={}\n  43 {EXECUTABLE} --user-data-dir={}\n",
+            on("work"),
+            on("gone"),
+        );
+        let found = copies(&listing);
+        let owners: Vec<Option<String>> = found
+            .iter()
+            .map(|copy| owner(&env, &config, copy))
+            .collect();
+        // Claude Desktop's own folder is the native profile's; a folder
+        // left by a profile that was removed is nobody's.
+        assert_eq!(
+            owners,
+            [Some("perso".to_string()), Some("work".to_string()), None]
+        );
+
+        let closes = |name: &str| in_the_way(&env, &config, name, &found).unwrap();
+        assert_eq!(closes("work"), [Some("perso".to_string()), None]);
+        assert_eq!(closes("perso"), [Some("work".to_string()), None]);
+        assert_eq!(
+            closes("client"),
+            [Some("perso".to_string()), Some("work".to_string()), None]
+        );
+        // Already alone on the profile, or nothing running: nothing closes.
+        let alone = copies(&format!("  41 {EXECUTABLE}\n"));
+        assert!(in_the_way(&env, &config, "perso", &alone)
+            .unwrap()
+            .is_empty());
+        assert!(in_the_way(&env, &config, "work", &[]).unwrap().is_empty());
+        assert!(in_the_way(&env, &config, "nobody", &found).is_err());
+
+        // Without a profile that reuses `~/.claude`, the Claude Desktop
+        // opened from the Dock is no profile's: it closes all the same.
+        config.profiles.remove("perso");
+        assert_eq!(owner(&env, &config, &alone[0]), None);
+        assert_eq!(in_the_way(&env, &config, "work", &alone).unwrap(), [None]);
     }
 
     #[test]

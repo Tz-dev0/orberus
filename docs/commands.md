@@ -78,13 +78,13 @@ See [editors.md](editors.md).
 ## desktop
 
 ```sh
-orberus desktop [name]
+orberus desktop [name] [--yes]
 ```
 
-Claude Desktop holds one account at a time. This gives each profile its own
-Claude Desktop: the same app, opened on a data folder of its own, so each
-one stays signed in to its account. Alone, the command lists the profiles
-and where their Claude Desktop stands:
+Claude Desktop holds one account at a time. This switches it: each profile
+keeps its own sign-in, and Claude Desktop is opened on the profile you name,
+then the one that was open is closed. Alone, the command lists the profiles
+and the one Claude Desktop is on:
 
 ```text
 $ orberus desktop
@@ -92,32 +92,43 @@ $ orberus desktop
 │ Profile │ Claude Desktop │ Its data                                                    │
 ├─────────┼────────────────┼─────────────────────────────────────────────────────────────┤
 │ client  │ not opened yet │ ~/.orberus/desktop/client                                   │
-│ perso   │ closed         │ ~/Library/Application Support/Claude (Claude Desktop's own) │
-│ work    │ open           │ ~/.orberus/desktop/work                                     │
+│ perso   │ open           │ ~/Library/Application Support/Claude (Claude Desktop's own) │
+│ work    │ closed         │ ~/.orberus/desktop/work                                     │
 └─────────┴────────────────┴─────────────────────────────────────────────────────────────┘
 
-Open one with: orberus desktop <profile>
+Switch with: orberus desktop <profile>
 ```
 
-With a name, it opens the Claude Desktop of that profile, or brings it to
-the front when it is already open:
+With a name, it switches. When a Claude Desktop has to close, it says so
+and asks first, since what runs in it stops with it:
 
 ```text
 $ orberus desktop work
-✓ Claude Desktop started for 'work'
+Claude Desktop is open on 'perso'. It closes, and what runs in it stops:
+a conversation that is answering, a task.
+Switch Claude Desktop to 'work'? [y/N] y
+✓ Claude Desktop switched to 'work' (it was on 'perso')
   First time: sign in there with the account of this profile.
 
 $ orberus desktop work
-✓ Claude Desktop of 'work' was already open: brought to the front
+✓ Claude Desktop was already on 'work': brought to the front
 ```
+
+| Option | Effect |
+|---|---|
+| `--yes`, `-y` | Do not ask before closing the Claude Desktop that is open. Needed outside a terminal |
+
+When Claude Desktop is closed, nothing is asked: it is opened on the
+profile. Claude Desktop is asked to quit the way its Quit menu does, never
+forced; if it is still open after ten seconds, the command says so.
 
 The profile that reuses `~/.claude` keeps Claude Desktop as it is today,
 with its account and its conversations. Every other profile starts with an
 empty Claude Desktop, where you sign in once.
 
 This relies on how Claude Desktop is built, not on a feature Anthropic
-documents, and signing in to a second one was not tried yet. How it works,
-what was tried and what to know before using it:
+documents, and signing in on a second data folder was not tried yet. How it
+works, what was tried and what to know before using it:
 [desktop.md](desktop.md).
 
 ## pause, resume
@@ -215,8 +226,8 @@ folder, with its login and history. Install again later and they are back.
 
 `--purge` deletes those too: `~/.orberus` as a whole, the folder of
 every profile, their logins in the macOS keychain, and the data of each
-profile's own [Claude Desktop](#desktop). This cannot be undone. It is
-refused while one of those Claude Desktops is open.
+profile's [Claude Desktop](#desktop). This cannot be undone. It is
+refused while Claude Desktop is open on one of them.
 `~/.claude`, the folder of the native profile, is never touched, and neither
 is Claude Desktop's own data, nor a profile folder that holds more than the
 profile.
@@ -280,9 +291,9 @@ kept, so its login and history stay on disk and the profile can be created
 again later.
 
 `--purge` also deletes that folder, the profile's login in the macOS
-keychain, and the data of its own [Claude Desktop](#desktop). This cannot be
+keychain, and the data of its [Claude Desktop](#desktop). This cannot be
 undone. It is refused for the native profile, whose folder is `~/.claude`,
-and while the profile's Claude Desktop is open.
+and while Claude Desktop is open on the profile.
 
 Team rules are never removed.
 

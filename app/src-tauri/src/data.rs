@@ -842,35 +842,46 @@ pub fn set_editor(env: &Env, settings: &str, on: bool) -> Result<()> {
     Ok(())
 }
 
-/// One profile's Claude Desktop, for the "Claude Desktop" section.
+/// One profile's line in the "Claude Desktop" section.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopView {
     pub profile: String,
-    /// `open`: its copy is running. `closed`: it was opened before. `new`:
-    /// never opened, so nobody signed in there yet.
+    /// `open`: Claude Desktop runs on this profile. `closed`: it was opened
+    /// on it before. `new`: never, so nobody signed in there yet.
     pub state: &'static str,
     /// True for the profile that reuses `~/.claude`: it has Claude Desktop
-    /// as it already was on this Mac, not a copy of its own.
+    /// as it already was on this Mac, on its usual data folder.
     pub usual: bool,
-    /// Where that Claude Desktop keeps its data, shortened to read.
+    /// Where Claude Desktop keeps this profile's data, shortened to read.
     pub data: String,
 }
 
-/// Every profile's Claude Desktop and where it stands. Empty when Claude
-/// Desktop is not installed: the page then has no section for it.
-pub fn desktop(env: &Env) -> Result<Vec<DesktopView>> {
+/// The "Claude Desktop" section: which profile Claude Desktop is on.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopOverview {
+    /// One line per profile. Empty when Claude Desktop is not installed:
+    /// the page then has no section for it.
+    pub profiles: Vec<DesktopView>,
+    /// How many Claude Desktops are open on a data folder that is no
+    /// profile's. A switch closes them too, so the page says so.
+    pub stray: usize,
+}
+
+/// Which profile Claude Desktop is on, and where each profile stands.
+pub fn desktop(env: &Env) -> Result<DesktopOverview> {
     let Some(app) = desktop::app(env) else {
-        return Ok(Vec::new());
+        return Ok(DesktopOverview::default());
     };
     // A list that cannot be read only costs the "open" marks.
-    desktop_views(env, &desktop::running(&app).unwrap_or_default())
+    desktop_overview(env, &desktop::running(&app).unwrap_or_default())
 }
 
 /// The same, given the copies of Claude Desktop that are running.
-fn desktop_views(env: &Env, copies: &[Running]) -> Result<Vec<DesktopView>> {
+fn desktop_overview(env: &Env, copies: &[Running]) -> Result<DesktopOverview> {
     let config = config::load(env)?.config;
-    config
+    let profiles = config
         .profiles
         .keys()
         .map(|name| {
@@ -890,18 +901,23 @@ fn desktop_views(env: &Env, copies: &[Running]) -> Result<Vec<DesktopView>> {
                 ),
             })
         })
-        .collect()
+        // `collect` into a `Result`: the first error ends the whole list.
+        .collect::<Result<Vec<_>>>()?;
+    let stray = copies
+        .iter()
+        .filter(|copy| desktop::owner(env, &config, copy).is_none())
+        .count();
+    Ok(DesktopOverview { profiles, stray })
 }
 
-/// Opens Claude Desktop on a profile, like `orberus desktop <profile>`:
-/// its copy is started, or brought to the front when it already runs.
-/// Returns `started` or `shown`.
-pub fn open_desktop(env: &Env, profile: &str) -> Result<&'static str> {
+/// Puts Claude Desktop on a profile, like `orberus desktop <profile>`: it
+/// is opened on that profile's account (or brought to the front when it is
+/// already there), then every other Claude Desktop is asked to quit. The
+/// page asked the user first, when something has to close.
+pub fn switch_desktop(env: &Env, profile: &str) -> Result<()> {
     let config = config::load(env)?.config;
-    Ok(match desktop::open(env, &config, profile)? {
-        desktop::Opened::Started => "started",
-        desktop::Opened::Shown => "shown",
-    })
+    desktop::switch(env, &config, profile)?;
+    Ok(())
 }
 
 /// Where the chosen terminal app is remembered. The name starts with a dot,
@@ -1579,20 +1595,21 @@ mod tests {
     }
 
     #[test]
-    fn each_profile_has_its_claude_desktop_and_the_native_one_keeps_the_usual() {
+    fn claude_desktop_is_on_one_profile_and_the_native_one_keeps_the_usual_folder() {
         let (_temp, env) = world();
-        // Opened once: its data folder is there.
+        // Opened once on `work`: its data folder is there.
         fs::create_dir_all(env.root.join("desktop/work")).unwrap();
 
-        let found = desktop_views(&env, &[]).unwrap();
+        let found = desktop_overview(&env, &[]).unwrap();
         let seen: Vec<(&str, &str, bool, &str)> = found
+            .profiles
             .iter()
-            .map(|copy| {
+            .map(|line| {
                 (
-                    copy.profile.as_str(),
-                    copy.state,
-                    copy.usual,
-                    copy.data.as_str(),
+                    line.profile.as_str(),
+                    line.state,
+                    line.usual,
+                    line.data.as_str(),
                 )
             })
             .collect();
@@ -1603,6 +1620,7 @@ mod tests {
                 ("work", "closed", false, "~/.orberus/desktop/work"),
             ]
         );
+        assert_eq!(found.stray, 0);
     }
 
     #[cfg(unix)]

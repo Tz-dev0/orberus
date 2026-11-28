@@ -1173,9 +1173,29 @@ h2 {
   color: var(--warn);
 }
 
-/* A profile's Claude Desktop that is running. */
+/* The profile Claude Desktop is on. */
 .desktop-open {
   color: var(--text);
+}
+
+/* The second click of a switch: it closes an app, it deletes nothing, so
+   it wears the profile's colour and not the red of a removal. */
+.talk-go.desktop-go {
+  background: var(--hue);
+  color: var(--on-seal);
+}
+
+/* What that click closes, under the profile's line. */
+.desktop-ask {
+  margin: 0;
+  padding: 0 8px 5px 32px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.desktop-ask.enter {
+  animation-name: slide;
 }
 
 .editor-state.enter {

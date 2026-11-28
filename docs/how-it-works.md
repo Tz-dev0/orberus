@@ -126,7 +126,7 @@ Claude Code's own files.
 | `~/.orberus/paused` | An empty file, while Orberus is paused (`orberus pause`) |
 | `~/.orberus/ide/` | The wrapper that editor extensions start |
 | `~/.orberus/profiles/<name>/` | The Claude Code folder of a profile. Claude Code fills it |
-| `~/.orberus/desktop/<name>/` | The data of a profile's own Claude Desktop, once you open it with [`orberus desktop`](desktop.md). Claude Desktop fills it; Orberus only reads the plan usage it notes there |
+| `~/.orberus/desktop/<name>/` | What Claude Desktop keeps for a profile, sign-in included, once you switch to it with [`orberus desktop`](desktop.md). Claude Desktop fills it; Orberus only reads the plan usage it notes there |
 | `~/.orberus/run/` | Small launch scripts and notes written by the menu bar app: the last folder of each profile, the terminal you chose, the last answer about updates |
 | `~/Library/LaunchAgents/com.github.tzdev0.orberus.plist` | Written by the menu bar app when it starts, so that macOS opens it at login. Its "Start Orberus with my Mac" switch deletes it |
 | `<profile folder>/settings.json` | Only the `cleanupPeriodDays` key, when you use `orberus retention` |

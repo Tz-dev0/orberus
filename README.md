@@ -42,9 +42,10 @@ logos belong to their owners and only say what Orberus works with.
 - **Codex** is the next tool: the same profiles and the same rules would pick
   its account too. Nothing of it is in the releases yet.
 - **Claude Desktop**: Orberus reads the plan usage it notes, for the limits.
-  A Claude Desktop per profile is a first version, so its tile stays
-  dashed: opening a second one on its own data works, signing in to it was
-  not tried yet. See [docs/desktop.md](docs/desktop.md).
+  Switching it from one profile's account to another is a first version, so
+  its tile stays dashed: opening it on a profile's own data and closing the
+  other one work, signing in there was not tried yet. See
+  [docs/desktop.md](docs/desktop.md).
 - **Windows**: the command builds and passes its tests there, but it was
   never tried in front of a real Claude Code. Not supported yet.
 
@@ -155,7 +156,7 @@ Rules, the config files and team rules are described in
 | `orberus setup` | Install the `claude` shim and put it in your `PATH` |
 | `orberus pause`, `orberus resume` | Stop picking accounts for a while, without uninstalling |
 | `orberus ide [on\|off] [editor]` | Send the Claude Code extension of VS Code, Cursor and the like through Orberus |
-| `orberus desktop [name]` | Open Claude Desktop with a profile's account: one Claude Desktop per profile |
+| `orberus desktop [name]` | Switch Claude Desktop to a profile's account: it closes, and opens again on that account |
 | `orberus add [name]` | Create a profile (`--native` reuses `~/.claude`) |
 | `orberus list` | Profiles, the account logged in to each, the default |
 | `orberus status` | Which profile applies here, and why |
@@ -294,8 +295,9 @@ picks the account by folder whether the app is open or not. See
 - `remove` keeps the profile's folder, so its login and history stay on disk.
   Only `remove --purge` deletes them, and it is refused for `~/.claude`.
 - `desktop` starts Claude Desktop itself, unmodified, on a data folder per
-  profile. Orberus does not read the sign-in or the conversations kept
-  there, and never deletes Claude Desktop's own data.
+  profile, and asks before it closes the one that is open: it is asked to
+  quit, never forced. Orberus does not read the sign-in or the conversations
+  kept there, and never deletes Claude Desktop's own data.
 - The menu bar app asks GitHub once a day whether a newer release exists:
   one request, with nothing about you in it. It is the only network request
   in the project.
@@ -313,7 +315,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 - [Rules and configuration](docs/rules.md): rule types, `config.toml`, team rules
 - [Commands](docs/commands.md): every command and its options
 - [Editors and IDEs](docs/editors.md): VS Code, Cursor, JetBrains
-- [Claude Desktop](docs/desktop.md): one per profile, and what was tried
+- [Claude Desktop](docs/desktop.md): switching its account, and what was tried
 - [Menu bar app](docs/app.md)
 - [How it works](docs/how-it-works.md)
 - [Troubleshooting](docs/troubleshooting.md): known limits and common problems

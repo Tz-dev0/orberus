@@ -70,8 +70,8 @@ no line. The `claude` shim never does this: it makes no network request.
   profile's folder, cut by what fills it: conversations, file history, plugins
   and skills, other.
 - **Claude Desktop** (folded, shown when Claude Desktop is installed): one
-  line per profile, with whether its Claude Desktop is open. Folded, it says
-  how many are open. See [desktop.md](desktop.md).
+  line per profile, with the one Claude Desktop is on. Folded, it names that
+  profile. See [desktop.md](desktop.md).
 - **Editors** (folded, shown when VS Code, Cursor or another editor built on
   VS Code is found): whether the Claude Code extension of each one goes
   through Orberus. Folded, it says how many still skip it.
@@ -92,7 +92,7 @@ own: `orberus --version`.
 | Remove a profile | Hover the profile, then the bin icon. The row says what goes and what stays before you confirm |
 | Change how long conversations are kept | Unfold "Conversations kept": 30 days, 90 days, 1 year, or a number of days |
 | Move big conversations to the Trash | Unfold "Storage", click a profile, then the bin icon of a conversation and "Move to Trash" |
-| Open Claude Desktop with a profile's account | Unfold "Claude Desktop" and click "Open" next to the profile: the same as [`orberus desktop <profile>`](desktop.md). When it is already open, the button says "Show" and brings it to the front. The first time, you sign in there |
+| Switch Claude Desktop to a profile's account | Unfold "Claude Desktop" and click "Switch" next to the profile: the same as [`orberus desktop <profile>`](desktop.md). The line then says which Claude Desktop closes, and "Close and switch" does it: what runs in it stops. With Claude Desktop closed, the button says "Open"; on the profile it is on, "Show" brings it to the front. The first time on a profile, you sign in there |
 | Pick the account by folder in an editor | Unfold "Editors" and click "Turn on" next to it: the same as [`orberus ide on`](editors.md) for that editor. "Turn off" undoes it. Reload the editor's window afterwards |
 | Pause Orberus | Turn on "Pause Orberus" at the bottom of the window: `claude` starts as if Orberus was not installed, rules included. "Resume" in the banner, or the switch again, ends it |
 | Update | When "Update to Orberus …" shows at the bottom of the window, click it: it opens the page that says how |
@@ -106,8 +106,8 @@ the folder you pick still has the last word.
 
 Removing a profile works as `orberus remove` does: the profile's Claude Code
 folder is kept unless you tick "Also delete its folder and sign out", which is
-`orberus remove --purge`. That also deletes the data of the profile's own
-Claude Desktop, and is refused while that Claude Desktop is open.
+`orberus remove --purge`. That also deletes what Claude Desktop keeps for
+the profile, and is refused while Claude Desktop is open on it.
 
 ## Language
 
@@ -127,9 +127,9 @@ command line.
   files (Terminal, and others such as Ghostty, WezTerm or kitty). Opening
   Claude Code was tested with Terminal only. An app that does not accept a
   script file, such as Alacritty, is not listed.
-- Every Claude Desktop is named "Claude" in the Dock, whatever its profile.
-  Signing in to a second one was not tried yet: see
-  [desktop.md](desktop.md#what-was-tried).
+- Claude Desktop is switched by closing it and opening it again: its
+  account cannot be changed while it is open. Signing in on a second data
+  folder was not tried yet: see [desktop.md](desktop.md#what-was-tried).
 - Error messages are in English, whatever the language of the window.
 - It is not signed with an Apple developer certificate. See
   [installation.md](installation.md#why-curl-and-not-the-browser).
