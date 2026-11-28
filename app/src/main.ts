@@ -1373,6 +1373,19 @@ function updateItem(version: string): HTMLElement {
   return item;
 }
 
+/** The last line of the window: what the app is not, and which version it
+ *  is. The version is the first thing asked for in a bug report. */
+function legalLine(overview: Overview | null): HTMLElement {
+  const line = el("p", "legal");
+  line.append(el("span", "", t("legal")));
+  if (overview) {
+    const version = el("span", "version", t("version", { version: overview.version }));
+    version.title = t("versionHint");
+    line.append(version);
+  }
+  return line;
+}
+
 function menu(overview: Overview | null): HTMLElement {
   const footer = el("footer");
   if (newVersion) footer.append(updateItem(newVersion));
@@ -1383,7 +1396,7 @@ function menu(overview: Overview | null): HTMLElement {
   footer.append(
     menuItem(t("editConfig"), "⌘,", () => api.openConfig()),
     menuItem(t("quit"), "⌘Q", () => api.quit()),
-    el("p", "legal", t("legal")),
+    legalLine(overview),
   );
   return footer;
 }

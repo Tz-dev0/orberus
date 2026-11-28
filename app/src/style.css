@@ -1479,7 +1479,19 @@ kbd {
 }
 
 .legal {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
   margin: 6px 8px 2px;
   font-size: 10px;
   color: var(--faint);
+}
+
+/* The version, at the end of that line. Selectable, to paste in a report. */
+.version {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }

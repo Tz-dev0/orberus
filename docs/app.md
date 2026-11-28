@@ -67,6 +67,9 @@ no line. The `claude` shim never does this: it makes no network request.
   through Orberus. Folded, it says how many still skip it.
 - **Terminal** (folded): the app that "Open…" starts Claude Code in.
 
+The last line of the window gives the app's version. The command has its
+own: `orberus --version`.
+
 ## What you can do
 
 | Action | How |

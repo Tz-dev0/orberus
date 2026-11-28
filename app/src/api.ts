@@ -6,6 +6,7 @@
 // i18n.ts. An error is the exception: its text comes from Rust, in English.
 
 import { invoke } from "@tauri-apps/api/core";
+import pagePackage from "../package.json";
 
 export interface Profile {
   name: string;
@@ -173,6 +174,8 @@ export interface Overview {
   terminal: string | null;
   /** True when macOS opens the app at login. */
   openAtLogin: boolean;
+  /** The version of the app. */
+  version: string;
 }
 
 /** One limit of an account, as it stands now. */
@@ -346,6 +349,8 @@ function preview(): Api {
     terminal: null,
     // On by default, as in the real app.
     openAtLogin: true,
+    // The real app gives its own version; the preview has the page's.
+    version: pagePackage.version,
     profiles: [
       { name: "perso", account: "me@example.com", plan: "Max 5x", location: "~/.claude", native: true, isDefault: true, rules: 0, teamRules: 0, canPurge: false, keepsDays: 120, keepsError: null },
       {
