@@ -126,6 +126,18 @@ Open it once and check that "Start Orberus with my Mac" is on. If it is, look
 at the login items in macOS's System Settings: macOS lists there what may
 open in the background, and lets you switch each one off.
 
+### The menu bar app is still there after I uninstalled
+
+`orberus uninstall` quits the app and moves it to the Trash. It finds a copy
+in `/Applications` or `~/Applications`, the copy that opens at login, and
+any copy that is running. Two cases leave one behind:
+
+- you removed the command another way (`cargo uninstall orberus`, or by
+  deleting the file): that removes the command and nothing else. Install
+  `orberus` again, run `orberus uninstall`, then remove the command;
+- a copy sits in another folder, does not open at login and was not running:
+  quit it if needed and move it to the Trash yourself.
+
 ## Known limits
 
 - **A running session keeps its account.** The choice is made when Claude

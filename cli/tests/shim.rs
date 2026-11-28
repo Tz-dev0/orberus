@@ -642,6 +642,65 @@ fn uninstall_moves_the_app_to_the_trash_only_when_it_is_ours() {
     assert!(home.join(".Trash/Orberus.app").is_dir());
 }
 
+// A copy kept outside the Applications folders (a build folder, Downloads)
+// is found through the file that opens it at login.
+#[cfg(target_os = "macos")]
+#[test]
+fn uninstall_finds_the_app_outside_the_applications_folders() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    let plist = "<string>com.github.tzdev0.orberus</string>";
+    let usual = home.join("Applications/Orberus.app");
+    let built = home.join("builds/macos/Orberus.app");
+    for app in [&usual, &built] {
+        fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        fs::write(app.join("Contents/Info.plist"), plist).unwrap();
+    }
+    // What the app writes when it starts: a file that names its program.
+    let agents = home.join("Library/LaunchAgents");
+    fs::create_dir_all(&agents).unwrap();
+    let login = agents.join("com.github.tzdev0.orberus.plist");
+    let names = |app: &Path| {
+        format!(
+            "<dict><key>ProgramArguments</key><array><string>{}</string></array></dict>",
+            app.join("Contents/MacOS/orberus-app").display()
+        )
+    };
+
+    // The file names a folder that is not our app: it stays.
+    let other = home.join("builds/Other.app");
+    fs::create_dir_all(other.join("Contents/MacOS")).unwrap();
+    fs::write(
+        other.join("Contents/Info.plist"),
+        "<string>com.example.other</string>",
+    )
+    .unwrap();
+    fs::write(&login, names(&other)).unwrap();
+    fs::remove_dir_all(&usual).unwrap();
+    world.ok(&home, &["uninstall", "--yes"]);
+    assert!(other.is_dir(), "an app that is not ours must stay");
+    assert!(
+        built.is_dir(),
+        "a copy nothing points to is not searched for"
+    );
+
+    // The file names our copy in the build folder: both copies go.
+    fs::create_dir_all(usual.join("Contents")).unwrap();
+    fs::write(usual.join("Contents/Info.plist"), plist).unwrap();
+    fs::write(&login, names(&built)).unwrap();
+    let done = world.ok(&home, &["uninstall", "--yes"]);
+    assert!(
+        done.contains("the menu bar app, moved to the Trash: ~/builds/macos/Orberus.app"),
+        "{done}"
+    );
+    assert!(!usual.exists());
+    assert!(!built.exists());
+    assert!(home.join(".Trash/Orberus.app").is_dir());
+    assert!(home.join(".Trash/Orberus 2.app").is_dir());
+    assert!(!login.exists());
+}
+
 #[test]
 fn usage_shows_each_folder_against_the_rules() {
     let world = World::new();

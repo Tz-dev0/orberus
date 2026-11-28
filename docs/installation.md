@@ -90,9 +90,10 @@ orberus uninstall
 
 It removes the shim, the `PATH` line that `setup` added to your shell config,
 the setting that `orberus ide on` wrote in your editors, `orberus` itself and
-the menu bar app (moved to the Trash, with the file that opens it when you
-log in), after showing you the list and asking. Open a new terminal
-afterwards: `claude` is the real Claude Code again.
+the menu bar app (asked to quit when it is running, then moved to the Trash,
+with the file that opens it when you log in), after showing you the list and
+asking. Open a new terminal afterwards: `claude` is the real Claude Code
+again.
 
 Your profiles are kept in `~/.orberus`: the config, the rules and the
 Claude Code folder of each profile, with its login and history. To delete
@@ -106,7 +107,9 @@ Your own `~/.claude` is never touched by either command. See
 [commands.md](commands.md#uninstall) for the details.
 
 If you installed `orberus` with `cargo install`, finish with
-`cargo uninstall orberus`.
+`cargo uninstall orberus`, in that order. `cargo uninstall` only deletes the
+command: alone, it leaves the menu bar app, the shim and the `PATH` line
+behind, and `claude` no longer picks an account.
 
 ## Build from source
 

@@ -83,6 +83,29 @@ pub fn enable(env: &Env, program: &Path) -> Result<()> {
     fs::write(&file, content(program)).with_context(|| format!("cannot write {}", file.display()))
 }
 
+/// The program the file names: the executable of the copy of the app that
+/// opens at login, wherever that copy is. `None` without a file, or when
+/// the file is not one of ours.
+pub fn program(env: &Env) -> Option<PathBuf> {
+    named_in(&fs::read_to_string(file(env)).ok()?)
+}
+
+/// The first program argument written in the file's text.
+fn named_in(text: &str) -> Option<PathBuf> {
+    // `split_once` cuts at the first match and gives both sides; the `?`
+    // ends the function with `None` as soon as one mark is missing.
+    let (_, after) = text.split_once("<key>ProgramArguments</key>")?;
+    let (_, after) = after.split_once("<string>")?;
+    let (path, _) = after.split_once("</string>")?;
+    // The reverse of `escaped`. `&amp;` goes last, so that a path holding
+    // the five characters `&lt;` comes back as it was.
+    let path = path
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&");
+    Some(PathBuf::from(path))
+}
+
 /// Stops opening the app at login. Returns false when it was not set.
 pub fn disable(env: &Env) -> Result<bool> {
     let file = file(env);
@@ -168,6 +191,40 @@ mod tests {
 
         assert!(disable(&env).unwrap());
         assert!(!file(&env).exists());
+    }
+
+    #[test]
+    fn the_file_tells_which_copy_of_the_app_opens_at_login() {
+        let (_temp, env) = world();
+        assert_eq!(program(&env), None);
+
+        // A folder name with the characters XML reserves comes back as it
+        // was written.
+        let program_path = env
+            .home
+            .join("R&D <old> &lt;/Orberus.app/Contents/MacOS/orberus-app");
+        fs::create_dir_all(program_path.parent().unwrap()).unwrap();
+        fs::write(&program_path, "").unwrap();
+        enable(&env, &program_path).unwrap();
+        assert_eq!(program(&env), Some(program_path));
+
+        // Other keys with text of their own, before and after, change
+        // nothing: the program is the first argument.
+        let text = "<dict><key>Label</key><string>label</string>\
+<key>ProgramArguments</key><array><string>/Applications/Orberus.app/Contents/MacOS/orberus-app</string>\
+<string>--flag</string></array>\
+<key>AssociatedBundleIdentifiers</key><string>id</string></dict>";
+        assert_eq!(
+            named_in(text),
+            Some(PathBuf::from(
+                "/Applications/Orberus.app/Contents/MacOS/orberus-app"
+            ))
+        );
+
+        // Not one of ours: nothing is read from it.
+        assert_eq!(named_in("<plist/>"), None);
+        fs::write(file(&env), "<plist/>").unwrap();
+        assert_eq!(program(&env), None);
     }
 
     #[test]
