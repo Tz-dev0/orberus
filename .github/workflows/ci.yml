@@ -1,15 +1,16 @@
-# Runs on every pull request, and on main after a merge: formatting, lints
-# and tests of the core, the command and the app. These are the commands
-# CONTRIBUTING.md asks for before a pull request, so a green run here means
-# the same thing as a green run on your machine.
+# Runs on every pull request: formatting, lints and tests of the core, the
+# command and the app. These are the commands CONTRIBUTING.md asks for before
+# a pull request, so a green run here means the same thing as a green run on
+# your machine.
+#
+# Not on main: every change reaches main through a pull request that already
+# passed here, and the release workflow runs the tests again on a tag.
 name: Tests
 
 on:
-  push:
-    branches: [main]
   pull_request:
 
-# A new push to a branch makes the run of the previous one pointless.
+# A new push to a pull request makes the run of the previous one pointless.
 concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
