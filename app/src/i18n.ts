@@ -30,7 +30,7 @@ const en = {
   keptFolder: "Its Claude Code folder stays on this Mac, with its login and history.",
   keptNative: "Its folder {location} is your own Claude Code setup: it stays on this Mac.",
   deletedFolder:
-    "{location} will be deleted with its history and settings, and its login removed from the keychain. This cannot be undone.",
+    "{location} will be deleted with its history, settings and login. Any Claude Desktop and Codex data and sign-ins for this profile will also be removed. This cannot be undone.",
   alsoDelete: "Also delete its folder and sign out",
   teamNeedsOne:
     "1 rule from your team needs this profile: Claude Code will refuse to start where it applies.",
@@ -301,7 +301,7 @@ const fr: Record<Key, string> = {
   keptNative:
     "Son dossier {location} est votre propre installation de Claude Code : il reste sur ce Mac.",
   deletedFolder:
-    "{location} sera supprimé avec son historique et ses réglages, et son login retiré du trousseau. C'est irréversible.",
+    "{location} sera supprimé avec son historique, ses réglages et sa connexion. Les données et les connexions de ce profil dans Claude Desktop et Codex seront aussi supprimées. C'est irréversible.",
   alsoDelete: "Supprimer aussi son dossier et se déconnecter",
   teamNeedsOne:
     "1 règle de votre équipe a besoin de ce profil : Claude Code refusera de démarrer là où elle s'applique.",

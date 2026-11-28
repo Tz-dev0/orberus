@@ -1,10 +1,9 @@
-//! The tools Orberus chooses an account for. Today there is one: Claude Code.
+//! The tools Orberus chooses an account for.
 //!
 //! Everything that names a tool goes through here: the command people type,
 //! the variable that tells the tool where its config folder is, and the
-//! folder it uses when that variable is not set. The shim, `setup`, `doctor`
-//! and `uninstall` read this table instead of spelling `claude` themselves,
-//! so adding a tool starts with one more entry in `ALL`.
+//! folder it uses when that variable is not set. Claude Code supports a
+//! shim and an editor wrapper. Codex CLI is available through `orberus run`.
 //!
 //! A tool can be started in two ways, and Orberus stands in front of both.
 //! People and most editors run its command, which finds the shim first in
@@ -17,14 +16,14 @@
 //! (`view::account`), the conversations and their size (`sessions`, `disk`,
 //! `usage`), how long they are kept (`retention`) and the keychain entry
 //! (`purge`). Those modules read Claude Code's own files, whose layout no
-//! other tool shares. A second tool needs its own readers there, and one
-//! decision first: where its config folder lives for a profile (a profile's
-//! folder under `profiles/` is Claude Code's config folder itself today).
+//! other tool shares.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use crate::config::Config;
+use anyhow::{Context, Result};
+
+use crate::config::{self, Config};
 use crate::paths::Env;
 
 // `'static` strings: the table is written in the program itself, so every
@@ -72,7 +71,16 @@ pub const CLAUDE: Tool = Tool {
     }),
 };
 
-/// Every tool Orberus knows. `setup` installs one shim per entry.
+pub const CODEX: Tool = Tool {
+    id: "codex",
+    name: "Codex CLI",
+    command: "codex",
+    config_env: "CODEX_HOME",
+    native_dir: ".codex",
+    extension: None,
+};
+
+/// Tools that support being invoked as a shim. Codex is opt-in through `run`.
 pub const ALL: &[&Tool] = &[&CLAUDE];
 
 /// The tool this program was started as, if any: `claude` (or `claude.exe`)
@@ -95,10 +103,35 @@ pub fn for_wrapper(invoked: &OsStr) -> Option<&'static Tool> {
 /// What follows a tool's command in the name of its wrapper.
 const WRAPPER_SUFFIX: &str = "-wrapper";
 
+/// Managed Codex home for a profile. Lowercase names keep their usual spelling.
+pub(crate) fn codex_dir(env: &Env, name: &str) -> Result<PathBuf> {
+    config::validate_name(name)?;
+    // Escape uppercase letters so `Work` and `work` get separate homes
+    // even on case-insensitive volumes. `~` cannot appear in a profile name.
+    let mut folder = String::with_capacity(name.len());
+    for letter in name.chars() {
+        if letter.is_ascii_uppercase() {
+            folder.push('~');
+        }
+        folder.push(letter.to_ascii_lowercase());
+    }
+    let dir = env.root.join("codex").join(folder);
+    std::path::absolute(&dir).with_context(|| format!("cannot resolve {}", dir.display()))
+}
+
 impl Tool {
-    /// The tool's own default config folder: `~/.claude`.
+    /// The tool's own default config folder, such as `~/.claude`.
     pub fn native_dir(&self, env: &Env) -> PathBuf {
         env.home.join(self.native_dir)
+    }
+
+    /// Config directory for a profile selected by the resolver.
+    pub fn profile_dir(&self, env: &Env, config: &Config, name: &str) -> Result<Option<PathBuf>> {
+        if self == &CODEX {
+            codex_dir(env, name).map(Some)
+        } else {
+            config::profile_dir(env, config, name)
+        }
     }
 
     /// The file name of the shim in Orberus' `bin` folder.
@@ -147,6 +180,7 @@ impl Tool {
         // tool cannot silently inherit Claude Code's path.
         match self.id {
             "claude" => config.claude_bin.as_deref(),
+            "codex" => config.codex_bin.as_deref(),
             _ => None,
         }
     }
@@ -178,6 +212,7 @@ mod tests {
         assert_eq!(for_command(OsStr::new("/usr/local/bin/orberus")), None);
         // Close to a tool's name is not the tool.
         assert_eq!(for_command(OsStr::new("claude-wrapper")), None);
+        assert_eq!(for_command(OsStr::new("codex")), None);
         assert_eq!(for_command(OsStr::new("")), None);
     }
 
@@ -201,8 +236,9 @@ mod tests {
     fn every_tool_has_its_own_command_and_variable() {
         // Two tools sharing a command would install the same shim; sharing
         // a variable would send both to the same config folder.
-        for (index, tool) in ALL.iter().enumerate() {
-            for other in &ALL[index + 1..] {
+        let tools = [&CLAUDE, &CODEX];
+        for (index, tool) in tools.iter().enumerate() {
+            for other in &tools[index + 1..] {
                 assert_ne!(tool.id, other.id);
                 assert_ne!(tool.command, other.command);
                 assert_ne!(tool.config_env, other.config_env);

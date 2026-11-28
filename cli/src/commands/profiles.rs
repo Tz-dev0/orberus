@@ -222,6 +222,12 @@ pub(crate) fn remove(
                 ));
             }
         }
+        if let Some(dir) = purge::codex_folder(env, &name)? {
+            ui.warning(&format!(
+                "{} will be deleted too, and Codex will sign out of this profile",
+                short_path(env, &dir)
+            ));
+        }
     }
     let question = if purge {
         format!("Remove profile '{name}' and delete its folder?")
@@ -246,6 +252,12 @@ pub(crate) fn remove(
         }
         if purged.desktop {
             ui.detail("deleted the data of its Claude Desktop");
+        }
+        if let Some(dir) = purged.codex {
+            ui.detail(&format!(
+                "signed out of Codex and deleted {}",
+                short_path(env, &dir)
+            ));
         }
     } else {
         config::remove_profile(env, &mut config, &name)?;

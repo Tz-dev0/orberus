@@ -599,8 +599,8 @@ pub fn add_profile(env: &Env, name: &str, reuse_login: bool) -> Result<()> {
 }
 
 /// Removes a profile and the user's rules that point to it, like
-/// `orberus remove`. Its Claude Code folder, and so its login, are kept,
-/// unless `purge` asks to delete them too (`orberus remove --purge`).
+/// `orberus remove`. Its local data and logins are kept unless `purge`
+/// asks to delete them too (`orberus remove --purge`).
 pub fn remove_profile(env: &Env, name: &str, purge: bool) -> Result<()> {
     let mut config = config::load(env)?.config;
     if purge {

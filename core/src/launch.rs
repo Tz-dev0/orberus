@@ -9,10 +9,10 @@ use std::process::Command;
 use anyhow::{anyhow, bail, Context, Result};
 
 use crate::config::Config;
-use crate::paths::Env;
-use crate::tool::Tool;
+use crate::paths::{create_private_dir, Env};
+use crate::tool::{Tool, CLAUDE, CODEX};
 
-/// Set on every process we start. A `claude` started from inside a running
+/// Set on managed Claude Code processes. A `claude` started from inside a running
 /// session inherits it and keeps the session's account instead of resolving
 /// again from its own folder.
 pub const SESSION_ENV: &str = "ORBERUS_SESSION";
@@ -124,18 +124,27 @@ pub fn handed_over(mut args: Vec<OsString>) -> Result<(Option<PathBuf>, Vec<OsSt
     Ok((Some(binary), args))
 }
 
-/// Starts the real tool. On macOS and Linux this replaces the current
-/// process, so signals and the terminal behave as if it was started
-/// directly. Returns the exit code only on platforms without `exec`.
-pub fn launch(tool: &Tool, real: &Path, target: Target, args: Vec<OsString>) -> Result<i32> {
+/// Prepares a tool process with the same profile environment for launches and logout.
+pub(crate) fn command(tool: &Tool, real: &Path, target: Target) -> Result<Command> {
     let mut command = Command::new(real);
-    command.args(args);
     if let Target::Profile { name, dir } = target {
-        command.env(SESSION_ENV, name);
+        if tool == &CLAUDE {
+            command.env(SESSION_ENV, name);
+        }
+        if tool == &CODEX {
+            // These process-level credentials can override the selected home's login.
+            command
+                .env_remove("CODEX_API_KEY")
+                .env_remove("CODEX_ACCESS_TOKEN");
+        }
         match dir {
             Some(dir) => {
-                fs::create_dir_all(dir)
-                    .with_context(|| format!("cannot create {}", dir.display()))?;
+                let created = if tool == &CODEX {
+                    create_private_dir(dir)
+                } else {
+                    fs::create_dir_all(dir)
+                };
+                created.with_context(|| format!("cannot create {}", dir.display()))?;
                 command.env(tool.config_env, dir);
             }
             None => {
@@ -143,7 +152,15 @@ pub fn launch(tool: &Tool, real: &Path, target: Target, args: Vec<OsString>) -> 
             }
         }
     }
+    Ok(command)
+}
 
+/// Starts the real tool. On macOS and Linux this replaces the current
+/// process, so signals and the terminal behave as if it was started
+/// directly. Returns the exit code only on platforms without `exec`.
+pub fn launch(tool: &Tool, real: &Path, target: Target, args: Vec<OsString>) -> Result<i32> {
+    let mut command = command(tool, real, target)?;
+    command.args(args);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

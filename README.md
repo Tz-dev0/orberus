@@ -2,7 +2,7 @@
   <img src="app/src-tauri/icons/128x128@2x.png" width="96" height="96" alt="">
   <h1>Orberus</h1>
   <p><b>The right account for each folder. Automatically.</b></p>
-  <p>Several Claude Code accounts on one Mac, picked by the folder you are in.<br>Codex is next.</p>
+  <p>Claude Code and Codex CLI accounts on one Mac, picked by the folder you are in.</p>
   <p>
     <a href="https://github.com/Tz-dev0/orberus/releases"><img src="https://img.shields.io/github/v/release/Tz-dev0/orberus?label=version&style=flat-square" alt="Version"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT license"></a>
@@ -31,7 +31,7 @@ and a locked rule refuses the wrong one.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/platforms-dark.svg">
-    <img src="docs/images/platforms-light.svg" width="840" alt="Works today: Claude Code and Claude Desktop (account switch, first version), on macOS (Apple Silicon and Intel). Coming next: Codex and Windows.">
+    <img src="docs/images/platforms-light.svg" width="840" alt="Works today: Claude Code, Claude Desktop account switching, and Codex CLI via orberus run, on macOS (Apple Silicon and Intel). Coming next: Windows.">
   </picture>
 </p>
 
@@ -46,8 +46,8 @@ logos belong to their owners and only say what Orberus works with.
   Claude Desktop in daily use, and back, works; signing in on a second data
   folder was not tried yet. Orberus also reads the plan usage Claude Desktop
   notes, for the limits. See [docs/desktop.md](docs/desktop.md).
-- **Codex** is the next tool: the same profiles and the same rules would pick
-  its account too. Nothing of it is in the releases yet.
+- **Codex CLI**: `orberus run --tool codex` applies the same folder rules
+  and gives each profile its own Codex home. See [Codex CLI commands](docs/commands.md#codex-cli).
 - **Windows**: the command builds and passes its tests there, but it was
   never tried in front of a real Claude Code. Not supported yet.
 
@@ -164,7 +164,7 @@ Rules, the config files and team rules are described in
 | `orberus status` | Which profile applies here, and why |
 | `orberus use [name]` | Pin the current folder to a profile |
 | `orberus default [name]` | Profile used when no rule applies |
-| `orberus run [-p name] [-- args]` | Start Claude Code, optionally forcing a profile |
+| `orberus run [--tool codex] [-p name] [-- args]` | Start Claude Code or Codex CLI, optionally choosing a profile |
 | `orberus rule add`, `list`, `remove` | Manage the rules |
 | `orberus usage [name]` | Which projects used each account, checked against your rules; `-c` for the heaviest conversations |
 | `orberus disk` | Disk space of each profile. Deletes nothing |

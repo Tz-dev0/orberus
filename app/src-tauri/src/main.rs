@@ -141,7 +141,7 @@ fn set_limits(name: String, on: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn remove_profile(name: String, purge: bool) -> Result<(), String> {
+async fn remove_profile(name: String, purge: bool) -> Result<(), String> {
     run(|env| data::remove_profile(env, &name, purge))
 }
 
