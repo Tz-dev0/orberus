@@ -5,6 +5,7 @@ use orberus_core::config;
 use orberus_core::ide::{self, State};
 use orberus_core::launch;
 use orberus_core::paths::Env;
+use orberus_core::pause;
 use orberus_core::retention::{self, Retention};
 use orberus_core::tool;
 use orberus_core::view::short_path;
@@ -115,6 +116,12 @@ pub(crate) fn doctor(ui: &Ui, env: &Env) -> Result<i32> {
         &format!("{} is not set by something else", tool.config_env),
         "remove it from your shell config: orberus sets it for each launch",
     );
+
+    // Not a failure: a choice of the user, but one that is easy to forget.
+    if pause::is_paused(env) {
+        ui.warning("Orberus is paused: claude starts as if it was not installed");
+        ui.detail("to pick the account by folder again: orberus resume");
+    }
 
     // Not a failure: the extension works, but with its own idea of the
     // account. Only for an editor where the extension is installed.

@@ -1012,6 +1012,78 @@ fn uninstall_takes_the_wrapper_out_of_the_editors() {
 }
 
 #[test]
+fn a_pause_sets_every_rule_aside_until_resumed() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    world.ok(&home, &["add", "perso", "--native"]);
+    world.ok(&home, &["add", "work"]);
+    world.ok(
+        &home,
+        &[
+            "rule",
+            "add",
+            "--git-remote",
+            "github.com/acme/*",
+            "--profile",
+            "work",
+            "--locked",
+        ],
+    );
+    let repo = world.repo("code/app", "git@github.com:acme/app.git");
+    let work_dir = world.root.join("profiles/work");
+    let by_rule = format!("dir={}\nsession=work\nargs=--print\n", work_dir.display());
+    assert_eq!(text(&world.shim(&repo, &["--print"], &[])), by_rule);
+
+    let said = world.ok(&home, &["pause"]);
+    assert!(said.contains("paused"), "{said}");
+    // The tool starts untouched: what was in the environment stays, and
+    // neither the locked rule nor an explicit choice is looked at.
+    let untouched = "dir=unset\nsession=unset\nargs=--print\n";
+    assert_eq!(text(&world.shim(&repo, &["--print"], &[])), untouched);
+    let output = world.shim(&repo, &["--print"], &[("ORBERUS_PROFILE", "perso")]);
+    assert!(
+        output.status.success(),
+        "a locked rule refuses nothing while paused"
+    );
+    assert_eq!(text(&output), untouched);
+    // The editors' wrapper too.
+    let copy = world.bundled();
+    let output = world.wrapper(&repo, &[copy.to_str().unwrap(), "--print"], &[]);
+    assert_eq!(
+        text(&output),
+        "bundled dir=unset session=unset args=--print\n"
+    );
+    // A config that cannot be read does not stop a paused Orberus.
+    let config = world.root.join("config.toml");
+    let good = fs::read_to_string(&config).unwrap();
+    fs::write(&config, "not = [valid").unwrap();
+    assert_eq!(text(&world.shim(&repo, &["--print"], &[])), untouched);
+    fs::write(&config, good).unwrap();
+
+    // `status` still says what the rules give, and that they are set aside.
+    let status = world.ok(&repo, &["status"]);
+    assert!(
+        status.contains("work") && status.contains("paused"),
+        "{status}"
+    );
+
+    world.ok(&home, &["resume"]);
+    assert_eq!(text(&world.shim(&repo, &["--print"], &[])), by_rule);
+}
+
+#[test]
+fn uninstall_ends_a_pause() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    world.ok(&home, &["pause"]);
+    assert!(world.root.join("paused").exists());
+    world.ok(&home, &["uninstall", "--yes"]);
+    assert!(!world.root.join("paused").exists());
+}
+
+#[test]
 fn uninstall_stops_opening_the_app_at_login() {
     let world = World::new();
     let home = world.home.clone();

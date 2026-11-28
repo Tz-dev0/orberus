@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use orberus_core::config::{self, Loaded};
 use orberus_core::launch;
 use orberus_core::paths::Env;
+use orberus_core::pause;
 use orberus_core::resolve;
 use orberus_core::tool;
 use orberus_core::view::{account, location, plan, short_path};
@@ -70,6 +71,13 @@ fn status_block(ui: &Ui, env: &Env, loaded: &Loaded, explicit: Option<&str>) -> 
             ),
             ("Claude", claude),
         ]),
+    }
+    // What is printed above is what the rules say; a pause sets them aside.
+    if pause::is_paused(env) {
+        ui.warning(
+            "Orberus is paused: claude starts as if it was not installed, whatever the rules say",
+        );
+        ui.detail("to pick the account by folder again: orberus resume");
     }
     // Inside a session the shim does not resolve again, so what is printed
     // above is not what a nested `claude` would use.

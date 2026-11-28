@@ -22,6 +22,7 @@ use orberus_core::ide::{self, State};
 use orberus_core::limits::{self, Capture, Source};
 use orberus_core::login;
 use orberus_core::paths::Env;
+use orberus_core::pause;
 use orberus_core::purge;
 use orberus_core::resolve::{self, Reason};
 use orberus_core::retention::{self, Retention};
@@ -91,6 +92,9 @@ pub struct Overview {
     pub terminal: Option<String>,
     /// True when macOS opens this copy of the app at login.
     pub open_at_login: bool,
+    /// True while Orberus is paused: `claude` starts as if it was not
+    /// installed.
+    pub paused: bool,
     /// The version of this app, to show at the bottom of the window.
     pub version: &'static str,
 }
@@ -490,6 +494,7 @@ pub fn overview(env: &Env) -> Result<Overview> {
         // Without a known program (which never happens in practice), the
         // option reads as off.
         open_at_login: std::env::current_exe().is_ok_and(|me| login::enabled(env, &me)),
+        paused: pause::is_paused(env),
         version: env!("CARGO_PKG_VERSION"),
     })
 }
@@ -732,6 +737,17 @@ fn run_dir(env: &Env) -> PathBuf {
 
 fn folder_note(env: &Env, name: &str) -> PathBuf {
     run_dir(env).join(format!("{name}.folder"))
+}
+
+/// Pauses Orberus, or ends the pause: the same as `orberus pause` and
+/// `orberus resume`.
+pub fn set_paused(env: &Env, paused: bool) -> Result<()> {
+    if paused {
+        pause::pause(env)?;
+    } else {
+        pause::resume(env)?;
+    }
+    Ok(())
 }
 
 /// The switch in the window: makes macOS open the app when the user logs
@@ -1110,6 +1126,12 @@ mod tests {
 
         let overview = overview(&env).unwrap();
         assert!(!overview.shim_installed);
+        // Paused and resumed from the window, as from the command.
+        assert!(!overview.paused);
+        set_paused(&env, true).unwrap();
+        assert!(super::overview(&env).unwrap().paused);
+        set_paused(&env, false).unwrap();
+        assert!(!super::overview(&env).unwrap().paused);
         // The app's own version, as its Cargo.toml has it.
         assert_eq!(overview.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(overview.profiles.len(), 2);

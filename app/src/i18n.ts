@@ -224,6 +224,11 @@ const en = {
   updateNew: "New",
   updateHint:
     "Version {version} is out. Opens the page that says how to update the command and this app.\nOrberus looks for a new release on GitHub once a day",
+  pause: "Pause Orberus",
+  pauseHint:
+    "While paused, claude starts as if Orberus was not installed: no account is picked and no rule applies, locked ones included. In your editors too.\nQuitting this app pauses nothing: this switch does",
+  pausedNotice: "Orberus is paused. claude no longer picks the account by folder, and no rule applies.",
+  resume: "Resume",
   openAtLogin: "Start Orberus with my Mac",
   openAtLoginHint:
     "Orberus opens by itself in the menu bar each time you start your Mac and log in. Off: you open it yourself when you want it.\nThe app only shows and changes things: claude picks the account by folder whether the app is open or not",
@@ -461,6 +466,11 @@ const fr: Record<Key, string> = {
   updateNew: "Nouveau",
   updateHint:
     "La version {version} est sortie. Ouvre la page qui explique comment mettre à jour la commande et cette app.\nOrberus regarde une fois par jour sur GitHub si une version est sortie",
+  pause: "Mettre Orberus en pause",
+  pauseHint:
+    "En pause, claude démarre comme si Orberus n'était pas installé : aucun compte n'est choisi et aucune règle ne s'applique, même verrouillée. Dans vos éditeurs aussi.\nQuitter cette app ne met rien en pause : c'est cet interrupteur qui le fait",
+  pausedNotice: "Orberus est en pause. claude ne choisit plus le compte selon le dossier, et aucune règle ne s'applique.",
+  resume: "Reprendre",
   openAtLogin: "Lancer Orberus au démarrage du Mac",
   openAtLoginHint:
     "Orberus s'ouvre tout seul dans la barre de menus à chaque démarrage du Mac, quand vous ouvrez votre session. Désactivé : vous l'ouvrez vous-même quand vous en avez besoin.\nL'app ne fait qu'afficher et régler : claude choisit le compte selon le dossier, que l'app soit ouverte ou non",

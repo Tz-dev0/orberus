@@ -75,6 +75,33 @@ stays as it is. A setting that already names another program is left alone.
 JetBrains IDEs need none of this: their plugin runs the `claude` command.
 See [editors.md](editors.md).
 
+## pause, resume
+
+```sh
+orberus pause
+orberus resume
+```
+
+`pause` stops Orberus without uninstalling it: until `resume`, `claude`
+starts as if Orberus was not installed. No account is picked, and no rule
+applies, locked ones included. The same goes for the editors sent through
+Orberus with `orberus ide on`.
+
+```text
+$ orberus pause
+✓ Orberus is paused
+  claude now starts as if Orberus was not installed: no account is picked,
+  and no rule applies, locked ones included. In your editors too.
+To pick the account by folder again: orberus resume
+```
+
+So that a pause is not forgotten, `claude` says it each time it starts in a
+terminal (`orberus: paused, no account is picked`), and `orberus status`,
+`orberus doctor` and the menu bar app say it too. `orberus run --profile x`
+still starts Claude Code with the profile you name. Quitting the menu bar
+app pauses nothing: only this command, or the app's "Pause Orberus" switch,
+does.
+
 ## doctor
 
 ```sh

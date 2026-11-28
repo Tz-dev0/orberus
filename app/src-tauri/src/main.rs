@@ -277,6 +277,11 @@ async fn set_editor(settings: String, on: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_paused(paused: bool) -> Result<(), String> {
+    run(|env| data::set_paused(env, paused))
+}
+
+#[tauri::command]
 fn set_open_at_login(on: bool) -> Result<(), String> {
     run(|env| data::set_open_at_login(env, on))
 }
@@ -442,6 +447,7 @@ fn main() {
             editors,
             set_editor,
             set_open_at_login,
+            set_paused,
             update,
             open_update_page,
             open_claude,

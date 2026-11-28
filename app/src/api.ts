@@ -177,6 +177,8 @@ export interface Overview {
   terminal: string | null;
   /** True when macOS opens the app at login. */
   openAtLogin: boolean;
+  /** True while Orberus is paused: claude starts as if it was not installed. */
+  paused: boolean;
   /** The version of the app. */
   version: string;
 }
@@ -274,6 +276,8 @@ export interface Api {
   update(): Promise<string | null>;
   /** Opens the page that says how to update. */
   openUpdatePage(): Promise<void>;
+  /** Pauses Orberus, or ends the pause. */
+  setPaused(paused: boolean): Promise<void>;
   /** Opens the app when the user logs in, or stops doing so. */
   setOpenAtLogin(on: boolean): Promise<void>;
   openConfig(): Promise<void>;
@@ -313,6 +317,7 @@ const tauri: Api = {
   editors: () => invoke<Editor[]>("editors"),
   setEditor: (settings, on) => invoke("set_editor", { settings, on }),
   setOpenAtLogin: (on) => invoke("set_open_at_login", { on }),
+  setPaused: (paused) => invoke("set_paused", { paused }),
   update: () => invoke<string | null>("update"),
   openUpdatePage: () => invoke("open_update_page"),
   openConfig: () => invoke("open_config"),
@@ -352,6 +357,7 @@ function preview(): Api {
     terminal: null,
     // On by default, as in the real app.
     openAtLogin: true,
+    paused: false,
     // The real app gives its own version; the preview has the page's.
     version: pagePackage.version,
     profiles: [
@@ -584,6 +590,9 @@ function preview(): Api {
     setEditor: async (settings, on) => {
       const editor = editorSample.find((found) => found.settings === settings);
       if (editor) editor.state = on ? "on" : "off";
+    },
+    setPaused: async (paused) => {
+      state.paused = paused;
     },
     setOpenAtLogin: async (on) => {
       state.openAtLogin = on;

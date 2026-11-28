@@ -17,6 +17,9 @@ When you type `claude`, the first of these that applies wins:
    from top to bottom;
 5. the **default profile**, set by `orberus default x`.
 
+None of this applies while Orberus is paused ([`orberus pause`](commands.md#pause-resume)):
+`claude` then starts as if Orberus was not installed.
+
 `orberus status` shows the result for the current folder and the reason.
 `orberus rule list` shows the rules in the order they are checked.
 

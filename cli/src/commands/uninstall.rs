@@ -9,6 +9,7 @@ use orberus_core::ide::{self, State};
 use orberus_core::limits;
 use orberus_core::login;
 use orberus_core::paths::Env;
+use orberus_core::pause;
 use orberus_core::purge;
 use orberus_core::tool;
 use orberus_core::uninstall::{self, Binary};
@@ -155,6 +156,9 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
         ui.success("The app no longer opens at login");
     }
     uninstall::remove_launchers(env)?;
+    // A pause does not outlive the tool: installed again later, Orberus
+    // must not start out silently paused.
+    pause::resume(env)?;
 
     if purge {
         for (name, dir) in &doomed {
