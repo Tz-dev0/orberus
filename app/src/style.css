@@ -1385,6 +1385,10 @@ footer {
   border-radius: 5px;
 }
 
+.menu-check .pick-mark {
+  text-align: right;
+}
+
 /* The shortcut, as in a native menu. */
 kbd {
   font: inherit;

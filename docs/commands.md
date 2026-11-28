@@ -134,7 +134,8 @@ What it removes:
   it names. Your editors' extension starts Claude Code itself again;
 - `orberus` itself, when it sits in `~/.orberus/bin`. Installed
   another way (`cargo install`), it tells you how to remove it;
-- the menu bar app, moved to the Trash.
+- the menu bar app, moved to the Trash, and the file that opens it when
+  you log in, if you ticked that.
 
 Your profiles stay: the config, the rules and each profile's Claude Code
 folder, with its login and history. Install again later and they are back.

@@ -20,6 +20,7 @@ use orberus_core::config::{self, RuleSource};
 use orberus_core::disk;
 use orberus_core::ide::{self, State};
 use orberus_core::limits::{self, Capture, Source};
+use orberus_core::login;
 use orberus_core::paths::Env;
 use orberus_core::purge;
 use orberus_core::resolve::Reason;
@@ -87,6 +88,8 @@ pub struct Overview {
     /// The terminal app chosen to open Claude Code in, by its name.
     /// `None` leaves the choice to macOS.
     pub terminal: Option<String>,
+    /// True when macOS opens this copy of the app at login.
+    pub open_at_login: bool,
 }
 
 /// The disk space one profile takes, for the "Storage" lines.
@@ -481,6 +484,9 @@ pub fn overview(env: &Env) -> Result<Overview> {
         shim_installed: shim_path(env).exists(),
         can_reuse_login: config::native_profile(config).is_none(),
         terminal: terminal(env).map(|app| app_name(&app)),
+        // Without a known program (which never happens in practice), the
+        // option reads as off.
+        open_at_login: std::env::current_exe().is_ok_and(|me| login::enabled(env, &me)),
     })
 }
 
@@ -699,6 +705,17 @@ fn run_dir(env: &Env) -> PathBuf {
 
 fn folder_note(env: &Env, name: &str) -> PathBuf {
     run_dir(env).join(format!("{name}.folder"))
+}
+
+/// Makes macOS open the app when the user logs in, or stops it. The app
+/// that is asked is the one that will be opened: its own program.
+pub fn set_open_at_login(env: &Env, on: bool) -> Result<()> {
+    if on {
+        let me = std::env::current_exe().context("cannot tell where the app is")?;
+        login::enable(env, &me)
+    } else {
+        login::disable(env).map(|_| ())
+    }
 }
 
 /// One editor of the VS Code family, for the "Editors" section.

@@ -23,7 +23,7 @@ pub const PATH_COMMENT: &str = "# orberus: the claude shim must come before the 
 pub const APPS_ENV: &str = "ORBERUS_APPS";
 
 /// The identifier of the menu bar app, as written in its Info.plist.
-const APP_IDENTIFIER: &str = "com.github.tzdev0.orberus";
+pub(crate) const APP_IDENTIFIER: &str = "com.github.tzdev0.orberus";
 const APP_NAME: &str = "Orberus.app";
 
 /// The line `setup` adds to a shell config, in its two spellings: with

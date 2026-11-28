@@ -276,6 +276,11 @@ async fn set_editor(settings: String, on: bool) -> Result<(), String> {
     run(|env| data::set_editor(env, &settings, on))
 }
 
+#[tauri::command]
+fn set_open_at_login(on: bool) -> Result<(), String> {
+    run(|env| data::set_open_at_login(env, on))
+}
+
 /// Opens `config.toml` in the default text editor.
 #[tauri::command]
 fn open_config() -> Result<(), String> {
@@ -423,6 +428,7 @@ fn main() {
             set_terminal,
             editors,
             set_editor,
+            set_open_at_login,
             open_claude,
             open_config,
             set_quit_label,

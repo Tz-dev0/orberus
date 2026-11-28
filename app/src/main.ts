@@ -1337,8 +1337,26 @@ function editorsSection(found: Editor[], overview: Overview): HTMLElement {
   return section;
 }
 
-function menu(): HTMLElement {
+/** A setting that is on or off: a check at the end of its line when it is
+ *  on, where the other lines have their shortcut. */
+function menuCheck(label: string, hint: string, on: boolean, action: () => Promise<void>): HTMLElement {
+  const item = el("button", "menu-item menu-check");
+  item.setAttribute("role", "menuitemcheckbox");
+  item.setAttribute("aria-checked", String(on));
+  item.title = hint;
+  const mark = el("span", "pick-mark", on ? "✓" : "");
+  if (on) keyed(mark, `checked:${label}`);
+  item.append(el("span", "", label), mark);
+  onClick(item, action);
+  return item;
+}
+
+function menu(overview: Overview | null): HTMLElement {
   const footer = el("footer");
+  if (overview) {
+    const on = overview.openAtLogin;
+    footer.append(menuCheck(t("openAtLogin"), t("openAtLoginHint"), on, () => api.setOpenAtLogin(!on)));
+  }
   footer.append(
     menuItem(t("editConfig"), "⌘,", () => api.openConfig()),
     menuItem(t("quit"), "⌘Q", () => api.quit()),
@@ -1452,7 +1470,7 @@ function render(overview: Overview | null, loadError = ""): void {
     page.append(main);
   }
 
-  page.append(menu());
+  page.append(menu(overview));
   root.replaceChildren(page);
   root.classList.remove("away");
   settle(page);
