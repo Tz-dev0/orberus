@@ -276,6 +276,20 @@ async fn set_editor(settings: String, on: bool) -> Result<(), String> {
     run(|env| data::set_editor(env, &settings, on))
 }
 
+/// `async`: finding Claude Desktop reads the Applications folders, and
+/// the running programs are listed.
+#[tauri::command]
+async fn desktop() -> Result<Vec<data::DesktopView>, String> {
+    run(data::desktop)
+}
+
+/// `async`: a copy that starts is waited for, then brought to the front,
+/// which takes seconds. The window must keep answering meanwhile.
+#[tauri::command]
+async fn open_desktop(profile: String) -> Result<&'static str, String> {
+    run(|env| data::open_desktop(env, &profile))
+}
+
 #[tauri::command]
 fn set_paused(paused: bool) -> Result<(), String> {
     run(|env| data::set_paused(env, paused))
@@ -446,6 +460,8 @@ fn main() {
             set_terminal,
             editors,
             set_editor,
+            desktop,
+            open_desktop,
             set_open_at_login,
             set_paused,
             update,

@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::config::{self, Config};
-use crate::desktop::{self, Sample};
+use crate::desktop_usage::{self as desktop, Sample};
 use crate::paths::Env;
 use crate::settings;
 use crate::tool;

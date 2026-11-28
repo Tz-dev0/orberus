@@ -14,11 +14,13 @@
 //! - Editors whose extension starts the tool by itself: [`ide`].
 //! - Reading Claude Code's own files: [`view`] (who is logged in),
 //!   [`sessions`], [`usage`], [`disk`], [`retention`], [`limits`].
-//! - Reading Claude Desktop's own files: [`desktop`] (plan usage).
+//! - Claude Desktop: [`desktop`] (one copy of the app per profile),
+//!   [`desktop_usage`] (the plan usage it notes).
 //! - Removing things: [`purge`], [`uninstall`].
 
 pub mod config;
 pub mod desktop;
+pub mod desktop_usage;
 pub mod disk;
 pub mod git;
 pub mod ide;

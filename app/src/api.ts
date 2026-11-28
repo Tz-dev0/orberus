@@ -215,6 +215,19 @@ export interface Terminal {
   selected: boolean;
 }
 
+/** One profile's Claude Desktop. */
+export interface DesktopCopy {
+  profile: string;
+  /** open: its copy is running. closed: it was opened before. new: never
+   *  opened, so nobody signed in there yet. */
+  state: "open" | "closed" | "new";
+  /** True for the profile that reuses ~/.claude: it has Claude Desktop as
+   *  it already was on this Mac, not a copy of its own. */
+  usual: boolean;
+  /** Where that Claude Desktop keeps its data. */
+  data: string;
+}
+
 /** An editor of the VS Code family found on this Mac. */
 export interface Editor {
   name: string;
@@ -272,6 +285,12 @@ export interface Api {
   editors(): Promise<Editor[]>;
   /** Sends an editor's extension through Orberus, or back. */
   setEditor(settings: string, on: boolean): Promise<void>;
+  /** Every profile's Claude Desktop. Empty when Claude Desktop is not
+   *  installed. */
+  desktop(): Promise<DesktopCopy[]>;
+  /** Opens Claude Desktop on a profile: starts its copy, or brings it to
+   *  the front when it already runs. */
+  openDesktop(profile: string): Promise<"started" | "shown">;
   /** The version to update to, or null. GitHub is asked at most once a day. */
   update(): Promise<string | null>;
   /** Opens the page that says how to update. */
@@ -316,6 +335,8 @@ const tauri: Api = {
   setTerminal: (path) => invoke("set_terminal", { path }),
   editors: () => invoke<Editor[]>("editors"),
   setEditor: (settings, on) => invoke("set_editor", { settings, on }),
+  desktop: () => invoke<DesktopCopy[]>("desktop"),
+  openDesktop: (profile) => invoke<"started" | "shown">("open_desktop", { profile }),
   setOpenAtLogin: (on) => invoke("set_open_at_login", { on }),
   setPaused: (paused) => invoke("set_paused", { paused }),
   update: () => invoke<string | null>("update"),
@@ -346,6 +367,8 @@ function preview(): Api {
     settings: `/Users/you/Library/Application Support/${name}/User/settings.json`,
     settingsShort: `~/Library/Application Support/${name}/User/settings.json`,
   });
+  // The profiles whose Claude Desktop is open, in the preview.
+  const desktopOpen = new Set<string>(["work"]);
   const editorSample: Editor[] = [
     editor("Cursor", "absent"),
     editor("VS Code", "off"),
@@ -590,6 +613,21 @@ function preview(): Api {
     setEditor: async (settings, on) => {
       const editor = editorSample.find((found) => found.settings === settings);
       if (editor) editor.state = on ? "on" : "off";
+    },
+    // `?nodesktop` in the address: a Mac without Claude Desktop.
+    desktop: async () =>
+      new URLSearchParams(location.search).has("nodesktop")
+        ? []
+        : state.profiles.map((profile) => ({
+            profile: profile.name,
+            state: desktopOpen.has(profile.name) ? "open" : profile.account ? "closed" : "new",
+            usual: profile.native,
+            data: profile.native ? "~/Library/Application Support/Claude" : `~/.orberus/desktop/${profile.name}`,
+          })),
+    openDesktop: async (profile) => {
+      const shown = desktopOpen.has(profile);
+      desktopOpen.add(profile);
+      return shown ? "shown" : "started";
     },
     setPaused: async (paused) => {
       state.paused = paused;

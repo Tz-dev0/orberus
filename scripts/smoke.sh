@@ -37,6 +37,7 @@ try usage
 try rule add --path "$home/projects" --profile work
 try rule list
 try ide
+try desktop
 try pause
 try status
 try resume

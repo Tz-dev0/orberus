@@ -134,9 +134,10 @@ open in the background, and lets you switch each one off.
   go through the shim. Zed's own Claude agent is not handled. The wrapper was
   tried in VS Code, not in each editor built on it. See
   [editors.md](editors.md).
-- **Claude Desktop** accounts are not handled: it keeps the one account you
-  logged it in to. Orberus only reads the plan usage it notes, for
-  `orberus limits`.
+- **Claude Desktop**: a Claude Desktop per profile relies on how the app is
+  built, not on a documented feature. Opening a second one next to the usual
+  one was tried; signing in to it was not. They are all named "Claude" in
+  the Dock. See [desktop.md](desktop.md#what-was-tried).
 - **macOS only** for now. `clean` and `remove --purge` rely on the macOS Trash
   and keychain.
 - **`setup` writes the `PATH` line for zsh and bash only.** With another

@@ -10,7 +10,7 @@ removing something needs `--yes`. Colours follow `NO_COLOR`.
 
 The outputs below are shortened examples.
 
-- Setup: [`setup`](#setup), [`ide`](#ide), [`doctor`](#doctor), [`uninstall`](#uninstall)
+- Setup: [`setup`](#setup), [`ide`](#ide), [`desktop`](#desktop), [`doctor`](#doctor), [`uninstall`](#uninstall)
 - Profiles: [`add`](#add), [`list`](#list), [`default`](#default), [`remove`](#remove)
 - Choosing a profile: [`status`](#status), [`use`](#use), [`run`](#run), [`rule`](#rule)
 - Usage: [`usage`](#usage)
@@ -74,6 +74,51 @@ Only that one setting is touched; the rest of the file, comments included,
 stays as it is. A setting that already names another program is left alone.
 JetBrains IDEs need none of this: their plugin runs the `claude` command.
 See [editors.md](editors.md).
+
+## desktop
+
+```sh
+orberus desktop [name]
+```
+
+Claude Desktop holds one account at a time. This gives each profile its own
+Claude Desktop: the same app, opened on a data folder of its own, so each
+one stays signed in to its account. Alone, the command lists the profiles
+and where their Claude Desktop stands:
+
+```text
+$ orberus desktop
+┌─────────┬────────────────┬─────────────────────────────────────────────────────────────┐
+│ Profile │ Claude Desktop │ Its data                                                    │
+├─────────┼────────────────┼─────────────────────────────────────────────────────────────┤
+│ client  │ not opened yet │ ~/.orberus/desktop/client                                   │
+│ perso   │ closed         │ ~/Library/Application Support/Claude (Claude Desktop's own) │
+│ work    │ open           │ ~/.orberus/desktop/work                                     │
+└─────────┴────────────────┴─────────────────────────────────────────────────────────────┘
+
+Open one with: orberus desktop <profile>
+```
+
+With a name, it opens the Claude Desktop of that profile, or brings it to
+the front when it is already open:
+
+```text
+$ orberus desktop work
+✓ Claude Desktop started for 'work'
+  First time: sign in there with the account of this profile.
+
+$ orberus desktop work
+✓ Claude Desktop of 'work' was already open: brought to the front
+```
+
+The profile that reuses `~/.claude` keeps Claude Desktop as it is today,
+with its account and its conversations. Every other profile starts with an
+empty Claude Desktop, where you sign in once.
+
+This relies on how Claude Desktop is built, not on a feature Anthropic
+documents, and signing in to a second one was not tried yet. How it works,
+what was tried and what to know before using it:
+[desktop.md](desktop.md).
 
 ## pause, resume
 
@@ -169,9 +214,12 @@ Your profiles stay: the config, the rules and each profile's Claude Code
 folder, with its login and history. Install again later and they are back.
 
 `--purge` deletes those too: `~/.orberus` as a whole, the folder of
-every profile, and their logins in the macOS keychain. This cannot be undone.
+every profile, their logins in the macOS keychain, and the data of each
+profile's own [Claude Desktop](#desktop). This cannot be undone. It is
+refused while one of those Claude Desktops is open.
 `~/.claude`, the folder of the native profile, is never touched, and neither
-is a profile folder that holds more than the profile.
+is Claude Desktop's own data, nor a profile folder that holds more than the
+profile.
 
 A `.orberus-profile` file left in a project folder does nothing once the tool
 is gone.
@@ -231,9 +279,10 @@ Removes a profile and your rules that point to it. Its Claude Code folder is
 kept, so its login and history stay on disk and the profile can be created
 again later.
 
-`--purge` also deletes that folder and the profile's login in the macOS
-keychain. This cannot be undone. It is refused for the native profile, whose
-folder is `~/.claude`.
+`--purge` also deletes that folder, the profile's login in the macOS
+keychain, and the data of its own [Claude Desktop](#desktop). This cannot be
+undone. It is refused for the native profile, whose folder is `~/.claude`,
+and while the profile's Claude Desktop is open.
 
 Team rules are never removed.
 

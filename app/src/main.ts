@@ -10,6 +10,7 @@ import {
   type Reason,
   type UsageProject,
   type Conversations,
+  type DesktopCopy,
   type Editor,
   type Limits,
   type LimitWindow,
@@ -1320,6 +1321,71 @@ function terminalSection(overview: Overview): HTMLElement {
   return section;
 }
 
+// Each profile's Claude Desktop, read after the list. Empty on a Mac
+// without Claude Desktop.
+let desktopOpen = false;
+let desktopCopies: DesktopCopy[] | null = null;
+
+/** Claude Desktop, one per profile: which are open, and the button that
+ *  starts one or brings it to the front. Every copy is called "Claude" in
+ *  the Dock, so this list is also how to tell them apart. */
+function desktopSection(copies: DesktopCopy[], overview: Overview): HTMLElement {
+  const open = copies.filter((copy) => copy.state === "open").length;
+  const section = el("section", "storage-section");
+  section.append(
+    foldLine(
+      "desktop",
+      t("desktop"),
+      t("desktopHint"),
+      desktopOpen,
+      open > 0 ? count(open, "desktopOpenOne", "desktopOpenMany") : t("desktopIdle"),
+      () => {
+        desktopOpen = !desktopOpen;
+        render(overview);
+      },
+    ),
+  );
+  if (!desktopOpen) return section;
+
+  const list = el("ul", "storage");
+  for (const copy of copies) {
+    const item = keyed(el("li", "storage-item"), `desktop:${copy.profile}`);
+    item.style.setProperty("--hue", hue(copy.profile));
+    const row = el("div", "storage-row editor-row");
+    const where = t(copy.usual ? "desktopUsualHint" : "desktopCopyHint", { data: copy.data });
+    row.title = copy.state === "new" ? `${t("desktopNewHint")}\n${where}` : where;
+    row.append(el("span", "dot"), el("span", "pick-name", copy.profile));
+    if (copy.state !== "closed") {
+      // Keyed by its state: the word pops in when a copy opens.
+      row.append(
+        keyed(
+          el(
+            "span",
+            copy.state === "open" ? "editor-state desktop-open" : "editor-state",
+            t(copy.state === "open" ? "desktopStateOpen" : "desktopStateNew"),
+          ),
+          `desktop-state:${copy.profile}:${copy.state}`,
+        ),
+      );
+    }
+    const running = copy.state === "open";
+    const button = el("button", "limits-action editor-action", t(running ? "desktopShow" : "desktopOpen"));
+    button.title = t(running ? "desktopShowHint" : "desktopOpenHint");
+    onClick(button, async () => {
+      // Starting the app takes a few seconds: say that it is under way.
+      if (!running) button.textContent = t("desktopOpening");
+      await api.openDesktop(copy.profile);
+      desktopCopies = await api.desktop();
+    });
+    row.append(button);
+    item.append(row);
+    list.append(item);
+  }
+  list.append(el("li", "talks-note", t("desktopNote")));
+  section.append(list);
+  return section;
+}
+
 // The editors of the VS Code family found on this Mac, read after the
 // list of profiles; null until then.
 let editorsOpen = false;
@@ -1597,6 +1663,12 @@ function render(overview: Overview | null, loadError = ""): void {
     if (storage && storage.profiles.some((size) => hues.has(size.name))) {
       main.append(storageSection(storage, overview));
     }
+    // Only where Claude Desktop is installed, and for the profiles still
+    // in the list.
+    if (desktopCopies && desktopCopies.length > 0) {
+      const copies = desktopCopies.filter((copy) => hues.has(copy.profile));
+      if (copies.length > 0) main.append(desktopSection(copies, overview));
+    }
     // Only where an editor of the VS Code family is installed.
     if (overview.profiles.length > 0 && editorList && editorList.length > 0) {
       main.append(editorsSection(editorList, overview));
@@ -1633,6 +1705,15 @@ async function refresh(): Promise<void> {
     if (changed && !adding && !removing && !ruleDraft) render(overview);
   } catch {
     // Keep the last reading.
+  }
+  // Claude Desktop: one app to find and the running programs to list.
+  try {
+    const found = await api.desktop();
+    const changed = JSON.stringify(found) !== JSON.stringify(desktopCopies);
+    desktopCopies = found;
+    if (changed && !adding && !removing && !ruleDraft) render(overview);
+  } catch {
+    // Keep the last list.
   }
   // The editors: a few folders to look at, still quick.
   try {

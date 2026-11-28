@@ -4,6 +4,7 @@ use std::fs;
 
 use anyhow::{bail, Context, Result};
 use orberus_core::config::{self, Loaded};
+use orberus_core::desktop;
 use orberus_core::paths::Env;
 use orberus_core::purge;
 use orberus_core::resolve::{self, REPO_FILE};
@@ -212,6 +213,15 @@ pub(crate) fn remove(
         ui.warning(&format!(
             "{kept} will be deleted with its history, settings and login. This cannot be undone"
         ));
+        // The profile's own Claude Desktop, when it was ever opened.
+        if let Some(data) = desktop::data_dir(env, &loaded.config, &name)? {
+            if data.is_dir() {
+                ui.warning(&format!(
+                    "{} will be deleted too: the data and sign-in of its Claude Desktop",
+                    short_path(env, &data)
+                ));
+            }
+        }
     }
     let question = if purge {
         format!("Remove profile '{name}' and delete its folder?")
@@ -233,6 +243,9 @@ pub(crate) fn remove(
         ui.detail(&format!("deleted its Claude Code folder: {kept}"));
         if purged.login {
             ui.detail("removed its login from the keychain");
+        }
+        if purged.desktop {
+            ui.detail("deleted the data of its Claude Desktop");
         }
     } else {
         config::remove_profile(env, &mut config, &name)?;

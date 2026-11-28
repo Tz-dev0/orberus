@@ -19,6 +19,7 @@ use orberus_core::paths::Env;
 use orberus_core::tool;
 
 use commands::clean::clean;
+use commands::desktop::desktop_command;
 use commands::disk::disk_usage;
 use commands::doctor::doctor;
 use commands::ide::ide_command;
@@ -181,6 +182,14 @@ enum Command {
         /// editor found
         editor: Option<String>,
     },
+    /// Open Claude Desktop with a profile's account, or list them
+    ///
+    /// Each profile has its own Claude Desktop, signed in on its own.
+    /// Without a name, the profiles are listed with where theirs stands.
+    Desktop {
+        /// Name of the profile whose Claude Desktop to open
+        name: Option<String>,
+    },
     /// Stop picking accounts for now: claude runs as if Orberus was not
     /// installed, until `orberus resume`
     Pause,
@@ -312,6 +321,7 @@ fn cli() -> Result<i32> {
             RuleCommand::Remove { number, yes } => rule_remove(&ui, &env, number, yes),
         },
         Command::Ide { switch, editor } => ide_command(&ui, &env, switch, editor),
+        Command::Desktop { name } => desktop_command(&ui, &env, name),
         Command::Pause => pause_command(&ui, &env),
         Command::Resume => resume_command(&ui, &env),
         Command::Doctor => doctor(&ui, &env),
