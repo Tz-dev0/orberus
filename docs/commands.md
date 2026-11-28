@@ -135,7 +135,7 @@ What it removes:
 - `orberus` itself, when it sits in `~/.orberus/bin`. Installed
   another way (`cargo install`), it tells you how to remove it;
 - the menu bar app, moved to the Trash, and the file that opens it when
-  you log in, if you ticked that.
+  you log in, if you turned that on.
 
 Your profiles stay: the config, the rules and each profile's Claude Code
 folder, with its login and history. Install again later and they are back.

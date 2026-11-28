@@ -1016,7 +1016,7 @@ fn uninstall_stops_opening_the_app_at_login() {
     let world = World::new();
     let home = world.home.clone();
     world.ok(&home, &["setup"]);
-    // What the menu bar app writes when "Open at login" is ticked.
+    // What the menu bar app writes when it is set to start with the Mac.
     let agents = home.join("Library/LaunchAgents");
     fs::create_dir_all(&agents).unwrap();
     let ours = agents.join("com.github.tzdev0.orberus.plist");

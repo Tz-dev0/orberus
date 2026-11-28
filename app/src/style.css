@@ -1385,8 +1385,61 @@ footer {
   border-radius: 5px;
 }
 
-.menu-check .pick-mark {
-  text-align: right;
+/* A setting of the app: the line is the button, the switch says how it
+   stands. Sized like the small switches of System Settings. */
+.menu-switch {
+  align-items: center;
+}
+
+.switch {
+  flex: none;
+  width: 26px;
+  height: 15px;
+  padding: 1.5px;
+  border-radius: 8px;
+  background: var(--press);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+
+.switch-knob {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0.5px 1.5px rgb(0 0 0 / 0.3);
+}
+
+/* On: the colour the user chose for controls in System Settings. */
+[aria-checked="true"] > .switch {
+  background: #34c759;
+  background: AccentColor;
+}
+
+[aria-checked="true"] > .switch > .switch-knob {
+  transform: translateX(11px);
+}
+
+/* The page was rebuilt after the click: the knob comes from the side it
+   was on, and the colour follows. */
+.switch.moved > .switch-knob {
+  animation: knob-off 0.22s var(--ease) backwards;
+}
+
+[aria-checked="true"] > .switch.moved > .switch-knob {
+  animation-name: knob-on;
+}
+
+@keyframes knob-on {
+  from {
+    transform: translateX(0);
+  }
+}
+
+@keyframes knob-off {
+  from {
+    transform: translateX(11px);
+  }
 }
 
 /* The shortcut, as in a native menu. */
