@@ -66,7 +66,8 @@ logos belong to their owners and only say what Orberus works with.
   conversations are kept, and move the biggest ones to the Trash.
 - **Limits at a glance**: the 5-hour and weekly limits of each account, side
   by side.
-- **Menu bar app** (optional): the same profiles and rules, one click away.
+- **Menu bar app** (optional): the same profiles and rules, one click away,
+  back in the menu bar each time you log in.
 
 <p align="center">
   <picture>
@@ -262,9 +263,12 @@ $ orberus retention work 365
 ### Menu bar app
 
 A small app that lives in the menu bar: your profiles and who is logged in to
-each, the rules, the limits and the usage by project, the disk space, and a
-button to open Claude Code in a profile. It speaks English and French.
-It reads and writes the same config as the CLI and is optional. See
+each, the rules, the limits and the usage by project, the disk space, your
+editors, and a button to open Claude Code in a profile. It speaks English and
+French, and opens by itself when you log in unless you turn that off.
+
+It reads and writes the same config as the CLI and is optional: `claude`
+picks the account by folder whether the app is open or not. See
 [docs/app.md](docs/app.md).
 
 ## Safety
@@ -283,6 +287,8 @@ It reads and writes the same config as the CLI and is optional. See
   last hour, since it may still be open. It never touches `memory/` folders.
 - `remove` keeps the profile's folder, so its login and history stay on disk.
   Only `remove --purge` deletes them, and it is refused for `~/.claude`.
+- The menu bar app writes one file outside `~/.orberus`, the one that opens
+  it when you log in. Its switch and `uninstall` delete it.
 - `uninstall` removes the tool and keeps your profiles. Nothing ever deletes
   `~/.claude`.
 

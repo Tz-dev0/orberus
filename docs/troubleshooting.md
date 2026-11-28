@@ -106,6 +106,20 @@ profiles that are still on the default.
 On a Mac with a notch, macOS hides icons when the menu bar is full. Open the
 app again from the Finder or Spotlight: its window appears.
 
+### The app opens by itself when I log in
+
+That is its default. Turn off "Start Orberus with my Mac" at the bottom of
+its window: the app deletes the file that asks macOS to open it,
+`~/Library/LaunchAgents/com.github.tzdev0.orberus.plist`, and remembers your
+choice. `claude` keeps picking the account by folder: the app is not needed
+for that.
+
+### The app does not come back after I log in
+
+Open it once and check that "Start Orberus with my Mac" is on. If it is, look
+at the login items in macOS's System Settings: macOS lists there what may
+open in the background, and lets you switch each one off.
+
 ## Known limits
 
 - **A running session keeps its account.** The choice is made when Claude

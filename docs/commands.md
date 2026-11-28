@@ -119,6 +119,7 @@ This removes
   the PATH line that setup added to your shell config
   the setting that sends VS Code's Claude Code extension through Orberus
   orberus itself: ~/.orberus/bin/orberus
+  the setting that opens the menu bar app when you log in
   the menu bar app, moved to the Trash: /Applications/Orberus.app
   kept: your profiles and rules, in ~/.orberus (to delete them too: --purge)
 Uninstall Orberus? [y/N]

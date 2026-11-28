@@ -338,7 +338,8 @@ function preview(): Api {
     shimInstalled: true,
     canReuseLogin: false,
     terminal: null,
-    openAtLogin: false,
+    // On by default, as in the real app.
+    openAtLogin: true,
     profiles: [
       { name: "perso", account: "me@example.com", plan: "Max 5x", location: "~/.claude", native: true, isDefault: true, rules: 0, teamRules: 0, canPurge: false, keepsDays: 120, keepsError: null },
       {
