@@ -151,6 +151,7 @@ Rules, the config files and team rules are described in
 |---|---|
 | `orberus` | Profile used in this folder, then the list of commands |
 | `orberus setup` | Install the `claude` shim and put it in your `PATH` |
+| `orberus pause`, `orberus resume` | Stop picking accounts for a while, without uninstalling |
 | `orberus ide [on\|off] [editor]` | Send the Claude Code extension of VS Code, Cursor and the like through Orberus |
 | `orberus add [name]` | Create a profile (`--native` reuses `~/.claude`) |
 | `orberus list` | Profiles, the account logged in to each, the default |
@@ -278,6 +279,8 @@ picks the account by folder whether the app is open or not. See
   no network request.
 - `ide on` writes one setting in your editors' settings and leaves the rest
   of the file as it is; `ide off` and `uninstall` take it out again.
+- `pause` sets every rule aside, locked ones included, until `resume`. It is
+  said each time `claude` starts, and by `status`, `doctor` and the app.
 - If the config cannot be read, or a locked rule forbids the profile you asked
   for, Claude Code does not start. It never falls back to another account.
 - `usage`, `disk`, `list`, `status` and `doctor` change nothing. `usage` reads
