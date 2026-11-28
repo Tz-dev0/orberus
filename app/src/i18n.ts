@@ -49,6 +49,26 @@ const en = {
   // Rules
   rules: "Rules",
   rulesHint: "Checked from top to bottom. A rule sends a folder or a repository to a profile",
+  rulesNone:
+    "No rule yet. A rule sends a folder, or every repository of an organisation, to a profile: your company's code to your work account, for example.",
+  ruleElse: "Everywhere else",
+  ruleEverywhere: "Everywhere",
+  ruleElseHint:
+    "Where no rule applies, claude uses the default profile. Rules are checked from top to bottom: the first one that matches wins",
+  ruleNoDefault: "Claude Code's own account",
+  ruleNoDefaultHint: "No default profile: where no rule applies, claude starts as if Orberus was not installed",
+  ruleSaysOwner: "In every repository of {owner}, claude uses {profile}.",
+  ruleSaysRepo: "In the repository {repo}, claude uses {profile}.",
+  ruleSaysFolder: "In {path} and everything below, claude uses {profile}.",
+  ruleSaysBoth: "In the repositories {repo} placed under {path}, claude uses {profile}.",
+  ruleSaysLocked: "Locked: any other profile is refused there.",
+  ruleSaysTeam: "Provided by your company.",
+  ruleToday: "Today, claude uses {profile} in {folder}: {reason}.",
+  ruleTodayNone: "Today, claude uses its own account in {folder}: no profile applies.",
+  ruleWill: "With this rule:",
+  ruleStillWins:
+    "In {folder} itself, {reason} still decides: rules are checked from top to bottom, and a new one goes last.",
+  ruleLockedWins: "In {folder} itself, {reason} still decides: a locked rule wins over everything.",
   newRule: "New rule…",
   newRuleHint: "Choose a folder, then where the rule applies and which profile it uses",
   pickRuleTitle: "Folder the rule is about",
@@ -267,6 +287,28 @@ const fr: Record<Key, string> = {
 
   rules: "Règles",
   rulesHint: "Lues de haut en bas. Une règle envoie un dossier ou un dépôt vers un profil",
+  rulesNone:
+    "Aucune règle pour l'instant. Une règle envoie un dossier, ou tous les dépôts d'une organisation, vers un profil : le code de votre entreprise vers votre compte pro, par exemple.",
+  ruleElse: "Partout ailleurs",
+  ruleEverywhere: "Partout",
+  ruleElseHint:
+    "Là où aucune règle ne s'applique, claude utilise le profil par défaut. Les règles sont lues de haut en bas : la première qui correspond l'emporte",
+  ruleNoDefault: "Le compte de Claude Code",
+  ruleNoDefaultHint:
+    "Pas de profil par défaut : là où aucune règle ne s'applique, claude démarre comme si Orberus n'était pas installé",
+  ruleSaysOwner: "Dans tous les dépôts de {owner}, claude utilise {profile}.",
+  ruleSaysRepo: "Dans le dépôt {repo}, claude utilise {profile}.",
+  ruleSaysFolder: "Dans {path} et tout ce qu'il contient, claude utilise {profile}.",
+  ruleSaysBoth: "Dans les dépôts {repo} placés sous {path}, claude utilise {profile}.",
+  ruleSaysLocked: "Verrouillée : tout autre profil y est refusé.",
+  ruleSaysTeam: "Fournie par votre entreprise.",
+  ruleToday: "Aujourd'hui, claude utilise {profile} dans {folder} : {reason}.",
+  ruleTodayNone: "Aujourd'hui, claude utilise son propre compte dans {folder} : aucun profil ne s'applique.",
+  ruleWill: "Avec cette règle :",
+  ruleStillWins:
+    "Dans {folder} même, {reason} décide toujours : les règles sont lues de haut en bas, et une nouvelle va en dernier.",
+  ruleLockedWins:
+    "Dans {folder} même, {reason} décide toujours : une règle verrouillée l'emporte sur tout.",
   newRule: "Nouvelle règle…",
   newRuleHint: "Choisir un dossier, puis où la règle s'applique et quel profil elle utilise",
   pickRuleTitle: "Dossier concerné par la règle",

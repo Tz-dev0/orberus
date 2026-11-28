@@ -405,6 +405,66 @@ function choiceText(choice: { path: string | null; gitRemote: string | null }): 
   return t("choiceFolder", { path: choice.path ?? "" });
 }
 
+/** A rule in plain words: where, and which profile claude uses there. */
+function ruleSentence(
+  rule: { path: string | null; gitRemote: string | null },
+  profile: string,
+  locked: boolean,
+  team = false,
+): string {
+  const remote = rule.gitRemote;
+  let says: string;
+  if (remote && rule.path) says = t("ruleSaysBoth", { repo: remote, path: rule.path, profile });
+  else if (remote?.endsWith("/*")) says = t("ruleSaysOwner", { owner: remote.slice(0, -2), profile });
+  else if (remote) says = t("ruleSaysRepo", { repo: remote, profile });
+  else says = t("ruleSaysFolder", { path: rule.path ?? "", profile });
+  if (locked) says += ` ${t("ruleSaysLocked")}`;
+  if (team) says += ` ${t("ruleSaysTeam")}`;
+  return says;
+}
+
+/** The line that closes the rules: what claude uses where none applies.
+ *  It shows that the list is read from top to bottom, down to the default. */
+function elseRow(overview: Overview): HTMLElement {
+  const row = keyed(el("li", "rule rule-else"), "rule:else");
+  const fallback = overview.profiles.find((profile) => profile.isDefault);
+  const where = el("span", "rule-where");
+  where.append(el("span", "rule-pattern", t(overview.rules.length > 0 ? "ruleElse" : "ruleEverywhere")));
+  const leader = el("span", "leader");
+  leader.setAttribute("aria-hidden", "true");
+  row.append(where, leader);
+  if (fallback) {
+    row.style.setProperty("--hue", hue(fallback.name));
+    row.title = t("ruleElseHint");
+    const target = el("span", "rule-profile");
+    target.append(el("span", "dot"), el("span", "", fallback.name));
+    row.append(target);
+  } else {
+    row.title = t("ruleNoDefaultHint");
+    row.append(el("span", "rule-none", t("ruleNoDefault")));
+  }
+  return row;
+}
+
+/** In the form, once a folder is chosen: what it gets today, and whether
+ *  that would still decide there after the new rule. */
+function todayLines(draft: RuleDraft): HTMLElement[] {
+  const folder = draft.folder;
+  const current = draft.current;
+  if (!current) return [el("p", "rule-today", t("ruleTodayNone", { folder }))];
+  const reason = reasonText(current.reason);
+  const lines = [el("p", "rule-today", t("ruleToday", { profile: current.profile, folder, reason }))];
+  // A new rule goes last among your own: what already matches this folder
+  // keeps deciding there, unless the new rule is locked and the old is not.
+  const kind = current.reason.kind;
+  if (kind === "locked") {
+    lines.push(el("p", "rule-today rule-caution", t("ruleLockedWins", { folder, reason })));
+  } else if ((kind === "rule" || kind === "file") && !draftLocked) {
+    lines.push(el("p", "rule-today rule-caution", t("ruleStillWins", { folder, reason })));
+  }
+  return lines;
+}
+
 /** A conversation's title, or the start of its id when it has none. */
 function titleOf(talk: { id: string; title: string | null }): string {
   return talk.title ?? t("untitled", { id: talk.id.slice(0, 8) });
@@ -442,6 +502,8 @@ function newRuleRow(overview: Overview): HTMLElement {
   const row = keyed(el("li", "profile-form rule-form"), "form:rule");
   row.style.setProperty("--hue", hue(draftProfile));
   const form = el("form");
+
+  form.append(...todayLines(draft));
 
   const where = el("fieldset", "rule-choices");
   where.append(el("legend", "", t("ruleWhere")));
@@ -485,9 +547,19 @@ function newRuleRow(overview: Overview): HTMLElement {
   box.checked = draftLocked;
   box.addEventListener("change", () => {
     draftLocked = box.checked;
+    // The sentence below, and what still decides, depend on it.
+    render(overview);
   });
   lock.append(box, el("span", "", t("lockIt")));
   form.append(lock);
+
+  // The rule about to be written, in plain words.
+  const says = el("p", "rule-says");
+  says.append(
+    el("span", "rule-says-lead", t("ruleWill")),
+    ` ${ruleSentence(draft.choices[draftChoice], draftProfile, draftLocked)}`,
+  );
+  form.append(says);
 
   if (ruleError) {
     const error = el("p", "form-error", ruleError);
@@ -529,6 +601,8 @@ function ruleRow(rule: Rule, overview: Overview): HTMLElement {
     `rule:${rule.source}:${rule.gitRemote ?? ""}:${rule.path ?? ""}:${rule.profile}`,
   );
   row.style.setProperty("--hue", hue(rule.profile));
+  // The rule in plain words, for the pointer and for a screen reader.
+  row.title = ruleSentence(rule, rule.profile, rule.locked, rule.source === "team.toml");
   const where = el("span", "rule-where");
   if (rule.gitRemote) {
     const part = el("span", "rule-part");
@@ -1486,8 +1560,17 @@ function render(overview: Overview | null, loadError = ""): void {
       const title = keyed(el("h2", "", t("rules")), "title:rules");
       title.title = t("rulesHint");
       const list = el("ul", "rules");
-      list.append(...overview.rules.map((rule) => ruleRow(rule, overview)), newRuleRow(overview));
-      section.append(title, list);
+      list.append(
+        ...overview.rules.map((rule) => ruleRow(rule, overview)),
+        elseRow(overview),
+        newRuleRow(overview),
+      );
+      section.append(title);
+      // Before the first rule: what a rule is, with an example.
+      if (overview.rules.length === 0 && !ruleDraft) {
+        section.append(keyed(el("p", "rules-intro", t("rulesNone")), "rules:intro"));
+      }
+      section.append(list);
       main.append(section);
     }
     // Only the profiles still in the list: a measure can be a moment old.

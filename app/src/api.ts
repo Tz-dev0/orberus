@@ -57,6 +57,9 @@ export interface RuleDraft {
   folder: string;
   /** Widest first, never empty. */
   choices: RuleChoice[];
+  /** The profile claude uses in that folder today, and why; null when it
+   *  uses none. */
+  current: { profile: string; reason: Reason } | null;
 }
 
 /** The disk space one profile takes. */
@@ -404,6 +407,11 @@ function preview(): Api {
       source: "code",
     },
   };
+  // `?norules` in the address shows the window before the first rule.
+  if (new URLSearchParams(location.search).has("norules")) {
+    state.rules = [];
+    for (const profile of state.profiles) profile.rules = 0;
+  }
   return {
     overview: async () => structuredClone(state),
     storage: async () => {
@@ -512,6 +520,10 @@ function preview(): Api {
         { path: null, gitRemote: "github.com/me/blog" },
         { path: "~/code/blog", gitRemote: null },
       ],
+      current: {
+        profile: state.profiles.find((profile) => profile.isDefault)?.name ?? "perso",
+        reason: { kind: "default", rule: null, source: null, file: null },
+      },
     }),
     addRule: async (choice, profile, locked) => {
       if (!state.profiles.some((known) => known.name === profile)) throw `unknown profile '${profile}'`;
