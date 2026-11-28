@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 use orberus_core::config::{self, Loaded};
 use orberus_core::launch::{self, Target};
 use orberus_core::paths::Env;
+use orberus_core::pause;
 use orberus_core::resolve;
 use orberus_core::tool::Tool;
 
@@ -19,6 +20,9 @@ use crate::ui::{self, Style};
 /// Shim mode: every argument belongs to the tool, nothing is parsed here.
 pub(crate) fn shim(tool: &Tool, args: Vec<OsString>) -> Result<i32> {
     let env = Env::from_process()?;
+    if pause::is_paused(&env) {
+        return paused(tool, &env, None, args);
+    }
     // Inside a session we already started: keep that session's account.
     if std::env::var_os(launch::SESSION_ENV).is_some() {
         let config = config::load(&env)
@@ -38,12 +42,36 @@ pub(crate) fn shim(tool: &Tool, args: Vec<OsString>) -> Result<i32> {
 pub(crate) fn wrapper(tool: &Tool, args: Vec<OsString>) -> Result<i32> {
     let env = Env::from_process()?;
     let (handed, args) = launch::handed_over(args)?;
+    if pause::is_paused(&env) {
+        return paused(tool, &env, handed, args);
+    }
     // No "inside a session" shortcut here, unlike the shim: only an editor
     // starts the wrapper, never a running session. If that variable is set,
     // the editor itself was opened from a session's terminal, and its
     // windows must still get the account of their own folder.
     let loaded = config::load(&env)?;
     start(tool, &env, &loaded, explicit_choice(), handed, args)
+}
+
+/// While Orberus is paused: the tool starts untouched, as if Orberus was
+/// not installed. No rule is read, so a config that cannot be read does
+/// not stop it either. Said on the terminal each time, so that a pause is
+/// not forgotten.
+fn paused(tool: &Tool, env: &Env, handed: Option<PathBuf>, args: Vec<OsString>) -> Result<i32> {
+    // The config is only needed for two settings: where the real tool is,
+    // and whether to keep quiet.
+    let config = config::load(env)
+        .map(|loaded| loaded.config)
+        .unwrap_or_default();
+    let real = match handed {
+        Some(real) => real,
+        None => launch::find_real(env, &config, tool)?,
+    };
+    if !config.quiet && std::io::stderr().is_terminal() {
+        let notice = "orberus: paused, no account is picked (orberus resume)";
+        eprintln!("{}", ui::paint_stderr(notice, Style::Yellow));
+    }
+    launch::launch(tool, &real, Target::Passthrough, args)
 }
 
 /// `ORBERUS_PROFILE=work`, when set to something.

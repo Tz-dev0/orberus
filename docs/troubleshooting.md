@@ -101,6 +101,12 @@ Claude Code deletes conversations after 30 days by default. Keep them longer
 with `orberus retention <name> <days>`; `orberus doctor` reminds you of the
 profiles that are still on the default.
 
+### `claude` uses the same account everywhere, and says "paused"
+
+Orberus is paused: someone ran `orberus pause` or turned on "Pause Orberus"
+in the menu bar app. `orberus resume` ends it. `orberus status` tells you
+whether it is paused.
+
 ### I cannot find the menu bar icon
 
 On a Mac with a notch, macOS hides icons when the menu bar is full. Open the

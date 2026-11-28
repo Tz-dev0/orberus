@@ -1391,6 +1391,8 @@ function menu(overview: Overview | null): HTMLElement {
   if (newVersion) footer.append(updateItem(newVersion));
   if (overview) {
     const on = overview.openAtLogin;
+    const paused = overview.paused;
+    footer.append(menuSwitch(t("pause"), t("pauseHint"), paused, () => api.setPaused(!paused)));
     footer.append(menuSwitch(t("openAtLogin"), t("openAtLoginHint"), on, () => api.setOpenAtLogin(!on)));
   }
   footer.append(
@@ -1399,6 +1401,19 @@ function menu(overview: Overview | null): HTMLElement {
     legalLine(overview),
   );
   return footer;
+}
+
+/** Said at the top of the window for as long as the pause lasts, with the
+ *  way out next to it: a pause is easy to forget. */
+function pausedNotice(): HTMLElement {
+  const node = notice(t("pausedNotice"), "warn");
+  const resume = el("button", "notice-action", t("resume"));
+  onClick(resume, async () => {
+    await api.setPaused(false);
+    switched = true;
+  });
+  node.append(resume);
+  return node;
 }
 
 function notice(text: string, kind = ""): HTMLElement {
@@ -1470,6 +1485,7 @@ function render(overview: Overview | null, loadError = ""): void {
     if (!overview.shimInstalled) {
       page.append(notice(t("shimMissing")));
     }
+    if (overview.paused) page.append(pausedNotice());
     const main = el("main");
     if (overview.profiles.length === 0 && !adding) {
       main.append(el("p", "empty", t("noProfile")));

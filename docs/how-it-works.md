@@ -123,6 +123,7 @@ Claude Code's own files.
 |---|---|
 | `~/.orberus/config.toml` | Your profiles and rules |
 | `~/.orberus/bin/` | `orberus` and the `claude` shim |
+| `~/.orberus/paused` | An empty file, while Orberus is paused (`orberus pause`) |
 | `~/.orberus/ide/` | The wrapper that editor extensions start |
 | `~/.orberus/profiles/<name>/` | The Claude Code folder of a profile. Claude Code fills it |
 | `~/.orberus/run/` | Small launch scripts and notes written by the menu bar app: the last folder of each profile, the terminal you chose, the last answer about updates |

@@ -27,6 +27,7 @@ pub mod launch;
 pub mod limits;
 pub mod login;
 pub mod paths;
+pub mod pause;
 pub mod purge;
 pub mod resolve;
 pub mod retention;

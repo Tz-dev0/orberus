@@ -23,6 +23,7 @@ use commands::disk::disk_usage;
 use commands::doctor::doctor;
 use commands::ide::ide_command;
 use commands::limits::{limits_command, statusline};
+use commands::pause::{pause_command, resume_command};
 use commands::profiles::{add, list, pin, remove, set_default};
 use commands::retention::retention_command;
 use commands::rules::{rule_add, rule_list, rule_remove};
@@ -180,6 +181,11 @@ enum Command {
         /// editor found
         editor: Option<String>,
     },
+    /// Stop picking accounts for now: claude runs as if Orberus was not
+    /// installed, until `orberus resume`
+    Pause,
+    /// Pick the account by folder again, after `orberus pause`
+    Resume,
     /// Check that everything is wired correctly
     Doctor,
     /// Remove Orberus from this Mac. Profiles are kept unless you ask
@@ -306,6 +312,8 @@ fn cli() -> Result<i32> {
             RuleCommand::Remove { number, yes } => rule_remove(&ui, &env, number, yes),
         },
         Command::Ide { switch, editor } => ide_command(&ui, &env, switch, editor),
+        Command::Pause => pause_command(&ui, &env),
+        Command::Resume => resume_command(&ui, &env),
         Command::Doctor => doctor(&ui, &env),
         Command::Uninstall { purge, yes } => uninstall_command(&ui, &env, purge, yes),
     }

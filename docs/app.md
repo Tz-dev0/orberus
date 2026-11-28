@@ -20,7 +20,10 @@ tell you a background item was added. Move the app to another folder and it
 puts the file right the next time you open it.
 
 The app only shows and changes things. `claude` picks the account by folder
-whether the app is open or not, and quitting it turns nothing off.
+whether the app is open or not, and quitting it turns nothing off. To stop
+Orberus for a while, use the "Pause Orberus" switch at the bottom of the
+window, or [`orberus pause`](commands.md#pause-resume): a banner then stays
+at the top of the window, with "Resume", until you end the pause.
 
 On a Mac with a notch, macOS can hide the icon when the menu bar is full.
 Opening the app again from the Finder or Spotlight shows the window.
@@ -83,6 +86,7 @@ own: `orberus --version`.
 | Change how long conversations are kept | Unfold "Conversations kept": 30 days, 90 days, 1 year, or a number of days |
 | Move big conversations to the Trash | Unfold "Storage", click a profile, then the bin icon of a conversation and "Move to Trash" |
 | Pick the account by folder in an editor | Unfold "Editors" and click "Turn on" next to it: the same as [`orberus ide on`](editors.md) for that editor. "Turn off" undoes it. Reload the editor's window afterwards |
+| Pause Orberus | Turn on "Pause Orberus" at the bottom of the window: `claude` starts as if Orberus was not installed, rules included. "Resume" in the banner, or the switch again, ends it |
 | Update | When "Update to Orberus …" shows at the bottom of the window, click it: it opens the page that says how |
 | Stop the app from opening when you log in | Turn off "Start Orberus with my Mac" at the bottom of the window. Click it again to turn it back on |
 | Choose the terminal app | Unfold "Terminal" and click one. "System default" is the app macOS opens `.command` files with, usually Terminal |
