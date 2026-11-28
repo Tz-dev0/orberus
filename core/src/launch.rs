@@ -124,12 +124,9 @@ pub fn handed_over(mut args: Vec<OsString>) -> Result<(Option<PathBuf>, Vec<OsSt
     Ok((Some(binary), args))
 }
 
-/// Starts the real tool. On macOS and Linux this replaces the current
-/// process, so signals and the terminal behave as if it was started
-/// directly. Returns the exit code only on platforms without `exec`.
-pub fn launch(tool: &Tool, real: &Path, target: Target, args: Vec<OsString>) -> Result<i32> {
+/// Prepares a tool process with the same profile environment for launches and logout.
+pub(crate) fn command(tool: &Tool, real: &Path, target: Target) -> Result<Command> {
     let mut command = Command::new(real);
-    command.args(args);
     if let Target::Profile { name, dir } = target {
         if tool == &CLAUDE {
             command.env(SESSION_ENV, name);
@@ -155,7 +152,15 @@ pub fn launch(tool: &Tool, real: &Path, target: Target, args: Vec<OsString>) -> 
             }
         }
     }
+    Ok(command)
+}
 
+/// Starts the real tool. On macOS and Linux this replaces the current
+/// process, so signals and the terminal behave as if it was started
+/// directly. Returns the exit code only on platforms without `exec`.
+pub fn launch(tool: &Tool, real: &Path, target: Target, args: Vec<OsString>) -> Result<i32> {
+    let mut command = command(tool, real, target)?;
+    command.args(args);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

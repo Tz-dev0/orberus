@@ -103,6 +103,22 @@ pub fn for_wrapper(invoked: &OsStr) -> Option<&'static Tool> {
 /// What follows a tool's command in the name of its wrapper.
 const WRAPPER_SUFFIX: &str = "-wrapper";
 
+/// Managed Codex home for a profile. Lowercase names keep their usual spelling.
+pub(crate) fn codex_dir(env: &Env, name: &str) -> Result<PathBuf> {
+    config::validate_name(name)?;
+    // Escape uppercase letters so `Work` and `work` get separate homes
+    // even on case-insensitive volumes. `~` cannot appear in a profile name.
+    let mut folder = String::with_capacity(name.len());
+    for letter in name.chars() {
+        if letter.is_ascii_uppercase() {
+            folder.push('~');
+        }
+        folder.push(letter.to_ascii_lowercase());
+    }
+    let dir = env.root.join("codex").join(folder);
+    std::path::absolute(&dir).with_context(|| format!("cannot resolve {}", dir.display()))
+}
+
 impl Tool {
     /// The tool's own default config folder, such as `~/.claude`.
     pub fn native_dir(&self, env: &Env) -> PathBuf {
@@ -111,24 +127,11 @@ impl Tool {
 
     /// Config directory for a profile selected by the resolver.
     pub fn profile_dir(&self, env: &Env, config: &Config, name: &str) -> Result<Option<PathBuf>> {
-        if self != &CODEX {
-            return config::profile_dir(env, config, name);
+        if self == &CODEX {
+            codex_dir(env, name).map(Some)
+        } else {
+            config::profile_dir(env, config, name)
         }
-
-        config::validate_name(name)?;
-        // Escape uppercase letters so `Work` and `work` get separate homes
-        // even on case-insensitive volumes. `~` cannot appear in a profile name.
-        let mut folder = String::with_capacity(name.len());
-        for letter in name.chars() {
-            if letter.is_ascii_uppercase() {
-                folder.push('~');
-            }
-            folder.push(letter.to_ascii_lowercase());
-        }
-        let dir = env.root.join("codex").join(folder);
-        let dir = std::path::absolute(&dir)
-            .with_context(|| format!("cannot resolve {}", dir.display()))?;
-        Ok(Some(dir))
     }
 
     /// The file name of the shim in Orberus' `bin` folder.

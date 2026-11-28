@@ -91,8 +91,7 @@ enum Command {
     Remove {
         /// Name of the profile. Asked when left out
         name: Option<String>,
-        /// Also delete its Claude Code folder (history, settings) and its
-        /// login in the keychain. Cannot be undone
+        /// Also sign out and delete the profile's Claude and Codex data. Cannot be undone
         #[arg(long)]
         purge: bool,
         /// Do not ask for confirmation

@@ -553,6 +553,63 @@ fn purge_deletes_the_profile_folder_but_never_the_native_one() {
     assert!(home.is_dir());
 }
 
+#[test]
+fn purge_signs_out_codex_before_deleting_its_home() {
+    let world = World::new();
+    let home = &world.home;
+    let codex = home.join("real-bin/codex");
+    fs::write(
+        &codex,
+        r#"#!/bin/sh
+set -eu
+entry="$HOME/keyring-${CODEX_HOME##*/}"
+case "$*" in
+    login) touch "$entry" "$CODEX_HOME/auth.json" ;;
+    'login status') test -f "$entry" ;;
+    logout)
+        test -f "$CODEX_HOME/auth.json"
+        test ! -f "$CODEX_HOME/fail-logout"
+        rm "$entry"
+        ;;
+    *) exit 2 ;;
+esac
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(codex, fs::Permissions::from_mode(0o755)).unwrap();
+
+    for profile in ["work", "personal"] {
+        world.ok(home, &["add", profile]);
+        world.ok(
+            home,
+            &["run", "--tool", "codex", "-p", profile, "--", "login"],
+        );
+    }
+    let work_codex = world.root.join("codex/work");
+    let fail_logout = work_codex.join("fail-logout");
+    fs::write(&fail_logout, "").unwrap();
+    let args = ["remove", "work", "--purge", "--yes"];
+    assert!(refused(&world, home, &args).contains("Codex"));
+    assert!(world.root.join("profiles/work").is_dir());
+    assert!(work_codex.join("auth.json").is_file());
+    assert!(world.ok(home, &["list"]).contains("work"));
+
+    fs::remove_file(fail_logout).unwrap();
+    world.ok(home, &args);
+    assert!(!work_codex.exists());
+    world.ok(home, &["add", "work"]);
+    let login_status = |profile| {
+        world.orberus(
+            home,
+            &[
+                "run", "--tool", "codex", "-p", profile, "--", "login", "status",
+            ],
+        )
+    };
+    assert_eq!(login_status("work").status.code(), Some(1));
+    assert!(login_status("personal").status.success());
+}
+
 // The Trash is only known on macOS for now.
 #[cfg(target_os = "macos")]
 #[test]

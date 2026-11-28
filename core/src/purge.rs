@@ -1,6 +1,6 @@
 //! Deleting what a profile leaves on the machine: its Claude Code folder,
 //! on macOS its login in the keychain, and the data of its own copy of
-//! Claude Desktop when it had one.
+//! Claude Desktop when it had one, plus its managed Codex home and login.
 //!
 //! This is the one place that destroys data, and only on request
 //! (`orberus remove --purge`, or the checkbox in the menu bar app). It is
@@ -14,7 +14,9 @@ use std::process::{Command, Stdio};
 use anyhow::{bail, Context, Result};
 
 use crate::config::{self, Config};
+use crate::launch::{self, Target};
 use crate::paths::Env;
+use crate::tool::{self, CODEX};
 
 /// What `purge_profile` did, for the message shown afterwards.
 #[derive(Debug)]
@@ -28,6 +30,8 @@ pub struct Purged {
     /// True when the profile had its own Claude Desktop, whose data folder
     /// (and so its sign-in there) was deleted.
     pub desktop: bool,
+    /// The Codex home deleted after signing out, if this profile used Codex.
+    pub codex: Option<PathBuf>,
 }
 
 /// The folder a purge of this profile would delete, or why it must not be.
@@ -52,6 +56,30 @@ pub fn folder(env: &Env, config: &Config, name: &str) -> Result<PathBuf> {
         );
     }
     Ok(dir)
+}
+
+/// The existing managed Codex home. A symlink could resolve to a different
+/// login, so refuse to sign out through one.
+pub fn codex_folder(env: &Env, name: &str) -> Result<Option<PathBuf>> {
+    let dir = tool::codex_dir(env, name)?;
+    let metadata = match dir.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("cannot inspect {}", dir.display()))
+        }
+    };
+    let parent = dir.parent().context("the Codex home has no parent")?;
+    let parent = parent
+        .symlink_metadata()
+        .context("cannot inspect the Codex profiles directory")?;
+    if !metadata.is_dir() || !parent.is_dir() {
+        bail!(
+            "refusing to purge {}: the Codex home must be a managed directory",
+            dir.display()
+        );
+    }
+    Ok(Some(dir))
 }
 
 /// The name of the keychain entry Claude Code uses for a config folder.
@@ -107,16 +135,44 @@ pub fn forget_login(dir: &Path) -> Result<bool> {
     }
 }
 
-/// Removes a profile and everything it left: the data of its Claude
-/// Desktop, its login in the keychain, its Claude Code folder, then its
+/// Removes a profile's Claude Desktop, Codex and Claude Code data, then its
 /// entry and rules in the config.
 ///
 /// The order matters: if a step fails, the ones after it have not run, and
-/// the profile is still in the config to try again. Claude Desktop comes
-/// first because it is the step that can refuse: a copy that is open.
+/// the profile is still in the config to try again. Claude Desktop can refuse
+/// when a copy is open, so check it before signing out of Codex or Claude Code.
 pub fn purge_profile(env: &Env, config: &mut Config, name: &str) -> Result<Purged> {
     let folder = folder(env, config, name)?;
+    let codex = codex_folder(env, name)?;
+    let codex_logout = codex
+        .as_deref()
+        .map(|dir| {
+            let real = launch::find_real(env, config, &CODEX)?;
+            launch::command(
+                &CODEX,
+                &real,
+                Target::Profile {
+                    name,
+                    dir: Some(dir),
+                },
+            )
+        })
+        .transpose()
+        .with_context(|| format!("cannot prepare Codex logout for profile '{name}'"))?;
     let desktop = crate::desktop::forget(env, config, name)?;
+    if let Some((dir, mut command)) = codex.as_deref().zip(codex_logout) {
+        let status = command
+            .arg("logout")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .with_context(|| format!("cannot run Codex logout for profile '{name}'"))?;
+        if !status.success() {
+            bail!("Codex logout failed for profile '{name}' ({status})");
+        }
+        fs::remove_dir_all(dir).with_context(|| format!("cannot delete {}", dir.display()))?;
+    }
     let login = forget_login(&folder)?;
     if folder.exists() {
         fs::remove_dir_all(&folder)
@@ -128,5 +184,6 @@ pub fn purge_profile(env: &Env, config: &mut Config, name: &str) -> Result<Purge
         login,
         rules,
         desktop,
+        codex,
     })
 }

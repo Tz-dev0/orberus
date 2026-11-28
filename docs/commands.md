@@ -291,14 +291,16 @@ Sets the profile used when no rule applies.
 orberus remove [name] [--purge] [--yes]        # or: orberus rm
 ```
 
-Removes a profile and your rules that point to it. Its Claude Code folder is
-kept, so its login and history stay on disk and the profile can be created
-again later.
+Removes a profile and your rules that point to it. Its data and logins stay
+on disk and can be reused by creating the profile again.
 
-`--purge` also deletes that folder, the profile's login in the macOS
-keychain, and the data of its [Claude Desktop](#desktop). This cannot be
-undone. It is refused for the native profile, whose folder is `~/.claude`,
-and while Claude Desktop is open on the profile.
+`--purge` also deletes the profile's Claude Code folder, its login in the
+macOS keychain, and the data of its [Claude Desktop](#desktop). If the
+profile has a managed Codex home, Orberus runs `codex logout` there before
+deleting it. If Codex cannot sign out, Orberus reports the failure and keeps
+the profile in the configuration so you can retry. Purging is irreversible.
+It is refused for the native profile, whose folder is `~/.claude`, and while
+Claude Desktop is open on the profile.
 
 Team rules are never removed.
 
@@ -368,9 +370,9 @@ process-level credentials cannot replace the profile's login. Sign in and
 out using Codex's `login` and `logout` commands through the same profile.
 
 Orberus finds `codex` on `PATH`. To select a specific binary, set the
-optional `codex_bin` path in `~/.orberus/config.toml`. `orberus remove` keeps
-the profile's Codex directory, including when purging its Claude data.
-`orberus uninstall --purge` removes the Orberus data directory as a whole.
+optional `codex_bin` path in `~/.orberus/config.toml`. See [remove](#remove)
+to sign out and delete one profile's data. Before `orberus uninstall --purge`
+deletes the Orberus data directory, sign out of any remaining Codex profiles.
 
 ## rule
 
