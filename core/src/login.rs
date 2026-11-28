@@ -36,6 +36,9 @@ fn escaped(path: &Path) -> String {
         .replace('>', "&gt;")
 }
 
+/// `AssociatedBundleIdentifiers` tells macOS which app this file belongs
+/// to, so that the Login Items list of System Settings shows the app, with
+/// its name and icon, rather than a bare program (`man launchd.plist`).
 fn content(program: &Path) -> String {
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -50,6 +53,8 @@ fn content(program: &Path) -> String {
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <key>AssociatedBundleIdentifiers</key>
+    <string>{APP_IDENTIFIER}</string>
 </dict>
 </plist>
 "#,
@@ -159,6 +164,10 @@ mod tests {
         let text = fs::read_to_string(file(&env)).unwrap();
         assert!(text.contains(&format!("<string>{}</string>", program.display())));
         assert!(text.contains("<key>RunAtLoad</key>"));
+        // Tied to the app, for the list of login items in System Settings.
+        assert!(text.contains(
+            "<key>AssociatedBundleIdentifiers</key>\n    <string>com.github.tzdev0.orberus</string>"
+        ));
 
         // Another copy of the app does not take this file for its own.
         assert!(!enabled(
@@ -182,6 +191,10 @@ mod tests {
         // First start of the app: on, without being asked.
         assert!(by_default(&env, &program).unwrap());
         assert!(enabled(&env, &program));
+        // A file written by an earlier version, in another form, is
+        // written again at the next start.
+        fs::write(file(&env), "<plist/>").unwrap();
+        assert!(by_default(&env, &program).unwrap());
         // Nothing more to do at the next start.
         assert!(!by_default(&env, &program).unwrap());
 
