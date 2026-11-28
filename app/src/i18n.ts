@@ -207,6 +207,8 @@ const en = {
   openAtLogin: "Start Orberus with my Mac",
   openAtLoginHint:
     "Orberus opens by itself in the menu bar each time you start your Mac and log in. Off: you open it yourself when you want it.\nThe app only shows and changes things: claude picks the account by folder whether the app is open or not",
+  version: "Version {version}",
+  versionHint: "The version of this app. The command has its own: orberus --version",
   editConfig: "Edit config file…",
   quit: "Quit Orberus",
   legal: "Not affiliated with Anthropic",
@@ -420,6 +422,8 @@ const fr: Record<Key, string> = {
   openAtLogin: "Lancer Orberus au démarrage du Mac",
   openAtLoginHint:
     "Orberus s'ouvre tout seul dans la barre de menus à chaque démarrage du Mac, quand vous ouvrez votre session. Désactivé : vous l'ouvrez vous-même quand vous en avez besoin.\nL'app ne fait qu'afficher et régler : claude choisit le compte selon le dossier, que l'app soit ouverte ou non",
+  version: "Version {version}",
+  versionHint: "La version de cette app. La commande a la sienne : orberus --version",
   editConfig: "Modifier le fichier de config…",
   quit: "Quitter Orberus",
   legal: "Sans lien avec Anthropic",

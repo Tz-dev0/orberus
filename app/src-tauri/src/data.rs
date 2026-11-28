@@ -91,6 +91,8 @@ pub struct Overview {
     pub terminal: Option<String>,
     /// True when macOS opens this copy of the app at login.
     pub open_at_login: bool,
+    /// The version of this app, to show at the bottom of the window.
+    pub version: &'static str,
 }
 
 /// The disk space one profile takes, for the "Storage" lines.
@@ -488,6 +490,7 @@ pub fn overview(env: &Env) -> Result<Overview> {
         // Without a known program (which never happens in practice), the
         // option reads as off.
         open_at_login: std::env::current_exe().is_ok_and(|me| login::enabled(env, &me)),
+        version: env!("CARGO_PKG_VERSION"),
     })
 }
 
@@ -1084,6 +1087,8 @@ mod tests {
 
         let overview = overview(&env).unwrap();
         assert!(!overview.shim_installed);
+        // The app's own version, as its Cargo.toml has it.
+        assert_eq!(overview.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(overview.profiles.len(), 2);
 
         let perso = &overview.profiles[0];
