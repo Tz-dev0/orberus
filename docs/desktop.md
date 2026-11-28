@@ -6,8 +6,7 @@ e-mail address; with two addresses, Anthropic's help page says to log out
 and log in again.
 
 Orberus switches it for you. Each profile keeps its own sign-in, and a
-switch opens Claude Desktop on the profile you name, then closes the one
-that was open:
+switch closes Claude Desktop, then opens it again on the profile you name:
 
 ```sh
 orberus desktop work
@@ -38,8 +37,8 @@ $ orberus desktop
 └─────────┴────────────────┴─────────────────────────────────────────────────────────────┘
 
 Switch with: orberus desktop <profile>
-  One Claude Desktop at a time: a switch opens it on that profile's account,
-  then closes the one that was open. Each profile keeps its own sign-in.
+  One Claude Desktop at a time: a switch closes it, then opens it again on
+  that profile's account. Each profile keeps its own sign-in.
 
 $ orberus desktop work
 Claude Desktop is open on 'perso'. It closes, and what runs in it stops:
@@ -70,11 +69,16 @@ it again when you switch back.
   it takes a second click.
 - **Claude Desktop is asked to quit, never forced.** macOS asks it the way
   its Quit menu does. If Claude Desktop has a question of its own before it
-  quits, answer it. After ten seconds, Orberus says that the other one is
-  still open and leaves it to you.
-- **The new one opens first.** For a moment two are open, with two Claude
-  icons in the Dock, then one. If the new one does not start, nothing else
-  is closed.
+  quits, answer it. After ten seconds, Orberus says that it did not quit,
+  opens nothing, and leaves it to you.
+- **One at a time.** Claude Desktop opens on the profile once the one that
+  was open is gone, the way you would quit it and open it again. Two never
+  run together.
+- **Except from inside Claude Desktop.** Typed in a terminal of the Claude
+  Desktop that has to close, or run by a Claude Code session of its Code
+  tab, the command would be closed with the app before it opened anything.
+  There, the new one opens first: for a moment two are open, with two
+  Claude icons in the Dock, then one.
 
 ## Which profile gets which data
 
@@ -106,17 +110,19 @@ open -n -a /Applications/Claude.app \
   --args --user-data-dir=/Users/you/.orberus/desktop/work
 ```
 
-then asks macOS to quit the Claude Desktop that was open. Four things in
-there are Orberus' own care:
+after it asked macOS to quit the Claude Desktop that was open. Four things
+in there are Orberus' own care:
 
 - **It looks before it starts.** Claude Desktop does not stop a second copy
   from opening on the same data folder, and two copies writing to one folder
   is how data gets damaged. Orberus lists the ones that run, and brings the
   profile's one to the front when it is there.
-- **New first, old after.** Typed in a terminal inside Claude Desktop, a
-  command that closed the app first would be closed with it, before it
-  opened anything. So the new one is started, then the others are asked to
-  quit.
+- **Old first, new after.** Claude Desktop does not mind running twice on
+  two data folders, each with its icon in the Dock. So the one that is open
+  is asked to quit, and the new one is started once it is gone. Orberus
+  checks whether it was itself started by the Claude Desktop that has to
+  close; if so, closing first would end the command before it opened
+  anything, and the order is turned around.
 - **A clean environment.** `open` hands the new app every variable of the
   program that ran it. Started from a terminal inside Claude Code, Claude
   Desktop would inherit that session's variables. Orberus starts it with the
@@ -168,15 +174,20 @@ in, with a Claude Code session open in its Code tab.
 - A switch to a profile that was never signed in to, and back a few seconds
   later, twice. Each time Claude Desktop opened on the profile asked for and
   the one that was open closed. On the way back, the other one was gone a
-  second after the daily one started.
+  second after the daily one started. These switches were made when the new
+  one still opened first, whatever the switch was asked from.
 - The daily Claude Desktop came back signed in, with its conversations.
 - The second time, the session of the Code tab was in the middle of a turn.
   The switch stopped that turn, and the conversation went on from there once
   Claude Desktop was back.
-- During a switch, the Dock showed two Claude icons.
+- During a switch, the Dock showed two Claude icons. This is why a switch
+  now closes first.
 
 Not tried yet:
 
+- **a switch in the order it now follows**, closing first: asking Claude
+  Desktop to quit, waiting for it and starting it were each tried, not yet
+  in that order, and not with the Dock in sight;
 - **signing in on a second data folder**, and so everything that depends on
   it: that the sign-in is still there after a switch away and back, and the
   Code tab of a signed-in profile (that it reads and writes in the profile's

@@ -184,10 +184,10 @@ enum Command {
     },
     /// Switch Claude Desktop to a profile's account, or list them
     ///
-    /// One Claude Desktop at a time: it is opened on the profile's account,
-    /// then the one that was open is closed. Each profile keeps its own
-    /// sign-in. Without a name, the profiles are listed with the one Claude
-    /// Desktop is on.
+    /// One Claude Desktop at a time: the one that is open is closed, then
+    /// it is opened again on the profile's account. Each profile keeps its
+    /// own sign-in. Without a name, the profiles are listed with the one
+    /// Claude Desktop is on.
     Desktop {
         /// Name of the profile to put Claude Desktop on
         name: Option<String>,

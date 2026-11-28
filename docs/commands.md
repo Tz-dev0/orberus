@@ -82,9 +82,9 @@ orberus desktop [name] [--yes]
 ```
 
 Claude Desktop holds one account at a time. This switches it: each profile
-keeps its own sign-in, and Claude Desktop is opened on the profile you name,
-then the one that was open is closed. Alone, the command lists the profiles
-and the one Claude Desktop is on:
+keeps its own sign-in, and Claude Desktop is closed, then opened again on the
+profile you name. Alone, the command lists the profiles and the one Claude
+Desktop is on:
 
 ```text
 $ orberus desktop
