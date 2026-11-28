@@ -72,8 +72,9 @@ it again when you switch back.
   its Quit menu does. If Claude Desktop has a question of its own before it
   quits, answer it. After ten seconds, Orberus says that the other one is
   still open and leaves it to you.
-- **The new one opens first.** For a moment two are open, then one. If the
-  new one does not start, nothing else is closed.
+- **The new one opens first.** For a moment two are open, with two Claude
+  icons in the Dock, then one. If the new one does not start, nothing else
+  is closed.
 
 ## Which profile gets which data
 
@@ -161,20 +162,32 @@ signed in to:
 - `remove --purge` is refused while Claude Desktop is open on the profile,
   and deletes its data once it is closed.
 
+With the same version, on a Mac where Claude Desktop is in daily use: signed
+in, with a Claude Code session open in its Code tab.
+
+- A switch to a profile that was never signed in to, and back a few seconds
+  later, twice. Each time Claude Desktop opened on the profile asked for and
+  the one that was open closed. On the way back, the other one was gone a
+  second after the daily one started.
+- The daily Claude Desktop came back signed in, with its conversations.
+- The second time, the session of the Code tab was in the middle of a turn.
+  The switch stopped that turn, and the conversation went on from there once
+  Claude Desktop was back.
+- During a switch, the Dock showed two Claude icons.
+
 Not tried yet:
 
 - **signing in on a second data folder**, and so everything that depends on
   it: that the sign-in is still there after a switch away and back, and the
   Code tab of a signed-in profile (that it reads and writes in the profile's
   Claude Code folder, and where it keeps that login);
-- **a switch away from the Claude Desktop in daily use**: starting it on a
-  profile and asking another one to quit were each tried, not the two in
-  one go on a Claude Desktop with an account and work in it;
-- a Claude Desktop that is busy when asked to quit: whether it asks first,
-  and how long it takes;
+- a Claude Desktop with a conversation that is answering or a task under
+  way when it is asked to quit: whether it asks first, and how long it
+  takes. With a session of the Code tab in the middle of a turn, it was gone
+  within eight seconds;
 - the command typed in a terminal inside the Claude Desktop that closes;
-- the Dock: what its icon shows and does while Claude Desktop is on another
-  profile;
+- the Dock: whether a second Claude icon stays once the switch is over, and
+  what a click on it does while Claude Desktop is on another profile;
 - an update of Claude Desktop while it runs on a profile's folder;
 - what macOS reopens after a restart: it may bring Claude Desktop back on
   its own folder.
