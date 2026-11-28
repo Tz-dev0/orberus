@@ -1385,6 +1385,27 @@ footer {
   border-radius: 5px;
 }
 
+/* A later release exists: the line carries a small badge, in the accent
+   colour of the system like the switch below it. */
+.menu-update {
+  align-items: center;
+}
+
+.update-badge {
+  padding: 1px 6px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: #0a84ff;
+  background: AccentColor;
+}
+
+.menu-update.enter {
+  animation-name: pop;
+  animation-timing-function: var(--spring);
+}
+
 /* A setting of the app: the line is the button, the switch says how it
    stands. Sized like the small switches of System Settings. */
 .menu-switch {

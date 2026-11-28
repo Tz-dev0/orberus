@@ -79,7 +79,8 @@ my Mac" at the bottom of its window. See [app.md](app.md#opening-it).
 Run the install commands again. For the app, quit it first (right-click its
 menu bar icon, then Quit).
 
-`orberus --version` prints the version you have.
+`orberus --version` prints the version you have. The menu bar app tells you
+when a later release is out: see [app.md](app.md#updates).
 
 ## Uninstall
 

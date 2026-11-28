@@ -36,5 +36,6 @@ mod settings;
 pub mod shell;
 pub mod tool;
 pub mod uninstall;
+pub mod update;
 pub mod usage;
 pub mod view;

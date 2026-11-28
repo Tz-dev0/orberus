@@ -28,6 +28,7 @@ use orberus_core::retention::{self, Retention};
 use orberus_core::rules;
 use orberus_core::sessions;
 use orberus_core::tool;
+use orberus_core::update;
 use orberus_core::usage::{self, Verdict};
 use orberus_core::view;
 
@@ -722,6 +723,12 @@ pub fn open_at_login_by_default(env: &Env) {
     if let Ok(me) = std::env::current_exe() {
         let _ = login::by_default(env, &me);
     }
+}
+
+/// The version to update to, when a release later than this app exists.
+/// GitHub is asked at most once a day: see the core's `update`.
+pub fn update(env: &Env) -> Option<String> {
+    update::available(env, env!("CARGO_PKG_VERSION"), unix_now())
 }
 
 /// One editor of the VS Code family, for the "Editors" section.

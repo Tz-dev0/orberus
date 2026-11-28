@@ -287,6 +287,9 @@ picks the account by folder whether the app is open or not. See
   last hour, since it may still be open. It never touches `memory/` folders.
 - `remove` keeps the profile's folder, so its login and history stay on disk.
   Only `remove --purge` deletes them, and it is refused for `~/.claude`.
+- The menu bar app asks GitHub once a day whether a newer release exists:
+  one request, with nothing about you in it. It is the only network request
+  in the project.
 - The menu bar app writes one file outside `~/.orberus`, the one that opens
   it when you log in. Its switch and `uninstall` delete it.
 - `uninstall` removes the tool and keeps your profiles. Nothing ever deletes

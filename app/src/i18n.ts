@@ -200,6 +200,10 @@ const en = {
   terminalsNote: "Listed: the installed apps that can run a script file.",
 
   // Menu and notices
+  updateAvailable: "Update to Orberus {version}…",
+  updateNew: "New",
+  updateHint:
+    "Version {version} is out. Opens the page that says how to update the command and this app.\nOrberus looks for a new release on GitHub once a day",
   openAtLogin: "Start Orberus with my Mac",
   openAtLoginHint:
     "Orberus opens by itself in the menu bar each time you start your Mac and log in. Off: you open it yourself when you want it.\nThe app only shows and changes things: claude picks the account by folder whether the app is open or not",
@@ -409,6 +413,10 @@ const fr: Record<Key, string> = {
   lookingTerminals: "Recherche des apps de terminal…",
   terminalsNote: "Listées : les apps installées qui savent lancer un fichier de script.",
 
+  updateAvailable: "Passer à Orberus {version}…",
+  updateNew: "Nouveau",
+  updateHint:
+    "La version {version} est sortie. Ouvre la page qui explique comment mettre à jour la commande et cette app.\nOrberus regarde une fois par jour sur GitHub si une version est sortie",
   openAtLogin: "Lancer Orberus au démarrage du Mac",
   openAtLoginHint:
     "Orberus s'ouvre tout seul dans la barre de menus à chaque démarrage du Mac, quand vous ouvrez votre session. Désactivé : vous l'ouvrez vous-même quand vous en avez besoin.\nL'app ne fait qu'afficher et régler : claude choisit le compte selon le dossier, que l'app soit ouverte ou non",

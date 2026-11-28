@@ -125,7 +125,7 @@ Claude Code's own files.
 | `~/.orberus/bin/` | `orberus` and the `claude` shim |
 | `~/.orberus/ide/` | The wrapper that editor extensions start |
 | `~/.orberus/profiles/<name>/` | The Claude Code folder of a profile. Claude Code fills it |
-| `~/.orberus/run/` | Small launch scripts and notes written by the menu bar app: the last folder of each profile, the terminal you chose |
+| `~/.orberus/run/` | Small launch scripts and notes written by the menu bar app: the last folder of each profile, the terminal you chose, the last answer about updates |
 | `~/Library/LaunchAgents/com.github.tzdev0.orberus.plist` | Written by the menu bar app when it starts, so that macOS opens it at login. Its "Start Orberus with my Mac" switch deletes it |
 | `<profile folder>/settings.json` | Only the `cleanupPeriodDays` key, when you use `orberus retention` |
 | `.orberus-profile` in a folder | When you use `orberus use` |
