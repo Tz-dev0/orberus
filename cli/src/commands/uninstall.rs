@@ -24,6 +24,8 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
     // A config that cannot be read must not block a removal: we then go on
     // without the list of profiles.
     let loaded = config::load(env).ok();
+    // Looked for now: one of the places that tell where the app is, the
+    // file that opens it at login, is deleted further down.
     let apps = uninstall::installed_apps(env);
     let binary = uninstall::binary(env)?;
 
@@ -68,9 +70,14 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
         ui.detail("the setting that opens the menu bar app when you log in");
     }
     for app in &apps {
+        let how = if app.running.is_empty() {
+            "moved to the Trash"
+        } else {
+            "quit, then moved to the Trash"
+        };
         ui.detail(&format!(
-            "the menu bar app, moved to the Trash: {}",
-            short_path(env, app)
+            "the menu bar app, {how}: {}",
+            short_path(env, &app.bundle)
         ));
     }
 
@@ -161,9 +168,27 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
         ));
     }
     for app in &apps {
-        uninstall::trash_app(env, app)?;
-        ui.success(&format!("{} moved to the Trash", short_path(env, app)));
-        ui.detail("if it is running, quit it from its menu bar icon");
+        // Quit first: left running, it would stay in the menu bar with its
+        // files in the Trash.
+        let quit = uninstall::quit_app(app);
+        if quit && !app.running.is_empty() {
+            ui.success("Menu bar app quit");
+        }
+        // A copy that cannot be moved (another disk, a folder we may not
+        // write in) is said and left: the rest of the removal goes on.
+        match uninstall::trash_app(env, &app.bundle) {
+            Ok(_) => ui.success(&format!(
+                "{} moved to the Trash",
+                short_path(env, &app.bundle)
+            )),
+            Err(error) => {
+                ui.warning(&format!("{error:#}"));
+                ui.detail("it stays where it is: move it to the Trash yourself");
+            }
+        }
+        if !quit {
+            ui.warning("the menu bar app is still running: quit it from its menu bar icon");
+        }
     }
     // The app is gone: macOS must not look for it at the next login.
     if login::disable(env)? {

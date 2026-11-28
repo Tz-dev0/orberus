@@ -434,7 +434,10 @@ function run(argv) {
 ///
 /// Like [`show`], this calls AppKit and sends the app no message of ours,
 /// so macOS asks for no permission.
-fn quit(pid: u32) -> Result<bool> {
+///
+/// Nothing in it is about Claude Desktop: `uninstall` asks our own menu bar
+/// app to quit the same way.
+pub(crate) fn quit(pid: u32) -> Result<bool> {
     const SCRIPT: &str = r#"ObjC.import("AppKit");
 function run(argv) {
   var app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(parseInt(argv[0], 10));

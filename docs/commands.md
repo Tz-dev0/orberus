@@ -203,7 +203,7 @@ This removes
   the setting that sends VS Code's Claude Code extension through Orberus
   orberus itself: ~/.orberus/bin/orberus
   the setting that opens the menu bar app when you log in
-  the menu bar app, moved to the Trash: /Applications/Orberus.app
+  the menu bar app, quit, then moved to the Trash: /Applications/Orberus.app
   kept: your profiles and rules, in ~/.orberus (to delete them too: --purge)
 Uninstall Orberus? [y/N]
 ```
@@ -218,8 +218,13 @@ What it removes:
   it names. Your editors' extension starts Claude Code itself again;
 - `orberus` itself, when it sits in `~/.orberus/bin`. Installed
   another way (`cargo install`), it tells you how to remove it;
-- the menu bar app, moved to the Trash, and the file that opens it when
-  you log in.
+- the menu bar app, wherever it is: asked to quit when it is running, as
+  "Quit" in its menu does, then moved to the Trash, with the file that opens
+  it when you log in. It is looked for in `/Applications` and
+  `~/Applications`, through that file (it names the copy that opens at
+  login), and among the running apps. A copy that sits in another folder,
+  does not open at login and is not running is not found: move that one to
+  the Trash yourself.
 
 Your profiles stay: the config, the rules and each profile's Claude Code
 folder, with its login and history. Install again later and they are back.

@@ -8,9 +8,14 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 
+use crate::desktop;
+use crate::login;
 use crate::paths::Env;
 use crate::tool;
 
@@ -221,22 +226,166 @@ pub(crate) fn app_folders(env: &Env) -> Vec<PathBuf> {
     }
 }
 
-/// The copies of the menu bar app that are installed.
+/// One copy of the menu bar app on this machine.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstalledApp {
+    /// Its `.app` folder.
+    pub bundle: PathBuf,
+    /// The numbers of the programs running from it. Empty when it is not
+    /// running.
+    pub running: Vec<u32>,
+}
+
+/// True when that folder is our app: its Info.plist carries our identifier,
+/// so another app of the same name is never touched.
+fn is_ours(bundle: &Path) -> bool {
+    fs::read_to_string(bundle.join("Contents/Info.plist"))
+        .is_ok_and(|plist| plist.contains(APP_IDENTIFIER))
+}
+
+/// The `.app` folder a program belongs to, when it sits where an app keeps
+/// its program: `<Name>.app/Contents/MacOS/<program>`.
+fn bundle_of(program: &Path) -> Option<PathBuf> {
+    let macos = program.parent()?;
+    let contents = macos.parent()?;
+    let bundle = contents.parent()?;
+    // `ends_with` compares whole path components: `NotMacOS` does not end
+    // with `MacOS`.
+    let shaped = macos.ends_with("MacOS")
+        && contents.ends_with("Contents")
+        && bundle.extension().is_some_and(|ext| ext == "app");
+    // `then` turns the yes or no into "some folder" or "none".
+    shaped.then(|| bundle.to_path_buf())
+}
+
+/// The running copies among the lines our script printed: one per line, its
+/// number, a tab, then its `.app` folder.
+fn copies_in(listing: &str) -> Vec<(u32, PathBuf)> {
+    listing
+        .lines()
+        .filter_map(|line| {
+            let (pid, bundle) = line.split_once('\t')?;
+            if bundle.is_empty() {
+                return None;
+            }
+            Some((pid.trim().parse().ok()?, PathBuf::from(bundle)))
+        })
+        .collect()
+}
+
+/// The copies of the menu bar app that are running, as macOS knows them:
+/// for each, its number and its `.app` folder. `None` when macOS could not
+/// be asked.
 ///
-/// A folder named like the app is only counted when its Info.plist carries
-/// our identifier, so another app of the same name is never touched.
-pub fn installed_apps(env: &Env) -> Vec<PathBuf> {
+/// Asked by the app's identifier rather than by its name or its folder: a
+/// copy started from a build folder or from Downloads is found too.
+/// `osascript` ships with macOS, and the script only reads a list from
+/// AppKit, so no permission is asked for.
+fn running_copies() -> Option<Vec<(u32, PathBuf)>> {
+    // A test names its own Applications folder. It must never see, let
+    // alone quit, the app of the person who runs it.
+    if std::env::var_os(APPS_ENV).is_some_and(|folder| !folder.is_empty()) {
+        return Some(Vec::new());
+    }
+    const SCRIPT: &str = r#"ObjC.import("AppKit");
+function run(argv) {
+  var apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(argv[0]);
+  var lines = [];
+  for (var i = 0; i < apps.count; i++) {
+    var app = apps.objectAtIndex(i);
+    var url = app.bundleURL;
+    lines.push(app.processIdentifier + "\t" + (url.isNil() ? "" : ObjC.unwrap(url.path)));
+  }
+  return lines.join("\n");
+}"#;
+    let output = Command::new("/usr/bin/osascript")
+        .args(["-l", "JavaScript", "-e", SCRIPT])
+        .arg(APP_IDENTIFIER)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| copies_in(&String::from_utf8_lossy(&output.stdout)))
+}
+
+/// Keeps, among the folders where a copy may be, the ones that are our app,
+/// each once, with the numbers of the programs running from it.
+fn copies(candidates: Vec<PathBuf>, running: &[(u32, PathBuf)]) -> Vec<InstalledApp> {
+    // One folder can be reached under two names (a link on the way). Names
+    // are compared once made canonical; the name shown stays the one found.
+    let real = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let mut seen: Vec<PathBuf> = Vec::new();
+    let mut found = Vec::new();
+    for bundle in candidates {
+        let place = real(&bundle);
+        if seen.contains(&place) || !is_ours(&bundle) {
+            continue;
+        }
+        let pids = running
+            .iter()
+            .filter(|(_, at)| real(at) == place)
+            .map(|(pid, _)| *pid)
+            .collect();
+        seen.push(place);
+        found.push(InstalledApp {
+            bundle,
+            running: pids,
+        });
+    }
+    found
+}
+
+/// The copies of the menu bar app on this machine, wherever they are.
+///
+/// Three places are looked at: the Applications folders, the copy that
+/// opens at login (the file names its program), and the copies that are
+/// running. Nothing is searched for on the disk: a copy that sits in
+/// another folder, does not open at login and is not running stays unseen.
+pub fn installed_apps(env: &Env) -> Vec<InstalledApp> {
     if !cfg!(target_os = "macos") {
         return Vec::new();
     }
-    app_folders(env)
+    // A list that cannot be read finds no copy; it does not stop a removal.
+    let running = running_copies().unwrap_or_default();
+    let mut candidates: Vec<PathBuf> = app_folders(env)
         .into_iter()
         .map(|folder| folder.join(APP_NAME))
-        .filter(|app| {
-            fs::read_to_string(app.join("Contents/Info.plist"))
-                .is_ok_and(|plist| plist.contains(APP_IDENTIFIER))
-        })
-        .collect()
+        .collect();
+    // `extend` takes anything that yields folders: an `Option` yields one
+    // or none.
+    candidates.extend(login::program(env).as_deref().and_then(bundle_of));
+    candidates.extend(running.iter().map(|(_, bundle)| bundle.clone()));
+    copies(candidates, &running)
+}
+
+/// How long a copy that was asked to quit is waited for: 5 seconds, in
+/// steps of 200 ms. The app has nothing to save, so it goes at once.
+const QUIT_STEPS: u32 = 25;
+
+/// Asks a running copy to quit, as "Quit" in its menu does, and waits for
+/// it. True when it is no longer running, and at once when it was not.
+///
+/// Nothing is forced. False also covers "macOS could not be asked": saying
+/// "it quit" without knowing would be a guess.
+pub fn quit_app(app: &InstalledApp) -> bool {
+    for pid in &app.running {
+        // An error here is not worth stopping a removal half way: the wait
+        // below finds the copy still running, and the caller says so.
+        let _ = desktop::quit(*pid);
+    }
+    let mut left = app.running.clone();
+    for _ in 0..QUIT_STEPS {
+        if left.is_empty() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(200));
+        if let Some(now) = running_copies() {
+            // `retain` keeps the numbers that are still in the new list.
+            left.retain(|pid| now.iter().any(|(running, _)| running == pid));
+        }
+    }
+    left.is_empty()
 }
 
 /// Moves one copy of the app to the Trash and returns where it went.
@@ -318,6 +467,100 @@ mod tests {
         // Written by hand, in another way: not ours to remove.
         let text = "PATH=$HOME/.orberus/bin:$PATH\nexport PATH\n";
         assert!(strip_path_lines(text, &path_lines(&env)).is_none());
+    }
+
+    /// A folder shaped like the app, with an Info.plist that carries the
+    /// given identifier.
+    fn app_at(bundle: &Path, identifier: &str) {
+        fs::create_dir_all(bundle.join("Contents/MacOS")).unwrap();
+        fs::write(
+            bundle.join("Contents/Info.plist"),
+            format!("<key>CFBundleIdentifier</key><string>{identifier}</string>"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_program_tells_which_app_it_belongs_to() {
+        assert_eq!(
+            bundle_of(Path::new(
+                "/Users/me/builds/Orberus.app/Contents/MacOS/orberus-app"
+            )),
+            Some(PathBuf::from("/Users/me/builds/Orberus.app"))
+        );
+        // Not where an app keeps its program: not an app's program.
+        assert_eq!(bundle_of(Path::new("/Users/me/bin/orberus-app")), None);
+        assert_eq!(
+            bundle_of(Path::new("/Users/me/Orberus.app/orberus-app")),
+            None
+        );
+        assert_eq!(
+            bundle_of(Path::new("/Users/me/Orberus/Contents/MacOS/orberus-app")),
+            None
+        );
+    }
+
+    #[test]
+    fn reads_the_running_copies_macos_listed() {
+        let listing = "412\t/Applications/Orberus.app\n9130\t/Users/me/My builds/Orberus.app\n";
+        assert_eq!(
+            copies_in(listing),
+            vec![
+                (412, PathBuf::from("/Applications/Orberus.app")),
+                (9130, PathBuf::from("/Users/me/My builds/Orberus.app")),
+            ]
+        );
+        // A copy macOS gives no folder for, and a line that is not ours.
+        assert!(copies_in("77\t\nnot a line\n").is_empty());
+        assert!(copies_in("").is_empty());
+    }
+
+    #[test]
+    fn a_copy_is_found_wherever_it_is_and_only_when_it_is_ours() {
+        let temp = tempfile::tempdir().unwrap();
+        let usual = temp.path().join("Applications/Orberus.app");
+        let built = temp.path().join("builds/Orberus.app");
+        let other = temp.path().join("elsewhere/Orberus.app");
+        app_at(&usual, APP_IDENTIFIER);
+        app_at(&built, APP_IDENTIFIER);
+        app_at(&other, "com.example.somethingelse");
+        let gone = temp.path().join("moved away/Orberus.app");
+
+        let running = vec![(412, built.clone()), (9130, other.clone())];
+        let found = copies(
+            vec![
+                usual.clone(),
+                // Named twice: by the file that opens it at login, and as
+                // a running copy.
+                built.clone(),
+                built.clone(),
+                other,
+                gone,
+            ],
+            &running,
+        );
+        assert_eq!(
+            found,
+            vec![
+                InstalledApp {
+                    bundle: usual,
+                    running: vec![],
+                },
+                InstalledApp {
+                    bundle: built,
+                    running: vec![412],
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_copy_that_is_not_running_has_nothing_to_quit() {
+        let app = InstalledApp {
+            bundle: PathBuf::from("/Applications/Orberus.app"),
+            running: vec![],
+        };
+        assert!(quit_app(&app));
     }
 
     #[test]
