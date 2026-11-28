@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use orberus_core::config;
 use orberus_core::ide::{self, State};
 use orberus_core::limits;
+use orberus_core::login;
 use orberus_core::paths::Env;
 use orberus_core::purge;
 use orberus_core::tool;
@@ -51,6 +52,9 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
     }
     if let Binary::Ours(path) = &binary {
         ui.detail(&format!("orberus itself: {}", short_path(env, path)));
+    }
+    if login::file(env).exists() {
+        ui.detail("the setting that opens the menu bar app when you log in");
     }
     for app in &apps {
         ui.detail(&format!(
@@ -145,6 +149,10 @@ pub(crate) fn uninstall_command(ui: &Ui, env: &Env, purge: bool, yes: bool) -> R
         uninstall::trash_app(env, app)?;
         ui.success(&format!("{} moved to the Trash", short_path(env, app)));
         ui.detail("if it is running, quit it from its menu bar icon");
+    }
+    // The app is gone: macOS must not look for it at the next login.
+    if login::disable(env)? {
+        ui.success("The app no longer opens at login");
     }
     uninstall::remove_launchers(env)?;
 

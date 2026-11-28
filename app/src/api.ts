@@ -171,6 +171,8 @@ export interface Overview {
   /** The terminal app chosen to open Claude Code in; null leaves it to
    *  macOS. */
   terminal: string | null;
+  /** True when macOS opens the app at login. */
+  openAtLogin: boolean;
 }
 
 /** One limit of an account, as it stands now. */
@@ -262,6 +264,8 @@ export interface Api {
   editors(): Promise<Editor[]>;
   /** Sends an editor's extension through Orberus, or back. */
   setEditor(settings: string, on: boolean): Promise<void>;
+  /** Opens the app when the user logs in, or stops doing so. */
+  setOpenAtLogin(on: boolean): Promise<void>;
   openConfig(): Promise<void>;
   /** Resizes the window to the height of its content. */
   fit(height: number): Promise<void>;
@@ -298,6 +302,7 @@ const tauri: Api = {
   setTerminal: (path) => invoke("set_terminal", { path }),
   editors: () => invoke<Editor[]>("editors"),
   setEditor: (settings, on) => invoke("set_editor", { settings, on }),
+  setOpenAtLogin: (on) => invoke("set_open_at_login", { on }),
   openConfig: () => invoke("open_config"),
   fit: (height) => invoke("fit", { height }),
   hide: () => invoke("hide"),
@@ -333,6 +338,7 @@ function preview(): Api {
     shimInstalled: true,
     canReuseLogin: false,
     terminal: null,
+    openAtLogin: false,
     profiles: [
       { name: "perso", account: "me@example.com", plan: "Max 5x", location: "~/.claude", native: true, isDefault: true, rules: 0, teamRules: 0, canPurge: false, keepsDays: 120, keepsError: null },
       {
@@ -554,6 +560,9 @@ function preview(): Api {
     setEditor: async (settings, on) => {
       const editor = editorSample.find((found) => found.settings === settings);
       if (editor) editor.state = on ? "on" : "off";
+    },
+    setOpenAtLogin: async (on) => {
+      state.openAtLogin = on;
     },
     setQuitLabel: async () => {},
     openConfig: async () => {},

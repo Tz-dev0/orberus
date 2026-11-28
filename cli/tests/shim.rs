@@ -1010,3 +1010,23 @@ fn uninstall_takes_the_wrapper_out_of_the_editors() {
     assert!(wrapper.symlink_metadata().is_err());
     assert!(!world.root.join("ide").exists());
 }
+
+#[test]
+fn uninstall_stops_opening_the_app_at_login() {
+    let world = World::new();
+    let home = world.home.clone();
+    world.ok(&home, &["setup"]);
+    // What the menu bar app writes when it is set to start with the Mac.
+    let agents = home.join("Library/LaunchAgents");
+    fs::create_dir_all(&agents).unwrap();
+    let ours = agents.join("com.github.tzdev0.orberus.plist");
+    let other = agents.join("com.example.other.plist");
+    fs::write(&ours, "<plist/>").unwrap();
+    fs::write(&other, "<plist/>").unwrap();
+
+    let done = world.ok(&home, &["uninstall", "--yes"]);
+    assert!(done.contains("no longer opens at login"), "{done}");
+    assert!(!ours.exists());
+    // Another program's file is not ours to remove.
+    assert!(other.exists());
+}

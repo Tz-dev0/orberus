@@ -200,6 +200,9 @@ const en = {
   terminalsNote: "Listed: the installed apps that can run a script file.",
 
   // Menu and notices
+  openAtLogin: "Start Orberus with my Mac",
+  openAtLoginHint:
+    "Orberus opens by itself in the menu bar each time you start your Mac and log in. Off: you open it yourself when you want it.\nThe app only shows and changes things: claude picks the account by folder whether the app is open or not",
   editConfig: "Edit config file…",
   quit: "Quit Orberus",
   legal: "Not affiliated with Anthropic",
@@ -406,6 +409,9 @@ const fr: Record<Key, string> = {
   lookingTerminals: "Recherche des apps de terminal…",
   terminalsNote: "Listées : les apps installées qui savent lancer un fichier de script.",
 
+  openAtLogin: "Lancer Orberus au démarrage du Mac",
+  openAtLoginHint:
+    "Orberus s'ouvre tout seul dans la barre de menus à chaque démarrage du Mac, quand vous ouvrez votre session. Désactivé : vous l'ouvrez vous-même quand vous en avez besoin.\nL'app ne fait qu'afficher et régler : claude choisit le compte selon le dossier, que l'app soit ouverte ou non",
   editConfig: "Modifier le fichier de config…",
   quit: "Quitter Orberus",
   legal: "Sans lien avec Anthropic",

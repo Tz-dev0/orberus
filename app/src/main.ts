@@ -1337,8 +1337,34 @@ function editorsSection(found: Editor[], overview: Overview): HTMLElement {
   return section;
 }
 
-function menu(): HTMLElement {
+// True right after a switch was used: the next page slides its knob from
+// the other side. Not at the opening of the window, where nothing moved.
+let switched = false;
+
+/** A setting that is on or off, as a switch at the end of its line. The
+ *  whole line is the button, so it is as easy to hit as its neighbours. */
+function menuSwitch(label: string, hint: string, on: boolean, action: () => Promise<void>): HTMLElement {
+  const item = el("button", "menu-item menu-switch");
+  item.setAttribute("role", "switch");
+  item.setAttribute("aria-checked", String(on));
+  item.title = hint;
+  const track = el("span", switched ? "switch moved" : "switch");
+  switched = false;
+  track.append(el("span", "switch-knob"));
+  item.append(el("span", "", label), track);
+  onClick(item, async () => {
+    await action();
+    switched = true;
+  });
+  return item;
+}
+
+function menu(overview: Overview | null): HTMLElement {
   const footer = el("footer");
+  if (overview) {
+    const on = overview.openAtLogin;
+    footer.append(menuSwitch(t("openAtLogin"), t("openAtLoginHint"), on, () => api.setOpenAtLogin(!on)));
+  }
   footer.append(
     menuItem(t("editConfig"), "⌘,", () => api.openConfig()),
     menuItem(t("quit"), "⌘Q", () => api.quit()),
@@ -1452,7 +1478,7 @@ function render(overview: Overview | null, loadError = ""): void {
     page.append(main);
   }
 
-  page.append(menu());
+  page.append(menu(overview));
   root.replaceChildren(page);
   root.classList.remove("away");
   settle(page);

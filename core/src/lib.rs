@@ -25,6 +25,7 @@ pub mod ide;
 mod jsonc;
 pub mod launch;
 pub mod limits;
+pub mod login;
 pub mod paths;
 pub mod purge;
 pub mod resolve;

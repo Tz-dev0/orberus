@@ -276,6 +276,11 @@ async fn set_editor(settings: String, on: bool) -> Result<(), String> {
     run(|env| data::set_editor(env, &settings, on))
 }
 
+#[tauri::command]
+fn set_open_at_login(on: bool) -> Result<(), String> {
+    run(|env| data::set_open_at_login(env, on))
+}
+
 /// Opens `config.toml` in the default text editor.
 #[tauri::command]
 fn open_config() -> Result<(), String> {
@@ -423,6 +428,7 @@ fn main() {
             set_terminal,
             editors,
             set_editor,
+            set_open_at_login,
             open_claude,
             open_config,
             set_quit_label,
@@ -434,6 +440,12 @@ fn main() {
             // A menu bar app: no icon in the Dock, no entry in Cmd-Tab.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // On by default: the app comes back at the next login unless
+            // the user turned that off in the window.
+            if let Ok(env) = Env::from_process() {
+                data::open_at_login_by_default(&env);
+            }
 
             // Right click on the icon: a one-line menu to quit.
             let quit = MenuItem::with_id(app, "quit", "Quit Orberus", true, None::<&str>)?;
