@@ -73,7 +73,7 @@ it again when you switch back.
   opens nothing, and leaves it to you.
 - **One at a time.** Claude Desktop opens on the profile once the one that
   was open is gone, the way you would quit it and open it again. Two never
-  run together.
+  run together, and the Dock shows one Claude.
 - **Except from inside Claude Desktop.** Typed in a terminal of the Claude
   Desktop that has to close, or run by a Claude Code session of its Code
   tab, the command would be closed with the app before it opened anything.
@@ -182,12 +182,14 @@ in, with a Claude Code session open in its Code tab.
   Claude Desktop was back.
 - During a switch, the Dock showed two Claude icons. This is why a switch
   now closes first.
+- A switch in the order it now follows, closing first, to a profile that
+  was never opened, and back. The daily Claude Desktop quit and Claude
+  Desktop was open on the profile about a second later. On the way back,
+  the other one closed and the daily one started within the same second.
+  The Dock showed one Claude icon.
 
 Not tried yet:
 
-- **a switch in the order it now follows**, closing first: asking Claude
-  Desktop to quit, waiting for it and starting it were each tried, not yet
-  in that order, and not with the Dock in sight;
 - **signing in on a second data folder**, and so everything that depends on
   it: that the sign-in is still there after a switch away and back, and the
   Code tab of a signed-in profile (that it reads and writes in the profile's
@@ -197,8 +199,8 @@ Not tried yet:
   takes. With a session of the Code tab in the middle of a turn, it was gone
   within eight seconds;
 - the command typed in a terminal inside the Claude Desktop that closes;
-- the Dock: whether a second Claude icon stays once the switch is over, and
-  what a click on it does while Claude Desktop is on another profile;
+- the Dock on a Mac where Claude is kept in it: the switches were watched
+  on one where its icon only shows while it runs;
 - an update of Claude Desktop while it runs on a profile's folder;
 - what macOS reopens after a restart: it may bring Claude Desktop back on
   its own folder.
