@@ -281,6 +281,91 @@ fn codex_run_without_a_profile_keeps_the_existing_codex_home() {
 }
 
 #[test]
+fn codex_shim_is_opt_in_and_uses_the_requested_directory() {
+    let world = World::new();
+    let home = &world.home;
+    world.fake_codex();
+    world.ok(home, &["setup"]);
+    let shim = world.root.join("bin/codex");
+    assert!(!shim.exists());
+    world.ok(home, &["setup", "--tool", "codex"]);
+    assert!(shim.is_symlink());
+    world.ok(home, &["add", "personal"]);
+    world.ok(home, &["add", "work"]);
+    assert!(world
+        .ok(home, &["doctor", "--tool", "codex"])
+        .contains("real Codex CLI is found"));
+    let work = world.repo("code/work project", "git@github.com:acme/project.git");
+    world.ok(
+        home,
+        &[
+            "rule",
+            "add",
+            "--git-remote",
+            "github.com/acme/*",
+            "--profile",
+            "work",
+            "--locked",
+        ],
+    );
+
+    for args in [
+        vec!["-C", "code/work project"],
+        vec!["exec", "--cd=code/work project", "--", "-C elsewhere"],
+    ] {
+        let output = world
+            .command(&shim, home)
+            .args(&args)
+            .env("ORBERUS_SESSION", "personal")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(text(&output).starts_with(&format!(
+            "home={}\n",
+            world.root.join("codex/work").display()
+        )));
+        for arg in args {
+            assert!(text(&output).contains(&format!("arg=<{arg}>\n")));
+        }
+    }
+    let locked = world
+        .command(&shim, home)
+        .args(["--cd", work.to_str().unwrap()])
+        .env("ORBERUS_PROFILE", "personal")
+        .output()
+        .unwrap();
+    assert_eq!(locked.status.code(), Some(2));
+    assert!(text(&locked).is_empty());
+    assert!(String::from_utf8_lossy(&locked.stderr).contains("locked to profile 'work'"));
+
+    world.ok(home, &["pause"]);
+    let output = world
+        .command(&shim, &work)
+        .env("CODEX_HOME", "/inherited")
+        .output()
+        .unwrap();
+    assert!(text(&output).starts_with("home=/inherited\n"));
+    world.ok(home, &["resume"]);
+    world.ok(home, &["uninstall", "--yes"]);
+    assert!(!shim.is_symlink());
+    assert!(world.home.join("real-bin/codex").is_file());
+}
+
+#[test]
+fn setup_and_uninstall_leave_an_unrelated_codex_in_the_shim_directory() {
+    let world = World::new();
+    world.fake_codex();
+    let shim = world.root.join("bin/codex");
+    fs::create_dir_all(world.root.join("bin")).unwrap();
+    fs::write(&shim, "not an Orberus shim").unwrap();
+    assert!(
+        refused(&world, &world.home, &["setup", "--tool", "codex"]).contains("refusing to replace")
+    );
+    world.ok(&world.home, &["uninstall", "--yes"]);
+    assert_eq!(fs::read_to_string(shim).unwrap(), "not an Orberus shim");
+}
+
+#[test]
 fn codex_run_uses_the_configured_binary_and_keeps_case_variants_separate() {
     let world = World::new();
     world.fake_codex();

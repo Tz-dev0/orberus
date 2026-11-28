@@ -4,12 +4,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use orberus_core::ide;
 use orberus_core::paths::Env;
 use orberus_core::shell;
 use orberus_core::tool;
 use orberus_core::view::short_path;
+use orberus_core::{config, launch, uninstall};
 
 use crate::ui::Ui;
 
@@ -66,14 +67,30 @@ pub(crate) fn install_link(link: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
+pub(crate) fn setup(ui: &Ui, env: &Env, tool: &tool::Tool) -> Result<i32> {
     let bin = env.bin_dir();
-    fs::create_dir_all(env.profiles_dir())?;
-
-    // One shim today. With a second tool, this block runs once per entry
-    // of `tool::ALL`.
-    let tool = &tool::CLAUDE;
     let link = tool.shim_path(env);
+    if tool == &tool::CODEX {
+        if !cfg!(unix) {
+            bail!("the Codex shim requires Unix symlinks; use orberus run --tool codex instead");
+        }
+        match link.symlink_metadata() {
+            Ok(_) if uninstall::shim(env, tool).is_none() => {
+                bail!(
+                    "refusing to replace {}: it is not an Orberus shim",
+                    link.display()
+                );
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("cannot inspect {}", link.display()))
+            }
+        }
+        let loaded = config::load(env)?;
+        launch::find_real(env, &loaded.config, tool)?;
+    }
+    fs::create_dir_all(env.profiles_dir())?;
     install_link(&link)?;
     // The wrapper is installed with it, so that turning it on in an editor
     // later never points that editor to a file that is not there.
@@ -94,13 +111,18 @@ pub(crate) fn setup(ui: &Ui, env: &Env) -> Result<i32> {
         ),
     ];
     // Only for someone who has such an editor, and has not done it yet.
-    if !ide::skipping(env, tool).is_empty() {
+    if tool.extension.is_some() && !ide::skipping(env, tool).is_empty() {
         steps.push((
             "orberus ide on",
             "use it in VS Code, Cursor and the like too",
         ));
     }
-    steps.push(("orberus doctor", "check the installation"));
+    let doctor = if tool == &tool::CODEX {
+        "orberus doctor --tool codex"
+    } else {
+        "orberus doctor"
+    };
+    steps.push((doctor, "check the installation"));
     ui.commands(&steps);
     Ok(0)
 }
