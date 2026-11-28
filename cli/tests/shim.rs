@@ -539,7 +539,7 @@ fn uninstall_removes_the_shim_and_the_path_line_but_keeps_the_profiles() {
 }
 
 #[test]
-fn each_profile_has_its_claude_desktop_and_a_purge_deletes_its_data() {
+fn each_profile_has_its_claude_desktop_data_and_a_purge_deletes_it() {
     let world = World::new();
     let home = world.home.clone();
     assert!(world.ok(&home, &["desktop"]).contains("No profile yet"));
@@ -556,6 +556,9 @@ fn each_profile_has_its_claude_desktop_and_a_purge_deletes_its_data() {
     assert!(listed.contains("~/.orberus/desktop/work"), "{listed}");
     assert!(listed.contains("not opened yet"), "{listed}");
     let error = refused(&world, &home, &["desktop", "work"]);
+    assert!(error.contains("Claude Desktop was not found"), "{error}");
+    // Nothing runs, so nothing would close: `--yes` changes nothing here.
+    let error = refused(&world, &home, &["desktop", "work", "--yes"]);
     assert!(error.contains("Claude Desktop was not found"), "{error}");
     let error = refused(&world, &home, &["desktop", "nobody"]);
     assert!(error.contains("unknown profile"), "{error}");

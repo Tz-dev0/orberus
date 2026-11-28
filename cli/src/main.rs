@@ -182,13 +182,18 @@ enum Command {
         /// editor found
         editor: Option<String>,
     },
-    /// Open Claude Desktop with a profile's account, or list them
+    /// Switch Claude Desktop to a profile's account, or list them
     ///
-    /// Each profile has its own Claude Desktop, signed in on its own.
-    /// Without a name, the profiles are listed with where theirs stands.
+    /// One Claude Desktop at a time: it is opened on the profile's account,
+    /// then the one that was open is closed. Each profile keeps its own
+    /// sign-in. Without a name, the profiles are listed with the one Claude
+    /// Desktop is on.
     Desktop {
-        /// Name of the profile whose Claude Desktop to open
+        /// Name of the profile to put Claude Desktop on
         name: Option<String>,
+        /// Do not ask before closing the Claude Desktop that is open
+        #[arg(long, short)]
+        yes: bool,
     },
     /// Stop picking accounts for now: claude runs as if Orberus was not
     /// installed, until `orberus resume`
@@ -321,7 +326,7 @@ fn cli() -> Result<i32> {
             RuleCommand::Remove { number, yes } => rule_remove(&ui, &env, number, yes),
         },
         Command::Ide { switch, editor } => ide_command(&ui, &env, switch, editor),
-        Command::Desktop { name } => desktop_command(&ui, &env, name),
+        Command::Desktop { name, yes } => desktop_command(&ui, &env, name, yes),
         Command::Pause => pause_command(&ui, &env),
         Command::Resume => resume_command(&ui, &env),
         Command::Doctor => doctor(&ui, &env),

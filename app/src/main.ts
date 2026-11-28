@@ -10,7 +10,8 @@ import {
   type Reason,
   type UsageProject,
   type Conversations,
-  type DesktopCopy,
+  type Desktop,
+  type DesktopProfile,
   type Editor,
   type Limits,
   type LimitWindow,
@@ -1321,66 +1322,113 @@ function terminalSection(overview: Overview): HTMLElement {
   return section;
 }
 
-// Each profile's Claude Desktop, read after the list. Empty on a Mac
-// without Claude Desktop.
+// Which profile Claude Desktop is on, read after the list. No profile in
+// it on a Mac without Claude Desktop.
 let desktopOpen = false;
-let desktopCopies: DesktopCopy[] | null = null;
+let desktopNow: Desktop | null = null;
+// The profile a switch was asked for, while its row says what closes.
+let switchingTo: string | null = null;
 
-/** Claude Desktop, one per profile: which are open, and the button that
- *  starts one or brings it to the front. Every copy is called "Claude" in
- *  the Dock, so this list is also how to tell them apart. */
-function desktopSection(copies: DesktopCopy[], overview: Overview): HTMLElement {
-  const open = copies.filter((copy) => copy.state === "open").length;
+/** "perso", or "perso and work": profiles named in a sentence. */
+function named(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return t("desktopAnd", { first: names.slice(0, -1).join(", "), last: names[names.length - 1] });
+}
+
+/** Claude Desktop, on one profile at a time: which one it is on, and the
+ *  button that switches it. A switch closes the Claude Desktop that is
+ *  open, and what runs in it: the row says so first, and a second click
+ *  does it. */
+function desktopSection(desktop: Desktop, lines: DesktopProfile[], overview: Overview): HTMLElement {
+  const open = lines.filter((line) => line.state === "open");
+  let sum = t("desktopClosed");
+  if (open.length === 1) sum = t("desktopOn", { name: open[0].profile });
+  else if (open.length > 1) sum = t("desktopOpenMany", { n: open.length });
+  else if (desktop.stray > 0) sum = t("desktopOnNone");
   const section = el("section", "storage-section");
   section.append(
-    foldLine(
-      "desktop",
-      t("desktop"),
-      t("desktopHint"),
-      desktopOpen,
-      open > 0 ? count(open, "desktopOpenOne", "desktopOpenMany") : t("desktopIdle"),
-      () => {
-        desktopOpen = !desktopOpen;
-        render(overview);
-      },
-    ),
+    foldLine("desktop", t("desktop"), t("desktopHint"), desktopOpen, sum, () => {
+      desktopOpen = !desktopOpen;
+      switchingTo = null;
+      render(overview);
+    }),
   );
   if (!desktopOpen) return section;
 
   const list = el("ul", "storage");
-  for (const copy of copies) {
-    const item = keyed(el("li", "storage-item"), `desktop:${copy.profile}`);
-    item.style.setProperty("--hue", hue(copy.profile));
+  for (const line of lines) {
+    const item = keyed(el("li", "storage-item"), `desktop:${line.profile}`);
+    item.style.setProperty("--hue", hue(line.profile));
     const row = el("div", "storage-row editor-row");
-    const where = t(copy.usual ? "desktopUsualHint" : "desktopCopyHint", { data: copy.data });
-    row.title = copy.state === "new" ? `${t("desktopNewHint")}\n${where}` : where;
-    row.append(el("span", "dot"), el("span", "pick-name", copy.profile));
-    if (copy.state !== "closed") {
-      // Keyed by its state: the word pops in when a copy opens.
+    const where = t(line.usual ? "desktopUsualHint" : "desktopOwnHint", { data: line.data });
+    row.title = line.state === "new" ? `${t("desktopNewHint")}\n${where}` : where;
+    row.append(el("span", "dot"), el("span", "pick-name", line.profile));
+
+    const running = line.state === "open";
+    // What putting Claude Desktop on this profile closes: every other one.
+    const closes = open.filter((other) => other.profile !== line.profile).map((other) => other.profile);
+    const mustClose = closes.length > 0 || desktop.stray > 0;
+    const go = async () => {
+      // Read again whatever happened: a switch that failed half-way may
+      // have left two open.
+      try {
+        await api.switchDesktop(line.profile);
+      } finally {
+        desktopNow = await api.desktop();
+      }
+    };
+
+    if (mustClose && switchingTo === line.profile) {
+      // Second click: it really closes the other one.
+      const button = keyed(el("button", "talk-go desktop-go", t("desktopGo")), `go:desktop:${line.profile}`);
+      onClick(button, async () => {
+        button.textContent = t("desktopSwitching");
+        switchingTo = null;
+        await go();
+      });
+      row.append(button);
+      const ask = closes.length > 0 ? t("desktopCloses", { names: named(closes) }) : t("desktopClosesAny");
+      item.append(row, keyed(el("p", "desktop-ask", ask), `ask:desktop:${line.profile}`));
+      list.append(item);
+      continue;
+    }
+
+    if (line.state !== "closed") {
+      // Keyed by its state: the word pops in when Claude Desktop lands
+      // on this profile.
       row.append(
         keyed(
           el(
             "span",
-            copy.state === "open" ? "editor-state desktop-open" : "editor-state",
-            t(copy.state === "open" ? "desktopStateOpen" : "desktopStateNew"),
+            running ? "editor-state desktop-open" : "editor-state",
+            t(running ? "desktopStateOpen" : "desktopStateNew"),
           ),
-          `desktop-state:${copy.profile}:${copy.state}`,
+          `desktop-state:${line.profile}:${line.state}`,
         ),
       );
     }
-    const running = copy.state === "open";
-    const button = el("button", "limits-action editor-action", t(running ? "desktopShow" : "desktopOpen"));
-    button.title = t(running ? "desktopShowHint" : "desktopOpenHint");
-    onClick(button, async () => {
-      // Starting the app takes a few seconds: say that it is under way.
-      if (!running) button.textContent = t("desktopOpening");
-      await api.openDesktop(copy.profile);
-      desktopCopies = await api.desktop();
-    });
+    const label = mustClose ? "desktopSwitch" : running ? "desktopShow" : "desktopOpen";
+    const button = el("button", "limits-action editor-action", t(label));
+    button.title = t(`${label}Hint`);
+    if (mustClose) {
+      // Nothing closes on this click: the row first says what would.
+      button.type = "button";
+      button.addEventListener("click", () => {
+        switchingTo = line.profile;
+        render(overview);
+      });
+    } else {
+      onClick(button, async () => {
+        // Starting the app takes a few seconds: say that it is under way.
+        if (!running) button.textContent = t("desktopOpening");
+        await go();
+      });
+    }
     row.append(button);
     item.append(row);
     list.append(item);
   }
+  if (desktop.stray > 0) list.append(el("li", "talks-note", t("desktopStray")));
   list.append(el("li", "talks-note", t("desktopNote")));
   section.append(list);
   return section;
@@ -1665,9 +1713,9 @@ function render(overview: Overview | null, loadError = ""): void {
     }
     // Only where Claude Desktop is installed, and for the profiles still
     // in the list.
-    if (desktopCopies && desktopCopies.length > 0) {
-      const copies = desktopCopies.filter((copy) => hues.has(copy.profile));
-      if (copies.length > 0) main.append(desktopSection(copies, overview));
+    if (desktopNow && desktopNow.profiles.length > 0) {
+      const lines = desktopNow.profiles.filter((line) => hues.has(line.profile));
+      if (lines.length > 0) main.append(desktopSection(desktopNow, lines, overview));
     }
     // Only where an editor of the VS Code family is installed.
     if (overview.profiles.length > 0 && editorList && editorList.length > 0) {
@@ -1709,8 +1757,8 @@ async function refresh(): Promise<void> {
   // Claude Desktop: one app to find and the running programs to list.
   try {
     const found = await api.desktop();
-    const changed = JSON.stringify(found) !== JSON.stringify(desktopCopies);
-    desktopCopies = found;
+    const changed = JSON.stringify(found) !== JSON.stringify(desktopNow);
+    desktopNow = found;
     if (changed && !adding && !removing && !ruleDraft) render(overview);
   } catch {
     // Keep the last list.
@@ -1772,6 +1820,8 @@ window.addEventListener("focus", () => {
 // picker or a form is open, where the window stays or comes straight back.
 window.addEventListener("blur", () => {
   if (pending > 0 || adding || removing || ruleDraft) return;
+  // A switch that was only asked for is not kept for the next opening.
+  switchingTo = null;
   seen = new Set();
   widths = new Map();
   if (insideApp) root.classList.add("away");
@@ -1812,12 +1862,13 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.key !== "Escape") return;
   // Escape first backs out of a form or a question, then closes the window.
-  if (adding || removing || trashing || ruleDraft || removingRule !== null) {
+  if (adding || removing || trashing || ruleDraft || removingRule !== null || switchingTo !== null) {
     closeForm();
     closeRuleForm();
     removing = null;
     removingRule = null;
     trashing = null;
+    switchingTo = null;
     void refresh();
   } else {
     void api.hide();
