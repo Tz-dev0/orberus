@@ -231,6 +231,38 @@ fn write(file: &Path, text: &str) -> Result<()> {
     fs::write(file, text).with_context(|| format!("cannot write {}", file.display()))
 }
 
+/// Makes sure the wrapper an editor will be told to start is there: a link
+/// to `program`, the `orberus` to run. Does nothing while the wrapper leads
+/// to a file. For the menu bar app, which is not `orberus` itself; the
+/// command links to its own file in `setup`.
+pub fn ensure_wrapper(env: &Env, tool: &Tool, program: &Path) -> Result<()> {
+    let wrapper = tool.wrapper_path(env);
+    // `exists` follows a link: a link to a file that is gone counts as
+    // missing, and is replaced below.
+    if wrapper.exists() {
+        return Ok(());
+    }
+    if let Some(dir) = wrapper.parent() {
+        fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+    }
+    match fs::remove_file(&wrapper) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error).with_context(|| format!("cannot replace {}", wrapper.display()))
+        }
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(program, &wrapper)
+        .with_context(|| format!("cannot create {}", wrapper.display()))?;
+    // Where links are not used, the wrapper is a copy of the program.
+    #[cfg(not(unix))]
+    fs::copy(program, &wrapper)
+        .map(|_| ())
+        .with_context(|| format!("cannot create {}", wrapper.display()))?;
+    Ok(())
+}
+
 /// Points the editor's extension to our wrapper. Returns false when it
 /// already was. Refuses to replace another program, or to touch a file it
 /// does not understand.

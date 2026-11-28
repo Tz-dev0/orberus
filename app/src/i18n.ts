@@ -166,6 +166,31 @@ const en = {
   talkHeavy:
     "Sends {context} tokens with each answer. /compact inside it, or a new conversation when the subject changes, lightens it",
 
+  // Editors
+  editors: "Editors",
+  editorsHint:
+    "VS Code, Cursor and the editors built on VS Code: their Claude Code extension starts its own copy of Claude Code, without Orberus, unless it is sent through it here.\nJetBrains IDEs and terminals already go through Orberus",
+  editorsSkipOne: "1 skips Orberus",
+  editorsSkipMany: "{n} skip Orberus",
+  editorsAllOn: "Through Orberus",
+  editorsNone: "No extension",
+  editorOn: "through Orberus",
+  editorOnHint:
+    "In this editor, Claude Code gets the account of the folder that is open, by the same rules as in a terminal.\n{file}",
+  editorOff: "skips Orberus",
+  editorOffHint: "In this editor, Claude Code always uses the same account, whatever folder is open.\n{file}",
+  editorAbsent: "extension not installed",
+  editorAbsentHint: "The Claude Code extension is not installed in this editor: nothing to do.\n{file}",
+  editorOther: "through {program}",
+  editorOtherHint: "This editor already starts Claude Code through another program. It is not replaced.\n{file}",
+  editorUnreadable: "settings not readable",
+  editorUnreadableHint: "{why}\n{file}",
+  editorTurnOn: "Turn on",
+  editorTurnOnHint: "Writes one setting in this editor's settings file. The rest of the file stays as it is",
+  editorTurnOff: "Turn off",
+  editorTurnOffHint: "Removes that setting from this editor's settings file",
+  editorsNote: "Reload the editor's window after a change.",
+
   // Terminal
   terminal: "Terminal",
   terminalHint: "The app a profile's “Open…” button starts Claude Code in",
@@ -347,6 +372,31 @@ const fr: Record<Key, string> = {
   talkSends: "Envoie {context} tokens à chaque réponse",
   talkHeavy:
     "Envoie {context} tokens à chaque réponse. /compact dans la conversation, ou une nouvelle conversation quand le sujet change, l'allège",
+
+  editors: "Éditeurs",
+  editorsHint:
+    "VS Code, Cursor et les éditeurs bâtis sur VS Code : leur extension Claude Code lance sa propre copie de Claude Code, sans Orberus, sauf si vous la faites passer par lui ici.\nLes IDE JetBrains et les terminaux passent déjà par Orberus",
+  editorsSkipOne: "1 sans Orberus",
+  editorsSkipMany: "{n} sans Orberus",
+  editorsAllOn: "Par Orberus",
+  editorsNone: "Aucune extension",
+  editorOn: "passe par Orberus",
+  editorOnHint:
+    "Dans cet éditeur, Claude Code prend le compte du dossier ouvert, selon les mêmes règles que dans un terminal.\n{file}",
+  editorOff: "sans Orberus",
+  editorOffHint:
+    "Dans cet éditeur, Claude Code utilise toujours le même compte, quel que soit le dossier ouvert.\n{file}",
+  editorAbsent: "extension non installée",
+  editorAbsentHint: "L'extension Claude Code n'est pas installée dans cet éditeur : rien à faire.\n{file}",
+  editorOther: "passe par {program}",
+  editorOtherHint: "Cet éditeur lance déjà Claude Code par un autre programme. Il n'est pas remplacé.\n{file}",
+  editorUnreadable: "réglages illisibles",
+  editorUnreadableHint: "{why}\n{file}",
+  editorTurnOn: "Activer",
+  editorTurnOnHint: "Écrit un réglage dans le fichier de réglages de cet éditeur. Le reste du fichier ne change pas",
+  editorTurnOff: "Désactiver",
+  editorTurnOffHint: "Retire ce réglage du fichier de réglages de cet éditeur",
+  editorsNote: "Rechargez la fenêtre de l'éditeur après un changement.",
 
   terminal: "Terminal",
   terminalHint: "L'app dans laquelle le bouton « Ouvrir… » d'un profil lance Claude Code",

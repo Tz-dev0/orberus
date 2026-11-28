@@ -10,6 +10,7 @@ import {
   type Reason,
   type UsageProject,
   type Conversations,
+  type Editor,
   type Limits,
   type LimitWindow,
   type Rule,
@@ -1245,6 +1246,97 @@ function terminalSection(overview: Overview): HTMLElement {
   return section;
 }
 
+// The editors of the VS Code family found on this Mac, read after the
+// list of profiles; null until then.
+let editorsOpen = false;
+let editorList: Editor[] | null = null;
+
+/** Whether the Claude Code extension of each editor goes through Orberus,
+ *  with the switch. Folded, it says how many editors still skip it. */
+function editorsSection(found: Editor[], overview: Overview): HTMLElement {
+  const skipping = found.filter((editor) => editor.state === "off").length;
+  const section = el("section", "storage-section");
+  section.append(
+    foldLine(
+      "editors",
+      t("editors"),
+      t("editorsHint"),
+      editorsOpen,
+      skipping > 0
+        ? count(skipping, "editorsSkipOne", "editorsSkipMany")
+        : found.some((editor) => editor.state === "on")
+          ? t("editorsAllOn")
+          : t("editorsNone"),
+      () => {
+        editorsOpen = !editorsOpen;
+        render(overview);
+      },
+      skipping > 0,
+    ),
+  );
+  if (!editorsOpen) return section;
+
+  const list = el("ul", "storage");
+  for (const editor of found) {
+    const item = keyed(el("li", "storage-item"), `editor:${editor.settings}`);
+    const row = el("div", "storage-row editor-row");
+    const file = editor.settingsShort;
+    const fact = (text: string, hint: string, flagged = false) => {
+      row.title = hint;
+      // Keyed by its state: the words pop in when the switch is used.
+      return keyed(
+        el("span", flagged ? "editor-state editor-skips" : "editor-state", text),
+        `editor-state:${editor.settings}:${editor.state}`,
+      );
+    };
+    const action = (label: string, hint: string, on: boolean) => {
+      const button = el("button", "limits-action editor-action", label);
+      button.title = hint;
+      onClick(button, async () => {
+        await api.setEditor(editor.settings, on);
+      });
+      return button;
+    };
+    row.append(el("span", "pick-name", editor.name));
+    switch (editor.state) {
+      case "on":
+        row.append(
+          fact(t("editorOn"), t("editorOnHint", { file })),
+          action(t("editorTurnOff"), t("editorTurnOffHint"), false),
+        );
+        break;
+      case "off":
+        row.append(
+          fact(t("editorOff"), t("editorOffHint", { file }), true),
+          action(t("editorTurnOn"), t("editorTurnOnHint"), true),
+        );
+        break;
+      case "absent":
+        row.append(fact(t("editorAbsent"), t("editorAbsentHint", { file })));
+        break;
+      case "other":
+        row.append(
+          fact(
+            // The program's name is enough on the line; its path is in the hint.
+            t("editorOther", { program: (editor.detail ?? "").replace(/^.*\//, "") }),
+            `${t("editorOtherHint", { file })}\n${editor.detail ?? ""}`,
+          ),
+        );
+        break;
+      case "unreadable":
+        row.append(
+          fact(t("editorUnreadable"), t("editorUnreadableHint", { why: editor.detail ?? "", file }), true),
+        );
+        break;
+    }
+    item.append(row);
+    list.append(item);
+  }
+  list.append(el("li", "talks-note", t("editorsNote")));
+  section.append(list);
+  return section;
+}
+
 function menu(): HTMLElement {
   const footer = el("footer");
   footer.append(
@@ -1352,6 +1444,10 @@ function render(overview: Overview | null, loadError = ""): void {
     if (storage && storage.profiles.some((size) => hues.has(size.name))) {
       main.append(storageSection(storage, overview));
     }
+    // Only where an editor of the VS Code family is installed.
+    if (overview.profiles.length > 0 && editorList && editorList.length > 0) {
+      main.append(editorsSection(editorList, overview));
+    }
     if (overview.profiles.length > 0) main.append(terminalSection(overview));
     page.append(main);
   }
@@ -1384,6 +1480,15 @@ async function refresh(): Promise<void> {
     if (changed && !adding && !removing && !ruleDraft) render(overview);
   } catch {
     // Keep the last reading.
+  }
+  // The editors: a few folders to look at, still quick.
+  try {
+    const found = await api.editors();
+    const changed = JSON.stringify(found) !== JSON.stringify(editorList);
+    editorList = found;
+    if (changed && !adding && !removing && !ruleDraft) render(overview);
+  } catch {
+    // Keep the last list.
   }
   // Measuring reads whole folders: the list above does not wait for it.
   try {

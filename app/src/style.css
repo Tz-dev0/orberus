@@ -1117,6 +1117,29 @@ h2 {
   white-space: nowrap;
 }
 
+/* An editor: its name, how its extension is started, and the switch. */
+.editor-state {
+  flex: none;
+  color: var(--muted);
+}
+
+.editor-skips {
+  color: var(--warn);
+}
+
+.editor-state.enter {
+  animation-name: pop;
+  animation-timing-function: var(--spring);
+}
+
+.editor-action {
+  flex: none;
+  min-width: 56px;
+  font-size: 11px;
+  color: var(--text);
+  text-align: right;
+}
+
 /* ----------------------------------------------------------- conversations */
 
 .talks {
