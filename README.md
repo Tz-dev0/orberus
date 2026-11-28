@@ -338,6 +338,18 @@ the output of `orberus doctor` and `orberus status`.
 Bug reports, ideas and pull requests are welcome. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for how to build and test the project.
 
+## Contributors
+
+Thanks to the people who made Orberus better:
+
+- [Aristide (el-hack)](https://github.com/el-hack): Codex CLI support,
+  through `orberus run --tool codex` and the `codex` shim
+  ([#36](https://github.com/Tz-dev0/orberus/pull/36),
+  [#38](https://github.com/Tz-dev0/orberus/pull/38)).
+
+Orberus is maintained by [Tz-dev0](https://github.com/Tz-dev0). Your name
+goes here when your first pull request is merged.
+
 ## License
 
 [MIT](LICENSE).

@@ -11,6 +11,6 @@ resolver = "2"
 
 # Written once, shared by both crates (`version.workspace = true`).
 [workspace.package]
-version = "0.1.10"
+version = "0.1.11"
 edition = "2021"
 license = "MIT"
