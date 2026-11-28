@@ -758,6 +758,52 @@ h2 {
   padding: 0;
 }
 
+/* What a rule is, before the first one. */
+.rules-intro {
+  margin: 0 8px 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+/* The last line: where no rule applies. Quieter than a rule, since nobody
+   wrote it. */
+.rule-else .rule-pattern {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.rule-none {
+  color: var(--muted);
+}
+
+/* In the form: what the folder gets today, then the rule in plain words. */
+.rule-today,
+.rule-says {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.rule-caution {
+  color: var(--warn);
+}
+
+.rule-says {
+  margin: 6px 0 0;
+  padding: 5px 7px;
+  border-radius: 6px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--hue) 14%, transparent);
+}
+
+.rule-says-lead {
+  color: var(--muted);
+}
+
+
 .rule-add {
   flex: 1;
   display: flex;

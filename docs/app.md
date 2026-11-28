@@ -47,7 +47,11 @@ no line. The `claude` shim never does this: it makes no network request.
   with its subscription (`Max 5x`, `Team`…) when Claude Code recorded it.
   A second ring marks the default profile.
 - **Rules**: every rule, with the profile it leads to, and whether it comes
-  from your config or from team rules.
+  from your config or from team rules. The list is read from top to bottom
+  and ends with "Everywhere else": the default profile, where no rule
+  applies. Leave the pointer on a rule to read it in plain words ("In every
+  repository of github.com/acme, claude uses work"). Before the first rule,
+  a line says what a rule is.
 - **Usage** (folded): for each profile, its account's 5-hour and weekly
   limits, as Claude shows them: how much is used, when it starts over, and a
   bar where full is the limit. These are not live numbers: they are the last
@@ -80,7 +84,7 @@ own: `orberus --version`.
 | Open Claude Code in a profile | Click the profile. You pick the project folder, then a terminal window opens there |
 | Create a profile | "New profile…", or ⌘N |
 | Set the default profile | Hover the profile, then "Set as default" |
-| Create a rule | "New rule…" under the rules. You pick a folder, then where the rule applies (every repository of its owner, this repository, or the folder), the profile, and whether to lock it |
+| Create a rule | "New rule…" under the rules. You pick a folder, and the form says which profile `claude` uses there today and why. Then you choose where the rule applies (every repository of its owner, this repository, or the folder), the profile, and whether to lock it; the rule about to be written is spelled out in plain words, and you are told when something else would still decide in that folder |
 | Remove a rule | Hover one of your own rules, then the bin icon and "Remove rule". Team rules cannot be removed |
 | Remove a profile | Hover the profile, then the bin icon. The row says what goes and what stays before you confirm |
 | Change how long conversations are kept | Unfold "Conversations kept": 30 days, 90 days, 1 year, or a number of days |

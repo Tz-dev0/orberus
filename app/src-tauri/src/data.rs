@@ -24,7 +24,7 @@ use orberus_core::login;
 use orberus_core::paths::Env;
 use orberus_core::pause;
 use orberus_core::purge;
-use orberus_core::resolve::Reason;
+use orberus_core::resolve::{self, Reason};
 use orberus_core::retention::{self, Retention};
 use orberus_core::rules;
 use orberus_core::sessions;
@@ -515,12 +515,35 @@ pub struct RuleDraft {
     pub folder: String,
     /// Where the rule can apply, widest first. Never empty.
     pub choices: Vec<RuleChoice>,
+    /// The profile `claude` uses in that folder today, and why. `None`
+    /// when it uses none, or when the config cannot be read.
+    pub current: Option<CurrentChoice>,
+}
+
+/// What today's rules give for a folder.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrentChoice {
+    pub profile: String,
+    pub reason: ReasonView,
 }
 
 /// The rules that make sense for a folder, like the guided
 /// `orberus rule add`.
 pub fn rule_draft(env: &Env, folder: &Path) -> RuleDraft {
+    // The same answer as `orberus status` run in that folder. A config
+    // that cannot be read only leaves the line out: the form has its own
+    // way to say what is wrong, when the rule is added.
+    let current = config::load(env)
+        .and_then(|loaded| resolve::resolve(env, &loaded, folder, None))
+        .ok()
+        .flatten()
+        .map(|found| CurrentChoice {
+            reason: reason_view(env, &found.reason),
+            profile: found.profile,
+        });
     RuleDraft {
+        current,
         folder: view::short_path(env, folder),
         choices: rules::choices(env, folder)
             .into_iter()
@@ -1203,11 +1226,25 @@ mod tests {
         assert_eq!(draft.choices.len(), 1);
         let path = draft.choices[0].path.clone();
         assert!(path.as_deref().is_some_and(|path| path.ends_with("notes")));
+        // What the folder gets today, to show in the form: no rule covers
+        // it, so the default profile.
+        let current = draft.current.unwrap();
+        assert_eq!(
+            (current.profile.as_str(), current.reason.kind),
+            ("perso", "default")
+        );
 
         add_rule(&env, path.clone(), None, "perso", false).unwrap();
         assert!(add_rule(&env, path.clone(), None, "perso", false).is_err());
         assert!(add_rule(&env, None, None, "perso", false).is_err());
         assert!(add_rule(&env, path.clone(), None, "nope", false).is_err());
+
+        // Once the rule is there, it is the reason.
+        let current = rule_draft(&env, &folder).current.unwrap();
+        assert_eq!(
+            (current.profile.as_str(), current.reason.kind),
+            ("perso", "rule")
+        );
 
         let rules = overview(&env).unwrap().rules;
         // The team rule first, then the one of the world, then the new one.
